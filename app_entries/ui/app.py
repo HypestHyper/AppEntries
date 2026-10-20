@@ -1,0 +1,1251 @@
+"""The main window."""
+import os
+from gettext import gettext as _
+from gettext import ngettext
+
+from gi.repository import Gdk, Gio, GLib, Gtk
+
+from .. import (APP_ID, APP_NAME, appimages, autostart, desktop_entries, editing, health, history, icon_lookup,
+               launcher_refresh, launchers, overrides, profile, symbols, trash, webapps)
+from ..model import AppItem, AppStore
+from .app_card import AppCard
+from .autostart_page import AutostartPage
+from .defaults_page import DefaultsPage
+from .dialogs import Dialog, choose_file, error_dialog, run_bg
+from .editor import EditWindow
+from .history_window import HistoryWindow
+from .icon_picker import IconPicker
+from .issues import IssuesPage
+from .launcher_window import LauncherWindow
+from .settings_page import SettingsPage
+from .webapp_window import WebAppWindow
+from .updates import UpdatesPage
+from .style import SIZES
+from .app_card import label_for_source
+from .widgets import Chip, Clamp, Snackbar, TabBar, Toggle, button, hbox, icon, label, set_text, vbox
+
+FILTERS = [
+    ("all", _("All apps"), "apps"),
+    ("hidden", _("Hidden"), "visibility_off"),
+    ("customised", _("Customised"), "edit_note"),
+    ("issues", _("Issues"), "healing"),
+    ("mine", _("My launchers"), "rocket_launch"),
+    ("autostart", _("Autostart"), "power_settings_new"),
+    ("defaults", _("Default apps"), "star"),
+    ("settings", _("Settings"), "tune", True),
+    ("updates", _("Updates"), "system_update_alt", True),
+]
+PAGES = ("issues", "autostart", "defaults", "settings", "updates")  # tabs that aren't app lists
+SELF_ID = APP_ID + ".desktop"
+COMPACT_BELOW = 900
+HYSTERESIS = 60
+
+
+class MainWindow(Gtk.ApplicationWindow):
+    def __init__(self, app, settings, style):
+        super().__init__(application=app, title=APP_NAME)
+        self.settings = settings
+        self.style = style
+        self.apps = AppStore()
+        self._scan_gen = 0
+        self._rescan_timer = 0
+        self._monitors = []
+        self._compact = None
+        self._loaded = False
+        self._query = ""
+        self._selecting = False
+        self.history_window = None
+
+        self.set_default_size(settings.get("window-width"), settings.get("window-height"))
+        if settings.get("maximized"):
+            self.maximize()
+        self.set_icon_name(APP_ID)
+
+        self._build_header()
+        self._build_body()
+        self._build_actions()
+        self._apply_window_controls()
+        settings.connect(self._on_setting)
+        self.connect("close-request", self._save_size)
+
+        self.rescan()
+        self._watch_dirs()
+
+    # ------------------------------------------------------------------ UI
+
+    def _build_header(self):
+        hb = Gtk.HeaderBar()
+        hb.set_show_title_buttons(False)
+        hb.set_title_widget(Gtk.Box())
+        logo = Gtk.Image(icon_name=APP_ID, pixel_size=40, accessible_role=Gtk.AccessibleRole.PRESENTATION)
+        title = label(APP_NAME, ("app-title",))
+        self._start = hbox(12, logo, title)
+        self._start.set_margin_start(4)
+        hb.pack_start(self._start)
+
+        self.chip = Chip(_("Loading…"), "warn")
+        self.chip.set_valign(Gtk.Align.CENTER)
+        self.refresh_btn = button(icon_name="refresh", style="tonal", small=True,
+                                  tooltip=_("Refresh applications (Ctrl+R)"))
+        self.refresh_btn.set_action_name("app.refresh")
+
+        self.refresh_btn.set_valign(Gtk.Align.CENTER)
+
+        self.winctl = hbox(4)
+        self.winctl.add_css_class("winctl")
+        self.winctl.set_valign(Gtk.Align.CENTER)
+        self.history_btn = button(icon_name="history", style="tonal", small=True,
+                                  tooltip=_("History: undo any change you made (Ctrl+H)"),
+                                  cb=self.show_history)
+        self.history_btn.set_valign(Gtk.Align.CENTER)
+        self._end = hbox(8, self.chip, self.history_btn, self.refresh_btn)
+        self._end.set_margin_end(4)
+        hb.pack_end(self._end)
+        self.header = hb
+        self.set_titlebar(hb)
+
+    def _build_body(self):
+        root = vbox(14)
+        root.set_margin_top(4)
+        root.set_margin_bottom(14)
+        root.set_margin_start(20)
+        root.set_margin_end(20)
+
+        if self.settings.get("filter") in ("settings", "updates", "autostart", "defaults"):
+            self.settings.set("filter", "all")  # start on the apps, not where you left off
+        self.tabs = TabBar(FILTERS, self.settings.get("filter"))
+        self.tabs.connect("changed", lambda _t, key: self.settings.set("filter", key))
+        # Always-visible search; typing anywhere in the window starts it.
+        self.search_entry = Gtk.SearchEntry(hexpand=True, width_chars=14,
+                                            placeholder_text=_("Search apps"))
+        self.search_entry.add_css_class("search-entry")
+        self.search_entry.set_valign(Gtk.Align.CENTER)
+        self.search_entry.set_tooltip_text(_("Search by name, description, command or file ID (Ctrl+F)"))
+        self.search_entry.update_property([Gtk.AccessibleProperty.LABEL], [_("Search apps")])
+        self.search_entry.set_key_capture_widget(self)
+        self.search_entry.connect("search-changed", self._on_search)
+        self.search_entry.connect("activate", self._on_search_activate)
+        self.search_entry.connect("stop-search", lambda e: e.set_text(""))
+
+        self.nodisplay_switch = Toggle(self.settings.get("show-no-display"),
+                                       lambda v: self.settings.set("show-no-display", v))
+        nd_label = label(_("Not in menus"), ("body", "dim"))
+        nodisplay = hbox(10, nd_label, self.nodisplay_switch)
+        nodisplay.set_valign(Gtk.Align.CENTER)
+        nodisplay.set_tooltip_text(_("Also list apps that ask not to appear in menus (NoDisplay), "
+                                     "such as helpers and settings panels"))
+        self.nodisplay_switch.update_property([Gtk.AccessibleProperty.LABEL], [_("Show apps not in menus")])
+        self.tabs.set_hexpand(False)
+        self.tabs.scroller.set_hexpand(False)
+        self.hidden_switch = Toggle(self.settings.get("show-hidden"),
+                                    lambda v: self.settings.set("show-hidden", v))
+        showhidden = hbox(10, label(_("Hidden"), ("body", "dim")), self.hidden_switch)
+        showhidden.set_valign(Gtk.Align.CENTER)
+        showhidden.set_tooltip_text(_("Also list hidden apps. The Hidden tab always shows them."))
+        self.showhidden = showhidden
+        self.hidden_switch.update_property([Gtk.AccessibleProperty.LABEL], [_("Show hidden apps")])
+        root.append(self.tabs)
+        # Where apps come from: a package manager, Flatpak, Snap, AppImage, …
+        self._sources = [("any", _("All sources"))] + [(k, label_for_source(k)) for k in health.SOURCES]
+        self.source_menu = Gtk.DropDown.new_from_strings([t for _k, t in self._sources])
+        keys = [k for k, _t in self._sources]
+        current = self.settings.get("source")
+        self.source_menu.set_selected(keys.index(current) if current in keys else 0)
+        self.source_menu.set_valign(Gtk.Align.CENTER)
+        self.source_menu.set_tooltip_text(_("Only list apps from one source: your package manager, Flatpak, "
+                                            "Snap, AppImage, Steam, or local launchers in your home folder. "
+                                            "Search looks within it."))
+        self.source_menu.update_property([Gtk.AccessibleProperty.LABEL], [_("Source")])
+        self.source_menu.connect("notify::selected", self._on_source)
+        self.select_btn = Gtk.ToggleButton(valign=Gtk.Align.CENTER)
+        self.select_btn.set_child(hbox(6, icon("checklist"), label(_("Select"))))
+        self.select_btn.add_css_class("tonal")
+        self.select_btn.set_tooltip_text(_("Pick several apps, then hide, show or restore them together"))
+        self.select_btn.update_property([Gtk.AccessibleProperty.LABEL], [_("Select several apps")])
+        self.select_btn.connect("toggled", lambda b: self.set_selecting(b.get_active()))
+        self.toolbar = hbox(16, self.search_entry, self.source_menu, showhidden, nodisplay, self.select_btn)
+        root.append(self.toolbar)
+
+        # Model: store -> filter -> sort -> grid
+        self.filter = Gtk.CustomFilter.new(self._match)
+        filtered = Gtk.FilterListModel(model=self.apps.store, filter=self.filter)
+        self.sorter = Gtk.CustomSorter.new(self._compare)
+        self.sorted = Gtk.SortListModel(model=filtered, sorter=self.sorter)
+        self.sorted.connect("items-changed", lambda *_: self._update_state())
+
+        factory = Gtk.SignalListItemFactory()
+        factory.connect("setup", self._setup_card)
+        factory.connect("bind", lambda _f, li: li.get_child().bind(li.get_item()))
+        factory.connect("unbind", lambda _f, li: li.get_child().unbind())
+        self.grid = Gtk.GridView(model=Gtk.NoSelection(model=self.sorted), factory=factory,
+                                 min_columns=1, max_columns=6, single_click_activate=False)
+        self.grid.connect("activate", self._on_activate)
+        self.grid.update_property([Gtk.AccessibleProperty.LABEL], [_("Applications")])
+        grid_scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
+        grid_scroll.set_child(self.grid)
+
+        self.empty_title = label("", ("title",), xalign=0.5)
+        self.empty_body = label("", ("body", "dim"), wrap=True, xalign=0.5, chars=50)
+        self.empty_body.set_justify(Gtk.Justification.CENTER)
+        empty = vbox(10, icon("search_off", ("big", "empty-icon")), self.empty_title, self.empty_body)
+        empty.set_valign(Gtk.Align.CENTER)
+        empty.set_halign(Gtk.Align.CENTER)
+        empty.set_margin_bottom(60)
+
+        loading = vbox(12, Gtk.Spinner(spinning=True, width_request=32, height_request=32),
+                       label(_("Looking for apps…"), ("body", "dim"), xalign=0.5))
+        loading.set_valign(Gtk.Align.CENTER)
+        loading.set_halign(Gtk.Align.CENTER)
+
+        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE,
+                               transition_duration=180, hhomogeneous=False, vexpand=True)
+        self.stack.add_named(loading, "loading")
+        self.stack.add_named(grid_scroll, "grid")
+        self.stack.add_named(empty, "empty")
+        self.issues = IssuesPage(self._fix, self._toggle_app, self._copy_text)
+        self.stack.add_named(self.issues, "issues")
+        self.autostart = AutostartPage(self, self._run_changes, lambda: [i.app for i in self.apps.items()])
+        self.stack.add_named(self.autostart, "autostart")
+        self.defaults = DefaultsPage(self, self._run_changes, lambda: [i.app for i in self.apps.items()])
+        self.stack.add_named(self.defaults, "defaults")
+        self.stack.add_named(SettingsPage(self, self.settings), "settings")
+        updates = self.get_application().updates
+        up = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
+        page = UpdatesPage(updates, self.settings)
+        page.set_margin_bottom(24)
+        up.set_child(Clamp(page, 760))
+        self.stack.add_named(up, "updates")
+        updates.connect(lambda: self.tabs.set_count("updates", "1" if updates.release else ""))
+        self.report = None
+
+        self.snackbar = Snackbar()
+        overlay = Gtk.Overlay(vexpand=True)
+        overlay.set_child(self.stack)
+        overlay.add_overlay(self.snackbar)
+        # Floating action button, bottom right, over the app grid.
+        self.fab = button(_("New launcher"), "add", "fab", tooltip=_("Make a launcher for a script or program (Ctrl+N)"),
+                          cb=lambda *_: self.new_launcher())
+        web = button(_("New web app"), "language", "fab tonal",
+                     tooltip=_("Open a site in its own window, without the address bar (Ctrl+Shift+N)"),
+                     cb=lambda *_: self.new_web_app())
+        self.fabs = hbox(12, web, self.fab)
+        self.fabs.set_halign(Gtk.Align.END)
+        self.fabs.set_valign(Gtk.Align.END)
+        self.fabs.set_margin_end(8)
+        self.fabs.set_margin_bottom(8)
+        overlay.add_overlay(self.fabs)
+        overlay.add_overlay(self._build_selection_bar())
+        self._update_tab_controls()
+        root.append(overlay)
+        self.set_child(root)
+
+    def _setup_card(self, _f, list_item):
+        list_item.set_child(AppCard(self._on_toggle, self._on_card_action, lambda: self._selecting))
+
+    def _build_selection_bar(self):
+        self.sel_count = label("", ("body", "sel-count"))
+        self.sel_hide = button(_("Hide"), "visibility_off", "filled", small=True,
+                               tooltip=_("Hide the selected apps from launcher menus"),
+                               cb=lambda *_: self._batch("hide"))
+        self.sel_show = button(_("Show"), "visibility", "tonal", small=True,
+                               tooltip=_("Show the selected apps in launcher menus again"),
+                               cb=lambda *_: self._batch("show"))
+        self.sel_restore = button(_("Restore"), "restart_alt", "tonal", small=True,
+                                  tooltip=_("Delete your files for the selected system apps, so their original "
+                                            "entries are used again"),
+                                  cb=lambda *_: self._batch("restore"))
+        self.sel_style = button(_("Style icons"), "palette", "tonal", small=True,
+                                tooltip=_("Give the selected apps' styled icons one colour, background and border"),
+                                cb=lambda *_: self._batch("style"))
+        all_btn = button(_("Select all"), "select_all", "text", small=True,
+                         tooltip=_("Select every app in the list as it's filtered now"),
+                         cb=lambda *_: self._select_all())
+        done = button(icon_name="close", style="text", small=True, tooltip=_("Stop selecting (Esc)"),
+                      cb=lambda *_: self.set_selecting(False))
+        bar = hbox(8, self.sel_count, all_btn, self.sel_hide, self.sel_show, self.sel_restore, self.sel_style, done)
+        bar.add_css_class("selection-bar")
+        self.sel_bar = Gtk.Revealer(child=bar, transition_type=Gtk.RevealerTransitionType.SLIDE_UP,
+                                    halign=Gtk.Align.CENTER, valign=Gtk.Align.END, reveal_child=False)
+        self.sel_bar.set_can_target(False)
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self._on_key)
+        self.add_controller(keys)
+        return self.sel_bar
+
+    def _build_actions(self):
+        filt = Gio.SimpleAction.new_stateful("filter", GLib.VariantType.new("s"),
+                                             GLib.Variant("s", self.settings.get("filter")))
+        filt.connect("change-state", lambda a, v: self.settings.set("filter", v.get_string()))
+        self.add_action(filt)
+        self._filter_action = filt
+
+        nd = Gio.SimpleAction.new_stateful("show-no-display", None,
+                                           GLib.Variant("b", self.settings.get("show-no-display")))
+        nd.connect("change-state", lambda a, v: self.settings.set("show-no-display", v.get_boolean()))
+        self.add_action(nd)
+        self._nd_action = nd
+
+        new = Gio.SimpleAction.new("new-launcher", None)
+        new.connect("activate", lambda *_: self.new_launcher())
+        self.add_action(new)
+        web = Gio.SimpleAction.new("new-web-app", None)
+        web.connect("activate", lambda *_: self.new_web_app())
+        self.add_action(web)
+
+        unhide = Gio.SimpleAction.new("unhide-all", None)
+        unhide.connect("activate", lambda *_: self._unhide_all())
+        self.add_action(unhide)
+
+        for name, cb in (("select", lambda *_: self.set_selecting(True)),
+                         ("export", lambda *_: self._export()),
+                         ("import", lambda *_: self._import()),
+                         ("refresh-launchers", lambda *_: self._refresh_launchers())):
+            act = Gio.SimpleAction.new(name, None)
+            act.connect("activate", cb)
+            self.add_action(act)
+
+        hist = Gio.SimpleAction.new("history", None)
+        hist.connect("activate", self.show_history)
+        self.add_action(hist)
+        undo_last = Gio.SimpleAction.new("undo-last", None)
+        undo_last.connect("activate", lambda *_a: self._undo_last())
+        self.add_action(undo_last)
+
+        search = Gio.SimpleAction.new("search", None)
+        search.connect("activate", lambda *_: self.search_entry.grab_focus())
+        self.add_action(search)
+
+    # -------------------------------------------------------------- settings
+
+    def _on_source(self, dropdown, _p):
+        key = self._sources[dropdown.get_selected()][0]
+        GLib.idle_add(lambda: (self.settings.set("source", key), False)[1])
+
+    def _on_setting(self, key):
+        if key == "filter":
+            v = self.settings.get("filter")
+            self.tabs.set_active(v)
+            self._filter_action.set_state(GLib.Variant("s", v))
+            self.filter.changed(Gtk.FilterChange.DIFFERENT)
+            self._update_tab_controls()
+            self._update_state()
+        elif key == "source":
+            self.filter.changed(Gtk.FilterChange.DIFFERENT)
+            self._update_counts()
+        elif key == "show-hidden":
+            self.hidden_switch.set_value(self.settings.get("show-hidden"))
+            self.filter.changed(Gtk.FilterChange.DIFFERENT)
+            self._update_counts()
+        elif key == "show-no-display":
+            v = self.settings.get("show-no-display")
+            self.nodisplay_switch.set_value(v)
+            self._nd_action.set_state(GLib.Variant("b", v))
+            self.filter.changed(Gtk.FilterChange.DIFFERENT)
+            self._update_counts()
+        elif key == "window-controls":
+            self._apply_window_controls()
+        elif key == "size":
+            self._compact = None
+            self._apply_size(self.get_width())
+
+    def _save_size(self, *_):
+        self.settings.set("maximized", self.is_maximized())
+        if not self.is_maximized():
+            w, h = self.get_default_size()
+            self.settings.set("window-width", w)
+            self.settings.set("window-height", h)
+        return False
+
+    # -------------------------------------------------------- window buttons
+
+    def _apply_window_controls(self):
+        parent = self.winctl.get_parent()
+        if parent is not None:
+            parent.remove(self.winctl)
+        child = self.winctl.get_first_child()
+        while child is not None:
+            nxt = child.get_next_sibling()
+            self.winctl.remove(child)
+            child = nxt
+        if not self.settings.get("window-controls"):
+            return
+        layout = Gtk.Settings.get_default().get_property("gtk-decoration-layout") or ":minimize,maximize,close"
+        left, _sep, right = layout.partition(":")
+        side, names = (self._start, left) if not right and left else (self._end, right)
+        made = 0
+        for name in names.split(","):
+            b = None
+            if name == "minimize":
+                b = button(icon_name="minimize", style="text", small=True, tooltip=_("Minimize"),
+                           cb=lambda *_: self.minimize())
+            elif name == "maximize":
+                b = button(icon_name="crop_square", style="text", small=True, tooltip=_("Maximize"),
+                           cb=lambda *_: self.unmaximize() if self.is_maximized() else self.maximize())
+            elif name == "close":
+                b = button(icon_name="close", style="text close", small=True, tooltip=_("Close"),
+                           cb=lambda *_: self.close())
+            if b is not None:
+                self.winctl.append(b)
+                made += 1
+        if made:
+            if side is self._end:
+                side.append(self.winctl)
+            else:
+                side.prepend(self.winctl)
+
+    # ------------------------------------------------------------ responsive
+
+    def do_size_allocate(self, width, height, baseline):
+        Gtk.ApplicationWindow.do_size_allocate(self, width, height, baseline)
+        self._apply_size(width)
+
+    def _apply_size(self, width):
+        size = self.settings.get("size")
+        if size != "auto":
+            want = size
+        else:
+            compact = self._compact
+            if compact is None:
+                compact = width < COMPACT_BELOW
+            elif compact and width >= COMPACT_BELOW + HYSTERESIS:
+                compact = False
+            elif not compact and width < COMPACT_BELOW:
+                compact = True
+            if compact == self._compact:
+                return
+            self._compact = compact
+            want = "compact" if compact else "default"
+        f = SIZES[want]
+        if f != self.style.factor:
+            GLib.idle_add(lambda: (self.style.set_size(f), False)[1])
+
+    # --------------------------------------------------------------- filters
+
+    def _visible_base(self, a):
+        # Entries their package keeps out of menus are listed only on request,
+        # unless the user has already changed them.
+        return self.settings.get("show-no-display") or not a.no_display or a.has_override
+
+    def _matches_query(self, item):
+        return all(t in item.search for t in self._query.split())
+
+    def _match(self, item):
+        a = item.app
+        if not self._visible_base(a) or not self._matches_query(item):
+            return False
+        source = self.settings.get("source")
+        if source != "any" and a.source != source:
+            return False
+        f = self.settings.get("filter")
+        if f == "hidden":
+            return a.hidden
+        if a.hidden and not self.settings.get("show-hidden"):
+            return False
+        if f == "customised":
+            return a.customised
+        if f == "mine":
+            return a.created
+        return True
+
+    def _update_tab_controls(self):
+        f = self.settings.get("filter")
+        # The Hidden tab always lists hidden apps; Issues isn't a list.
+        self.toolbar.set_visible(f not in ("autostart", "defaults", "settings", "updates"))
+        self.showhidden.set_visible(f not in ("hidden", "issues"))
+        self.fabs.set_visible(f == "mine" and not self._selecting)
+
+    def _compare(self, a, b, *_):
+        ka = (a.app.name.casefold(), a.app.id)
+        kb = (b.app.name.casefold(), b.app.id)
+        return (ka > kb) - (ka < kb)
+
+    def _on_search(self, entry):
+        q = entry.get_text().strip().casefold()
+        if q == self._query:
+            return
+        self._query = q
+        if q and self.settings.get("filter") in PAGES:
+            self.settings.set("filter", "all")  # those pages aren't searchable
+        self.filter.changed(Gtk.FilterChange.DIFFERENT)
+        self._update_counts()
+
+    def _on_search_activate(self, _entry):
+        if not self.sorted.get_n_items():
+            return
+        if hasattr(self.grid, "scroll_to"):  # GTK 4.12+
+            self.grid.scroll_to(0, Gtk.ListScrollFlags.FOCUS, None)
+        else:
+            self.grid.grab_focus()
+
+    # ---------------------------------------------------------------- state
+
+    def _update_counts(self):
+        source = self.settings.get("source")
+        items = [i for i in self.apps.items() if self._visible_base(i.app) and self._matches_query(i)
+                 and (source == "any" or i.app.source == source)]
+        listed = items if self.settings.get("show-hidden") else [i for i in items if not i.app.hidden]
+        self.tabs.set_count("all", len(listed))
+        self.tabs.set_count("hidden", sum(1 for i in items if i.app.hidden))
+        self.tabs.set_count("customised", sum(1 for i in listed if i.app.customised))
+        self.tabs.set_count("mine", sum(1 for i in listed if i.app.created))
+        total = [i for i in self.apps.items() if self._visible_base(i.app)]
+        hidden = sum(1 for i in total if i.app.hidden)
+        if self._loaded:
+            text = _("{n} apps · {h} hidden").format(n=len(total), h=hidden)
+            self.chip.set(text, "ok")
+
+    def _update_state(self):
+        if not self._loaded:
+            if self.settings.get("filter") in ("autostart", "defaults", "settings", "updates"):
+                self.stack.set_visible_child_name(self.settings.get("filter"))
+            return
+        page = "grid" if self.sorted.get_n_items() else "empty"
+        if self.settings.get("filter") in PAGES:
+            page = self.settings.get("filter")
+        elif page == "empty":
+            f = self.settings.get("filter")
+            if self._query:
+                set_text(self.empty_title, _("No apps match “{q}”").format(q=self.search_entry.get_text().strip()))
+                set_text(self.empty_body, _("Try a different name, command or file ID."))
+            elif f == "customised":
+                set_text(self.empty_title, _("Nothing is customised"))
+                set_text(self.empty_body, _("Apps you change with Edit, or that have your own copy of their entry, "
+                                            "are listed here. Restore original puts the system version back."))
+            elif self.settings.get("source") != "any" and not self._query:
+                set_text(self.empty_title, _("No apps from this source"))
+                set_text(self.empty_body, _("Choose All sources next to the search box to see everything."))
+            elif f == "mine":
+                set_text(self.empty_title, _("No launchers yet"))
+                set_text(self.empty_body, _("Use New launcher to make one for a script or program, or New web app "
+                                            "to open a site in its own window. What you make is listed here."))
+            elif f == "hidden":
+                set_text(self.empty_title, _("Nothing is hidden"))
+                set_text(self.empty_body, _("Turn on “Hidden from launcher” on any app to hide it from your app menus."))
+            else:
+                set_text(self.empty_title, _("No apps found"))
+                set_text(self.empty_body, _("No application entries were found in your XDG data folders."))
+        if self.stack.get_visible_child_name() != page:
+            self.stack.set_visible_child_name(page)
+
+    # ---------------------------------------------------------------- scan
+
+    def rescan(self, *_args):
+        self._scan_gen += 1
+        gen = self._scan_gen
+
+        def done(result):
+            if gen != self._scan_gen:
+                return
+            if isinstance(result, Exception):
+                self.chip.set(_("Couldn't read apps"), "error")
+                return
+            apps, report = result
+            self.apps.sync(apps)
+            self.defaults.reload()
+            self.report = report
+            self.issues.update(report)
+            self.tabs.set_count("issues", report.count)
+            first = not self._loaded
+            self._loaded = True
+            self._update_counts()
+            self._update_state()
+            if first and self.sorted.get_n_items():
+                GLib.idle_add(lambda: (self.grid.grab_focus(), False)[1])
+
+        icon_lookup.clear_cache()
+        run_bg(health.scan_and_check, done)
+        self.autostart.reload()
+
+    def queue_rescan(self, delay=300):
+        if self._rescan_timer:
+            GLib.source_remove(self._rescan_timer)
+
+        def fire():
+            self._rescan_timer = 0
+            self.rescan()
+            return False
+
+        self._rescan_timer = GLib.timeout_add(delay, fire)
+
+    def _watch_dirs(self):
+        for d in desktop_entries.application_dirs() + [autostart.user_dir()] + autostart.system_dirs():
+            f = Gio.File.new_for_path(d)
+            try:
+                m = f.monitor_directory(Gio.FileMonitorFlags.WATCH_MOVES, None)
+            except GLib.Error:
+                continue
+            m.connect("changed", lambda *_: self.queue_rescan())
+            self._monitors.append(m)
+
+    # -------------------------------------------------------------- toggling
+
+    def _on_activate(self, _grid, position):
+        item = self.sorted.get_item(position)
+        if item is not None and self._selecting:
+            item.set_selected(not item.selected)
+            self._update_selection()
+        elif item is not None and not item.busy:
+            self._on_toggle(item, not item.app.hidden)
+
+    def _on_toggle(self, item: AppItem, hidden: bool, allow_delete=False):
+        if item.busy or (hidden and item.app.id == SELF_ID):
+            item.emit("changed")
+            return
+        app = item.app
+        item.set_busy(True)
+
+        def done(result):
+            item.set_busy(False)
+            if isinstance(result, overrides.NeedsConfirmation):
+                item.emit("changed")
+                self._confirm_delete(item, result.path)
+                return
+            if isinstance(result, overrides.OverrideError):
+                item.emit("changed")
+                verb = _("Couldn't hide {name}") if hidden else _("Couldn't unhide {name}")
+                error_dialog(self, verb.format(name=app.name),
+                             _("The file below couldn't be changed: {reason}. Nothing else was changed. "
+                               "Check that you own the folder and it isn't read-only.").format(reason=result.reason),
+                             result.path)
+                self.queue_rescan(0)
+                return
+            if isinstance(result, Exception):
+                item.emit("changed")
+                error_dialog(self, _("Something went wrong"), str(result))
+                return
+            self.queue_rescan(0)
+            if result is not None:
+                self._announce(result)
+
+        run_bg(lambda: overrides.set_hidden(app, hidden, allow_delete=allow_delete), done)
+
+    def _announce(self, change):
+        text = _("Hid {name}") if change.hidden else _("Showed {name}")
+        self._record(text.format(name=change.app_name), [change])
+
+    def _confirm_delete(self, item, path):
+        name = item.app.name
+
+        def on_response(resp):
+            if resp == "delete":
+                self._on_toggle(item, False, allow_delete=True)
+
+        Dialog(self, _("Delete this file to unhide {name}?").format(name=name),
+               _("{name} is hidden by a file that App Entries didn't create, or that has been "
+                 "edited since. To show the app again, the file has to be deleted. You can undo this "
+                 "right after.").format(name=name),
+               [("cancel", _("Cancel"), "tonal"), ("delete", _("Delete file"), "danger")],
+               on_response, icon_name="warning", icon_class="warn-text", detail=path).present()
+
+    # ------------------------------------------------------- explicit actions
+    # Everything below runs only when the user presses a button, and every
+    # change can be undone from the snackbar.
+
+    def _copy_text(self, text):
+        clipboard = self.get_clipboard()
+        try:
+            clipboard.set(text)
+        except (TypeError, AttributeError):
+            clipboard.set_content(Gdk.ContentProvider.new_for_value(text))
+        self.snackbar.show(_("Copied: {text}").format(text=text))
+
+    def _toggle_app(self, app, hidden):
+        item = self.apps.by_id.get(app.id)
+        if item is not None:
+            self._on_toggle(item, hidden)
+
+    def _run_changes(self, plan, message, failed_title, after=None, allow_empty=False):
+        """Plan (in the background), apply all-or-nothing, record it in the
+        history and offer Undo. `after(changes)` runs once they're applied and
+        returns anything it moved to the Trash, so Undo can put it back."""
+        def work():
+            changes = [c for c in plan() if c is not None]
+            return overrides.apply_all(changes)
+
+        def done(result):
+            self.queue_rescan(0)
+            if isinstance(result, overrides.OverrideError):
+                error_dialog(self, failed_title,
+                             _("The file below couldn't be changed: {reason}. Nothing was changed.")
+                             .format(reason=result.reason), result.path)
+            elif isinstance(result, Exception):
+                error_dialog(self, failed_title, str(result))
+            elif result or allow_empty:
+                trashed = (after(result) or []) if after is not None else []
+                self._record(message(len(result)), result, trashed)
+
+        run_bg(work, done)
+
+    def _record(self, text, changes, trashed=()):
+        """Log a change in the history and show it with Undo."""
+        entry = history.record(text, changes, list(trashed))
+        if entry is not None:
+            self.snackbar.show(text, _("Undo"), lambda: self.undo_entry(entry.id))
+        else:
+            self.snackbar.show(text)
+        self.history_changed()
+
+    def undo_entry(self, entry_id):
+        def work():
+            e = history.undo(entry_id)
+            if any("/mime/packages/" in p for p in e.paths):
+                appimages.refresh_mime()
+            return e
+
+        def done(result):
+            self.queue_rescan(0)
+            self.history_changed()
+            if isinstance(result, history.UndoError):
+                error_dialog(self, _("Couldn't undo"), str(result), result.path or None)
+            elif isinstance(result, Exception):
+                error_dialog(self, _("Couldn't undo"), str(result))
+            else:
+                self.snackbar.show(_("Undone: {what}").format(what=result.message))
+
+        run_bg(work, done)
+
+    def _undo_last(self):
+        def found(entries):
+            e = next((x for x in entries if x.can_undo), None) if not isinstance(entries, Exception) else None
+            if e is None:
+                self.snackbar.show(_("Nothing to undo"))
+            else:
+                self.undo_entry(e.id)
+
+        run_bg(history.load, found)
+
+    def history_changed(self):
+        if self.history_window is not None:
+            self.history_window.reload()
+
+    def show_history(self, *_a):
+        if self.history_window is None:
+            self.history_window = HistoryWindow(self, self.undo_entry)
+            self.history_window.connect("destroy", lambda *_x: setattr(self, "history_window", None))
+        self.history_window.present()
+
+    def _fix(self, kind, targets):
+        n_ = ngettext
+        if kind == "legacy":
+            self._run_changes(lambda: [overrides.plan_update_legacy(a) for a in targets],
+                              lambda n: n_("Updated {n} hide file", "Updated {n} hide files", n).format(n=n),
+                              _("Couldn't update the hide files"))
+        elif kind == "leftovers":
+            self._run_changes(lambda: [overrides.plan_delete(l.id, l.name, l.path, False) for l in targets],
+                              lambda n: n_("Removed {n} leftover file", "Removed {n} leftover files", n).format(n=n),
+                              _("Couldn't remove the leftover files"))
+        elif kind == "missing":
+            self._run_changes(lambda: [overrides.plan_set_hidden(a, True) for a in targets],
+                              lambda n: n_("Hid {n} app", "Hid {n} apps", n).format(n=n),
+                              _("Couldn't hide the apps"))
+        elif kind == "delete":
+            self._confirm_delete_launcher(targets[0])
+
+    def _save_edit(self, app, fields, picked=None):
+        def plan():
+            changes = []
+            if picked is not None:
+                path = fields.icon
+                svg = symbols.render(picked, title=fields.name.strip())
+                before = overrides.read_text(path)
+                if svg != before:
+                    changes.append(overrides.Change(app.id, app.name, path, before, svg, app.hidden))
+            return changes + [editing.plan_edit(app, fields)]
+
+        self._run_changes(plan,
+                          lambda n: _("Saved your changes to {name}").format(name=fields.name.strip()),
+                          _("Couldn't save your changes"))
+
+    def new_launcher(self):
+        LauncherWindow(self, self._save_launcher, self._save_raw,
+                       glyph_color=self.style.palette["ON_SURFACE"], highlight=self._highlight()).present()
+
+    def new_web_app(self):
+        WebAppWindow(self, self._save_launcher, glyph_color=self.style.palette["ON_SURFACE"]).present()
+        if self.settings.get("filter") != "mine":
+            self.settings.set("filter", "mine")
+
+    def _highlight(self):
+        rgba = Gdk.RGBA()
+        rgba.parse(self.style.palette["PRIMARY"])
+        rgba.alpha = 0.24
+        return rgba
+
+    def _save_launcher(self, did, spec, make_executable):
+        is_new = did is None
+
+        def plan():
+            if make_executable:
+                launchers.make_executable(spec.program)
+            return launchers.plan_save(spec, did)[1]
+
+        made = _("Created the {name} web app") if spec.web_url else _("Created the {name} launcher")
+        self._run_changes(plan, lambda n: (made if is_new else _("Saved {name}")).format(name=spec.name.strip()),
+                          _("Couldn't save the launcher"))
+        if is_new and self.settings.get("filter") not in ("all", "mine"):
+            self.settings.set("filter", "mine")
+
+    def _save_raw(self, did, name, text):
+        self._run_changes(lambda: [launchers.plan_raw(text, did, name)],
+                          lambda n: _("Saved {name}").format(name=name), _("Couldn't save the launcher"))
+
+    @staticmethod
+    def _web_spec(app):
+        if not app.created or not app.override_path:
+            return None
+        try:
+            spec = launchers.read_spec(overrides.read_text(app.override_path) or "")
+        except overrides.OverrideError:
+            return None
+        return spec if spec is not None and spec.web_url else None
+
+    def _confirm_delete_launcher(self, app):
+        spec = self._web_spec(app)
+        profile = ""
+        if spec is not None and spec.web_profile:
+            profile = webapps.own_data(spec.args)
+
+        def on_response(resp):
+            if resp not in ("delete", "delete-data"):
+                return
+            def plan():
+                changes = (launchers.plan_delete(app) if app.created else
+                           [overrides.plan_delete(app.id, app.name, app.override_path, False)])
+                return changes
+
+            def after(result):
+                if resp == "delete-data" and profile:
+                    try:
+                        return [trash.move(profile)]
+                    except trash.TrashError as e:
+                        error_dialog(self, _("Couldn't move its data to the Trash"), str(e), profile)
+                return []
+
+            done_text = _("Deleted the {name} web app") if spec else _("Deleted the {name} launcher")
+            self._run_changes(plan, lambda n: done_text.format(name=app.name),
+                              _("Couldn't delete {name}").format(name=app.name), after=after)
+
+        what = _("web app") if spec else _("launcher")
+        body = (_("This deletes the {what} file from your applications folder, so {name} disappears from your "
+                  "menus. You can undo this right after.").format(what=what, name=app.name))
+        if not spec:
+            body = body.replace(".", ". " + _("The program itself isn't touched."), 1)
+        else:
+            body += " " + _("Your browser and its cookies and sign-ins aren't touched.")
+        buttons = [("cancel", _("Cancel"), "tonal"), ("delete", _("Delete"), "danger")]
+        if profile:
+            body += " " + _("This web app also has sign-ins of its own, kept apart from your browser. Delete "
+                            "with data moves only that folder to the Trash.")
+            buttons = [("cancel", _("Cancel"), "tonal"), ("delete", _("Keep data"), "tonal"),
+                       ("delete-data", _("Delete with data"), "danger")]
+        Dialog(self, _("Delete {name}?").format(name=app.name), body, buttons,
+               on_response, icon_name="delete", icon_class="error-text", detail=app.override_path).present()
+
+    def _remove_appimage(self, app):
+        home = os.path.expanduser("~")
+
+        def short(p):
+            return "~" + p[len(home):] if p.startswith(home + os.sep) else p
+
+        def planned(result):
+            if isinstance(result, Exception):
+                error_dialog(self, _("Couldn't look at {name}").format(name=app.name), str(result))
+                return
+            r = result
+            why = appimages.problem(r)
+            if why:
+                error_dialog(self, _("Couldn't remove {name}").format(name=app.name), why, r.appimage)
+                return
+            exists = os.path.isfile(r.appimage)
+            lines = []
+            if exists:
+                lines.append(_("{file} ({size}), to the Trash").format(file=short(r.appimage),
+                                                                         size=GLib.format_size(r.size)))
+            lines += [short(p) for p in r.entries + r.icons + r.others]
+            if r.settings:
+                lines.append("")
+                lines.append(_("Only with “Remove with settings”, to the Trash:"))
+                lines += [short(p) for p in r.settings]
+            if exists:
+                body = _("This removes {name} and everything set up for it, so nothing of it is left in your "
+                         "menus or in Open With. The AppImage goes to the Trash, where you can restore it; "
+                         "the rest comes back with Undo.").format(name=app.name)
+            else:
+                body = _("The AppImage itself is already gone. What was set up for it is removed, and comes "
+                         "back with Undo.")
+            if r.settings:
+                body += " " + _("Folders that look like its settings are listed last. They're only a guess from "
+                                "the name, so they're kept unless you choose Remove with settings.")
+            if r.blocked:
+                body += " " + ngettext(
+                    "One more entry outside your folder starts it and can't be removed here: {files}.",
+                    "{n} more entries outside your folder start it and can't be removed here: {files}.",
+                    len(r.blocked)).format(n=len(r.blocked), files=", ".join(r.blocked))
+
+            def on_response(resp):
+                if resp not in ("remove", "remove-all"):
+                    return
+                to_trash = ([r.appimage] if exists else []) + (r.settings if resp == "remove-all" else [])
+
+                def after(_result):
+                    trashed = []
+                    for p in to_trash:
+                        try:
+                            trashed.append(trash.move(p))
+                        except trash.TrashError as e:
+                            error_dialog(self, _("Couldn't move it to the Trash"), str(e), p)
+                    if r.others:
+                        run_bg(appimages.refresh_mime)
+                    return trashed
+
+                self._run_changes(lambda: appimages.changes(r, app.id, app.name),
+                                  lambda n: _("Removed {name}").format(name=app.name),
+                                  _("Couldn't remove {name}").format(name=app.name), after=after,
+                                  allow_empty=bool(to_trash))
+
+            buttons = [("cancel", _("Cancel"), "tonal"), ("remove", _("Remove"), "danger")]
+            if r.settings:
+                buttons = [("cancel", _("Cancel"), "tonal"), ("remove", _("Remove"), "tonal"),
+                           ("remove-all", _("Remove with settings"), "danger")]
+            Dialog(self, _("Remove {name}?").format(name=app.name), body, buttons,
+                   on_response, icon_name="delete_forever", icon_class="error-text",
+                   detail="\n".join(lines[:18]) + ("\n…" if len(lines) > 18 else "")).present()
+
+        run_bg(lambda: appimages.plan(app), planned)
+
+    def _on_card_action(self, item, action):
+        app = item.app
+        if action == "selected":
+            self._update_selection()
+        elif action == "restore":
+            def plan():
+                changes = [overrides.plan_restore_original(app)]
+                # An icon drawn for this app in the Edit window goes too.
+                icon = launchers.icon_path(launchers.PREFIX + "icon-" + app.id)
+                text = overrides.read_text(icon)
+                if text is not None and launchers.symbols_icon(text):
+                    changes.append(overrides.Change(app.id, app.name, icon, text, None, app.base_hidden))
+                return changes
+
+            self._run_changes(plan,
+                              lambda n: _("Restored the original {name}").format(name=app.name),
+                              _("Couldn't restore {name}").format(name=app.name))
+        elif action == "delete":
+            self._confirm_delete_launcher(app)
+        elif action == "edit" and app.created and self._web_spec(app):
+            WebAppWindow(self, self._save_launcher, did=app.id, text=overrides.read_text(app.override_path),
+                         glyph_color=self.style.palette["ON_SURFACE"]).present()
+        elif action == "remove-appimage":
+            self._remove_appimage(app)
+        elif action == "edit" and app.created:
+            text = overrides.read_text(app.override_path)
+            LauncherWindow(self, self._save_launcher, self._save_raw, did=app.id, text=text,
+                           glyph_color=self.style.palette["ON_SURFACE"], highlight=self._highlight()).present()
+        elif action == "duplicate":
+            spec = launchers.duplicate(overrides.read_text(app.override_path) or "")
+            if spec is None:
+                error_dialog(self, _("Couldn't duplicate {name}").format(name=app.name),
+                             _("It was changed by hand, so it can't be copied through the form. Use Open file "
+                               "location and copy the file instead."), app.override_path)
+            else:
+                self._save_launcher(None, spec, False)
+        elif action == "edit":
+            try:
+                EditWindow(self, app, self._save_edit, self.style.palette["ON_SURFACE"],
+                           self._highlight()).present()
+            except overrides.OverrideError as e:
+                error_dialog(self, _("Couldn't open {name}").format(name=app.name),
+                             _("The entry file couldn't be read: {reason}.").format(reason=e.reason), e.path)
+        elif action.startswith("find:"):
+            self.settings.set("filter", "all")
+            self.search_entry.set_text(action[len("find:"):])
+        elif action == "open-folder":
+            path = app.override_path or app.source_path
+            try:
+                Gio.AppInfo.launch_default_for_uri(Gio.File.new_for_path(os.path.dirname(path)).get_uri(), None)
+            except GLib.Error as e:
+                error_dialog(self, _("Couldn't open the folder"), e.message, os.path.dirname(path))
+
+    def _unhide_all(self):
+        apps = [i.app for i in self.apps.items()]
+
+        def planned(result):
+            if isinstance(result, Exception):
+                error_dialog(self, _("Couldn't unhide the apps"), str(result))
+                return
+            changes, skipped = result
+            if not changes:
+                self.snackbar.show(_("Nothing to unhide: no apps are hidden by you or App Entries"))
+                return
+            body = _("Every app hidden by App Entries or by your own files is shown in launchers again. "
+                     "Apps hidden by their own package, such as helpers and settings panels, stay as they are. "
+                     "You can undo this right after.")
+            if skipped:
+                body += " " + ngettext(
+                    "{n} app hidden by a file App Entries didn't make is skipped; unhide it on its own card.",
+                    "{n} apps hidden by files App Entries didn't make are skipped; unhide them on their own cards.",
+                    len(skipped)).format(n=len(skipped))
+
+            def on_response(resp):
+                if resp == "show":
+                    self._run_changes(lambda: changes,
+                                      lambda n: ngettext("Unhid {n} app", "Unhid {n} apps", n).format(n=n),
+                                      _("Couldn't unhide the apps"))
+
+            Dialog(self, ngettext("Show {n} hidden app?", "Show {n} hidden apps?", len(changes))
+                   .format(n=len(changes)), body,
+                   [("cancel", _("Cancel"), "tonal"), ("show", _("Show all"), "filled")],
+                   on_response, icon_name="visibility").present()
+
+        run_bg(lambda: overrides.plan_unhide_all(apps), planned)
+
+    # ------------------------------------------------------------ selecting
+
+    def set_selecting(self, on):
+        if on == self._selecting:
+            return
+        self._selecting = on
+        if self.select_btn.get_active() != on:
+            self.select_btn.set_active(on)
+        for item in self.apps.items():
+            item.selected = False
+            item.emit("changed")
+        self.sel_bar.set_reveal_child(on)
+        self.sel_bar.set_can_target(on)
+        self.snackbar.set_margin_bottom(72 if on else 0)
+        self._update_tab_controls()
+        self._update_selection()
+
+    def _on_key(self, _c, keyval, _code, _state):
+        if keyval == Gdk.KEY_Escape and self._selecting:
+            self.set_selecting(False)
+            return True
+        return False
+
+    def _selected(self):
+        return [i.app for i in self.apps.items() if i.selected]
+
+    def _select_all(self):
+        shown = [self.sorted.get_item(i) for i in range(self.sorted.get_n_items())]
+        everything = all(i.selected for i in shown)
+        for item in shown:
+            item.set_selected(not everything)
+        self._update_selection()
+
+    def _update_selection(self):
+        apps = self._selected()
+        set_text(self.sel_count, ngettext("{n} selected", "{n} selected", len(apps)).format(n=len(apps)))
+        self.sel_hide.set_sensitive(any(not a.hidden and a.id != SELF_ID for a in apps))
+        self.sel_show.set_sensitive(any(a.hidden for a in apps))
+        self.sel_restore.set_sensitive(any(a.has_override and a.system for a in apps))
+        self.sel_style.set_sensitive(bool(apps))
+
+    def _batch(self, what):
+        apps = self._selected()
+        n_ = ngettext
+        if what == "hide":
+            targets = [a for a in apps if not a.hidden and a.id != SELF_ID]
+            self._run_changes(lambda: [overrides.plan_set_hidden(a, True) for a in targets],
+                              lambda n: n_("Hid {n} app", "Hid {n} apps", n).format(n=n),
+                              _("Couldn't hide the apps"))
+        elif what == "show":
+            def planned(result):
+                if isinstance(result, Exception):
+                    error_dialog(self, _("Couldn't show the apps"), str(result))
+                    return
+                changes, skipped = result
+                if changes:
+                    self._run_changes(lambda: changes, lambda n: n_("Showed {n} app", "Showed {n} apps", n)
+                                      .format(n=n), _("Couldn't show the apps"))
+                if skipped:
+                    error_dialog(self, n_("{n} app was left hidden", "{n} apps were left hidden", len(skipped))
+                                 .format(n=len(skipped)),
+                                 _("They're hidden by files App Entries didn't make, which would have to be "
+                                   "deleted. Turn them on one at a time to be asked about each file."),
+                                 "\n".join(a.name for a in skipped))
+            hidden = [a for a in apps if a.hidden]
+            run_bg(lambda: self._plan_show(hidden), planned)
+        elif what == "style":
+            self._style_icons(apps)
+        elif what == "restore":
+            targets = [a for a in apps if a.has_override and a.system]
+
+            def on_response(resp):
+                if resp == "restore":
+                    self._run_changes(lambda: [overrides.plan_restore_original(a) for a in targets],
+                                      lambda n: n_("Restored {n} app", "Restored {n} apps", n).format(n=n),
+                                      _("Couldn't restore the apps"))
+
+            Dialog(self, n_("Restore {n} app?", "Restore {n} apps?", len(targets)).format(n=len(targets)),
+                   _("Your files for these apps are deleted, so the versions installed by the system are used "
+                     "again. Edits and hide settings for them go away. You can undo this right after."),
+                   [("cancel", _("Cancel"), "tonal"), ("restore", _("Restore"), "filled")],
+                   on_response, icon_name="restart_alt",
+                   detail=", ".join(a.name for a in targets[:12]) + ("…" if len(targets) > 12 else "")).present()
+
+    def _style_icons(self, apps):
+        def found(result):
+            if isinstance(result, Exception):
+                error_dialog(self, _("Couldn't read the icons"), str(result))
+                return
+            styled = [(a, f) for a, f in result if f is not None]
+            if not styled:
+                Dialog(self, _("No styled icons selected"),
+                       _("Only icons made in App Entries can be restyled: launchers you made, and apps you gave a "
+                         "styled icon with Edit. Give an app one with Edit → Styled… first."),
+                       [("ok", _("OK"), "filled")], icon_name="palette").present()
+                return
+            targets = [a for a, _f in styled]
+            start = styled[0][1][2]
+
+            def picked(style):
+                def plan():
+                    changes, _skipped = launchers.plan_restyle(targets, style)
+                    return changes
+
+                self._run_changes(plan, lambda n: ngettext("Restyled {n} icon", "Restyled {n} icons", len(targets))
+                                  .format(n=len(targets)), _("Couldn't restyle the icons"))
+
+            IconPicker(self, start, picked, self.style.palette["ON_SURFACE"], style_for=len(targets)).present()
+            if len(styled) < len(apps):
+                self.snackbar.show(ngettext("{n} selected app has no styled icon and stays as it is",
+                                            "{n} selected apps have no styled icon and stay as they are",
+                                            len(apps) - len(styled)).format(n=len(apps) - len(styled)), seconds=6)
+
+        run_bg(lambda: [(a, launchers.styled_icon(a)) for a in apps], found)
+
+    @staticmethod
+    def _plan_show(apps):
+        changes, skipped = [], []
+        for a in apps:
+            try:
+                c = overrides.plan_set_hidden(a, False)
+            except overrides.NeedsConfirmation:
+                skipped.append(a)
+                continue
+            if c is not None:
+                changes.append(c)
+        return changes, skipped
+
+    # ------------------------------------------------------- export / import
+
+    def _export(self, parent=None):
+        parent = parent or self
+        apps = [i.app for i in self.apps.items()]
+
+        def counted(result):
+            if isinstance(result, Exception):
+                error_dialog(parent, _("Couldn't export"), str(result))
+                return
+            items, others = result
+            if not items and not others:
+                self.snackbar.show(_("Nothing to export yet: you haven't hidden, edited or made any apps"))
+                return
+            body = _("Saves a file with the apps you hid, the entries you edited and the launchers you made, "
+                     "with their icons. Import it on another computer, or after reinstalling, to get them back. "
+                     "Hidden apps are saved by name only, so they're hidden whichever version is installed there.")
+            buttons = [("cancel", _("Cancel"), "tonal")]
+            if others:
+                body += " " + ngettext(
+                    "{n} other file in your applications folder wasn't made by App Entries. Include it too "
+                    "if you want a full copy of the folder.",
+                    "{n} other files in your applications folder weren't made by App Entries. Include them "
+                    "too if you want a full copy of the folder.", others).format(n=others)
+                buttons.append(("all", _("Include them"), "tonal"))
+            if items:
+                buttons.append(("ours", ngettext("Export {n} item", "Export {n} items", len(items))
+                                .format(n=len(items)), "filled"))
+
+            def on_response(resp):
+                if resp in ("ours", "all"):
+                    self._export_to(apps, resp == "all", parent)
+
+            Dialog(parent, _("Export your changes"), body, buttons, on_response, icon_name="upload").present()
+
+        run_bg(lambda: profile.collect(apps), counted)
+
+    def _export_to(self, apps, include_others, parent):
+        def chosen(path):
+            if not path.endswith(".json"):
+                path += ".json"
+
+            def done(result):
+                if isinstance(result, Exception):
+                    error_dialog(parent, _("Couldn't export"), str(result), path)
+                else:
+                    self.snackbar.show(ngettext("Exported {n} item", "Exported {n} items", len(result[0]))
+                                       .format(n=len(result[0])))
+
+            run_bg(lambda: profile.export(path, apps, include_others), done)
+
+        choose_file(parent, _("Export your changes"), chosen, patterns=("*.json",), filter_name=_("Exports"),
+                    save_as="app-entries-%s.json" % GLib.DateTime.new_now_local().format("%Y-%m-%d"))
+
+    def _import(self, parent=None):
+        parent = parent or self
+        apps = [i.app for i in self.apps.items()]
+
+        def chosen(path):
+            def planned(result):
+                if isinstance(result, Exception):
+                    error_dialog(parent, _("Couldn't import"), str(result), path)
+                    return
+                self._confirm_import(result, parent)
+
+            run_bg(lambda: profile.plan_import(profile.read(path), apps), planned)
+
+        choose_file(parent, _("Import changes"), chosen, patterns=("*.json",), filter_name=_("Exports"))
+
+    def _confirm_import(self, plan, parent=None):
+        parent = parent or self
+        lines = list(plan.adds)
+        icons = sum(1 for c in plan.changes if not c.app_id)
+        if icons:
+            lines.append(ngettext("Add {n} icon file", "Add {n} icon files", icons).format(n=icons))
+        lines += [_("Skip {name}: {why}").format(name=n, why=w) for n, w in plan.skipped]
+        if plan.unchanged:
+            lines.append(ngettext("{n} item already matches", "{n} items already match", plan.unchanged)
+                         .format(n=plan.unchanged))
+        detail = "\n".join(lines[:20]) + ("\n…" if len(lines) > 20 else "")
+        if not plan.changes:
+            Dialog(parent, _("Nothing to import"), _("Everything in the file already matches this computer."),
+                   [("ok", _("OK"), "filled")], icon_name="download", detail=detail or None).present()
+            return
+
+        def on_response(resp):
+            if resp == "import":
+                self._run_changes(lambda: plan.changes,
+                                  lambda n: ngettext("Imported {n} change", "Imported {n} changes", n).format(n=n),
+                                  _("Couldn't import"))
+
+        Dialog(parent, ngettext("Make {n} change?", "Make {n} changes?", len(plan.changes))
+               .format(n=len(plan.changes)),
+               _("These are the changes the file asks for. Apps that aren't installed here are skipped. "
+                 "Files in your applications folder are replaced where the file has a different version. "
+                 "You can undo all of it right after."),
+               [("cancel", _("Cancel"), "tonal"), ("import", _("Import"), "filled")],
+               on_response, icon_name="download", detail=detail).present()
+
+    # ------------------------------------------------------ refresh launchers
+
+    def _refresh_launchers(self):
+        def on_response(resp):
+            if resp != "refresh":
+                return
+
+            def done(result):
+                if isinstance(result, Exception):
+                    error_dialog(self, _("Couldn't refresh"), str(result))
+                elif any("failed" in line or "Couldn't" in line for line in result):
+                    error_dialog(self, _("Part of the refresh didn't work"), _("Here's what happened:"),
+                                 "\n".join(result))
+                else:
+                    self.snackbar.show(_("Asked launchers to reload their app lists"))
+
+            run_bg(launcher_refresh.refresh, done)
+
+        Dialog(self, _("Refresh launcher menus?"),
+               _("Most launchers notice changes on their own. If yours still shows an app you hid, or misses "
+                 "one you showed, this nudges it. Your files aren't changed. It does this:"),
+               [("cancel", _("Cancel"), "tonal"), ("refresh", _("Refresh"), "filled")],
+               on_response, icon_name="sync", detail="\n".join("• " + s for s in launcher_refresh.steps())).present()
