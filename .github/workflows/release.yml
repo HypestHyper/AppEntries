@@ -6,7 +6,7 @@ name: Release
 # it then uses the version in app_entries/__init__.py. An existing release gets its notes
 # rewritten and the archive replaced. With "Move the tag" ticked, a run by hand also moves
 # the existing release's tag to this commit, for fixes that don't need a new version
-# (wording, documentation).
+# (wording, documentation). "Remove a release" deletes that release and its tag instead.
 on:
   push:
     tags: ["v*"]
@@ -18,12 +18,27 @@ on:
         description: "Move the existing release's tag to this commit (for fixes that don't need a new version)"
         type: boolean
         default: false
+      remove:
+        description: "Remove a release and its tag instead, like v1.0.0 (leave empty to publish)"
+        type: string
+        default: ""
 
 permissions:
   contents: write
 
 jobs:
+  remove:
+    if: github.event_name == 'workflow_dispatch' && inputs.remove != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove the release and its tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.remove }}
+        run: gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+
   release:
+    if: github.event_name != 'workflow_dispatch' || inputs.remove == ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
