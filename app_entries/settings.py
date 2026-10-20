@@ -16,7 +16,8 @@ DEFAULTS = {
     "show-hidden": True,
     "source": "any",            # any, system, flatpak, snap, appimage, steam or user
     "theme": "system",          # system | light | dark
-    "accent": "53dbb0",
+    "accent": "53dbb0",         # six hex digits, "desktop" or "palette"
+    "palette": "generated",     # generated, or one of theme.PRESETS
     "themed-icon": True,
     "size": "auto",             # auto | compact | default | large
     "reduce-motion": False,

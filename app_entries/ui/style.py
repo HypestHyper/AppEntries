@@ -318,6 +318,11 @@ popover.options > contents {{ padding: 6px; }}
 flowboxchild {{ padding: 0; background: none; }}
 .swatch.swatch-small {{ min-width: 32px; min-height: 32px; border-radius: 16px; }}
 .swatch.swatch-small:checked {{ border-radius: 10px; }}
+button.palette-chip {{ min-height: 36px; padding: 0 14px 0 10px; border-radius: 18px; font-size: 13px;
+  background-color: transparent; color: {ON_SURFACE}; box-shadow: inset 0 0 0 1px {OUTLINE_VARIANT}; }}
+button.palette-chip:hover {{ background-color: alpha({ON_SURFACE}, .06); }}
+button.palette-chip:checked {{ background-color: {SECONDARY_CONTAINER}; color: {ON_SECONDARY_CONTAINER};
+  box-shadow: inset 0 0 0 2px {PRIMARY}; border-radius: 12px; }}
 button.color-dot {{ padding: 2px; min-width: 0; min-height: 0; background: none; border-radius: 50%; box-shadow: none; }}
 button.color-dot:hover {{ background: alpha({ON_SURFACE}, .08); }}
 .swatch-f4f4f5, .swatch-1b1b1f {{ box-shadow: inset 0 0 0 1px {OUTLINE}; }}
@@ -380,10 +385,12 @@ def load_css(provider: Gtk.CssProvider, css: str) -> None:
 class Style:
     """Owns the CSS providers. Recolours and rescales without touching widgets."""
 
-    def __init__(self, seed: str = theme.DEFAULT_SEED, size: str = "default", dark: bool = True):
+    def __init__(self, seed: str = theme.DEFAULT_SEED, size: str = "default", dark: bool = True,
+                 preset: str = ""):
+        """`seed` is the accent (six hex digits), or "" to use the preset's own."""
         self.display = Gdk.Display.get_default()
-        self.seed, self.dark = seed, dark
-        self.palette = theme.palette(seed, dark)
+        self.seed, self.dark, self.preset = seed, dark, preset
+        self.palette = theme.palette(seed, dark, preset)
         self._set_gtk_dark(dark)
         self.factor = SIZES.get(size, 0.9)
         self.main = Gtk.CssProvider()
@@ -427,13 +434,14 @@ class Style:
         if settings is not None:
             settings.set_property("gtk-application-prefer-dark-theme", dark)
 
-    def recolor(self, seed: str = None, dark: bool = None, animate: bool = True):
-        """Switch accent and/or light/dark, blending over ~300 ms."""
+    def recolor(self, seed: str = None, dark: bool = None, animate: bool = True, preset: str = None):
+        """Switch accent, palette and/or light/dark, blending over ~300 ms."""
         self.seed = self.seed if seed is None else seed
+        self.preset = self.preset if preset is None else preset
         if dark is not None and dark != self.dark:
             self.dark = dark
             self._set_gtk_dark(dark)
-        old, new = self.palette, theme.palette(self.seed, self.dark)
+        old, new = self.palette, theme.palette(self.seed, self.dark, self.preset)
         if old == new:
             return
         self.palette = new

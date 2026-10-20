@@ -5,7 +5,9 @@ from gettext import gettext as _
 from gi.repository import Gio, GLib, Gtk
 
 from .. import APP_NAME, VERSION, desktop_entries, theme
-from .widgets import Clamp, Group, button, card, hbox, label, section, switch_row, vbox, wrap_row
+from .color_picker import ColorDot, ColorPicker
+from .widgets import (Clamp, Group, WrapBox, button, card, hbox, icon, label, section, set_text, switch_row,
+                      vbox, wrap_row)
 
 REPO_URL = "https://github.com/HypestHyper/AppEntries"
 
@@ -24,24 +26,88 @@ class SettingsPage(Gtk.ScrolledWindow):
         page.set_margin_bottom(24)
 
         # Appearance
-        page.append(section(_("Appearance"), _("One accent colour sets the whole palette.")))
+        page.append(section(_("Appearance"), _("One accent colour sets the whole palette, or pick a well-known "
+                                               "colour scheme.")))
         c = card()
-        swatches = hbox(10)
+        self._accent_buttons = {}
         first = None
-        current = theme.valid_seed(settings.get("accent"))
-        for seed, name in theme.SEEDS:
-            b = Gtk.ToggleButton(tooltip_text=_(name))
-            b.add_css_class("swatch")
-            b.add_css_class("swatch-" + seed)
-            b.update_property([Gtk.AccessibleProperty.LABEL], [_("Accent: {name}").format(name=_(name))])
+        swatches = WrapBox(10, 10)
+        accent = settings.get("accent")
+
+        def toggle(key, child, tip):
+            nonlocal first
+            b = Gtk.ToggleButton(tooltip_text=tip)
+            b.set_child(child)
+            b.update_property([Gtk.AccessibleProperty.LABEL], [tip])
             if first is None:
                 first = b
             else:
                 b.set_group(first)
-            b.set_active(seed == current)
-            b.connect("toggled", self._on_swatch, seed)
+            b.connect("toggled", lambda btn, k=key: btn.get_active() and self._set_accent(k))
+            self._accent_buttons[key] = b
             swatches.append(b)
-        c.append(hbox(12, label(_("Accent"), ("body", "dim")), swatches))
+            return b
+
+        desk = toggle("desktop", hbox(6, icon("wallpaper"), label(_("Desktop"))),
+                      _("Use your desktop's accent colour, and follow it when it changes"))
+        desk.add_css_class("tonal")
+        desk.add_css_class("small")
+        pal = toggle("palette", hbox(6, icon("palette"), label(_("Palette's"))),
+                     _("Use the chosen palette's own accent colour"))
+        pal.add_css_class("tonal")
+        pal.add_css_class("small")
+        for seed, name in theme.SEEDS:
+            b = toggle(seed, Gtk.Box(), _("Accent: {name}").format(name=_(name)))
+            b.add_css_class("swatch")
+            b.add_css_class("swatch-" + seed)
+        self._custom_btn = Gtk.ToggleButton(tooltip_text=_("Any other colour"))
+        self._custom_btn.set_child(hbox(6, icon("colorize"), label(_("Other…"))))
+        self._custom_btn.add_css_class("tonal")
+        self._custom_btn.add_css_class("small")
+        self._custom_btn.set_group(first)
+        self._custom_btn.update_property([Gtk.AccessibleProperty.LABEL], [_("Any other accent colour")])
+        swatches.append(self._custom_btn)
+        self._picker = ColorPicker("#" + theme.valid_seed(accent), _("Accent"))
+        self._picker.connect("changed", lambda _p, hexv: self._custom_btn.get_active()
+                             and self.settings.set("accent", hexv.lstrip("#")))
+        self._picker_reveal = Gtk.Revealer(child=self._picker,
+                                           transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
+        self._custom_btn.connect("toggled", self._on_custom)
+        c.append(vbox(8, label(_("Accent"), ("body", "dim")), swatches, self._picker_reveal))
+        self._accent_note = label("", ("small", "faint"), wrap=True, chars=60)
+        c.append(self._accent_note)
+
+        # Palettes
+        self._palette_buttons = {}
+        palettes = WrapBox(8, 8)
+        pfirst = None
+        dark = getattr(win.get_application().style, "dark", True)
+        for key, name in [("generated", _("From accent"))] + [(k, v[0]) for k, v in theme.PRESETS.items()]:
+            b = Gtk.ToggleButton()
+            b.add_css_class("palette-chip")
+            if key == "generated":
+                dots = [ColorDot(theme.palette(theme.DEFAULT_SEED, dark)[r], 14)
+                        for r in ("SURFACE_DIM", "SURFACE_CONTAINER", "PRIMARY")]
+            else:
+                c_ = theme.PRESETS[key][1][dark]
+                dots = [ColorDot(c_[r], 14) for r in ("window", "card", "accent")]
+            b.set_child(hbox(8, hbox(2, *dots), label(name)))
+            b.update_property([Gtk.AccessibleProperty.LABEL], [_("Palette: {name}").format(name=name)])
+            if pfirst is None:
+                pfirst = b
+            else:
+                b.set_group(pfirst)
+            b.connect("toggled", lambda btn, k=key: btn.get_active() and self._set_palette(k))
+            self._palette_buttons[key] = b
+            palettes.append(b)
+        c.append(vbox(8, label(_("Palette"), ("body", "dim")), palettes))
+        c.append(label(_("A palette replaces the background and text colours with a well-known colour scheme, in "
+                         "light and dark. The accent above still applies; choose Palette's to use the scheme's own."),
+                       ("small", "faint"), wrap=True, chars=60))
+        self._win = win
+        win.get_application().accent_listeners.append(self._sync_accent)
+        self.connect("destroy", lambda *_a: win.get_application().accent_listeners.remove(self._sync_accent)
+                     if self._sync_accent in win.get_application().accent_listeners else None)
 
         r = wrap_row(10)
         r.append(hbox(10, label(_("Theme"), ("body", "dim")),
@@ -122,14 +188,63 @@ class SettingsPage(Gtk.ScrolledWindow):
 
         self.set_child(Clamp(page, 760))
         settings.connect(self._on_setting)
+        self._sync_accent()
 
-    def _on_swatch(self, b, seed):
+    # -- accent and palette ---------------------------------------------------
+
+    def _set_accent(self, key):
+        self._picker_reveal.set_reveal_child(False)
+        self.settings.set("accent", key)
+
+    def _on_custom(self, b):
+        self._picker_reveal.set_reveal_child(b.get_active())
         if b.get_active():
-            self.settings.set("accent", seed)
+            self.settings.set("accent", self._picker.hex().lstrip("#"))
+
+    def _set_palette(self, key):
+        self.settings.set("palette", key)
+        # A scheme looks right with its own accent; you can pick another after.
+        if key != "generated" and self.settings.get("accent") in [s for s, _n in theme.SEEDS]:
+            self.settings.set("accent", "palette")
+        elif key == "generated" and self.settings.get("accent") == "palette":
+            self.settings.set("accent", theme.DEFAULT_SEED)
+
+    def _sync_accent(self):
+        accent, palette = self.settings.get("accent"), self.settings.get("palette")
+        preset = palette in theme.PRESETS
+        self._accent_buttons["palette"].set_visible(preset)
+        if accent not in self._accent_buttons and self._picker.hex().lstrip("#") != accent:
+            self._picker.set_hex("#" + theme.valid_seed(accent), emit=False)
+        b = self._accent_buttons.get(accent)
+        if b is not None:
+            if not b.get_active():
+                b.set_active(True)
+        elif not self._custom_btn.get_active():
+            self._custom_btn.set_active(True)
+        pb = self._palette_buttons.get(palette if preset else "generated")
+        if pb is not None and not pb.get_active():
+            pb.set_active(True)
+        if accent == "desktop":
+            color, where = self._win.get_application().desktop_accent.value()
+            if color:
+                note = _("Following {source}: {color}.").format(source=where, color=color)
+            else:
+                note = _("Your desktop doesn't share an accent colour, so {fallback} is used. GNOME and KDE "
+                         "share theirs; on Hyprland, Sway and similar, theme tools like Noctalia, matugen or "
+                         "wallust write it to ~/.config/gtk-4.0/gtk.css.").format(
+                    fallback=_("the palette's own") if preset else _("Mint"))
+        elif accent == "palette":
+            note = _("Using the palette's own accent colour.")
+        else:
+            note = _("Desktop follows your desktop's accent colour: GNOME and KDE settings, or the colours "
+                     "theme tools like Noctalia and matugen write for GTK apps.")
+        set_text(self._accent_note, note)
 
     def _on_setting(self, key):
         if key == "show-no-display":
             self._nd.set_value(self.settings.get("show-no-display"))
+        elif key in ("accent", "palette"):
+            self._sync_accent()
 
     @staticmethod
     def _open(uri):

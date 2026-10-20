@@ -51,7 +51,7 @@
 - **Export / Import** your changes to set up another computer.
 - **Updates** from GitHub releases, installed with one button.
 - A **command line** for scripts, and full keyboard and screen reader support.
-- Light and dark themes, six accent colours and a responsive layout.
+- Light and dark themes and a responsive layout. The accent can follow your desktop's (GNOME and KDE settings, or the colours Noctalia, matugen, wallust and other theme tools write for GTK apps), and palettes like Catppuccin, Gruvbox, Nord, Rosé Pine, Tokyo Night, Everforest and Solarized restyle the whole app.
 
 Nothing happens by itself: every option is explained, nothing is written until you press a button, and every change can be undone. System files are never changed.
 

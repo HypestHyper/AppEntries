@@ -63,3 +63,5 @@ music_note
 folder_zip
 star
 expand_more
+wallpaper
+colorize

@@ -11,6 +11,7 @@
  "cleaning_services": 61695,
  "close": 57676,
  "code": 59503,
+ "colorize": 58296,
  "computer": 58122,
  "content_copy": 57677,
  "crop_square": 58305,
@@ -61,5 +62,6 @@
  "upload": 58054,
  "visibility": 58391,
  "visibility_off": 59637,
+ "wallpaper": 57788,
  "warning": 57346
 }

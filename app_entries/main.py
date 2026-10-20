@@ -12,7 +12,7 @@ gi.require_version("Gsk", "4.0")
 gi.require_version("Graphene", "1.0")
 from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
 
-from . import APP_ID, APP_NAME, VERSION  # noqa: E402
+from . import APP_ID, APP_NAME, VERSION, theme  # noqa: E402
 
 DOMAIN = "app-entries"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -35,6 +35,7 @@ class Application(Gtk.Application):
         self.add_main_option("version", ord("v"), GLib.OptionFlags.NONE, GLib.OptionArg.NONE,
                              gettext.gettext("Print the version and exit"), None)
         self.window = None
+        self.accent_listeners = []   # called when the desktop's accent changes
         self.settings = None
         self.style = None
 
@@ -59,9 +60,11 @@ class Application(Gtk.Application):
 
         self.settings = Settings()
         self.scheme = ColorScheme(self._on_scheme_changed)
+        from .ui.appearance import DesktopAccent
+        self.desktop_accent = DesktopAccent(self._on_desktop_accent)
         size = self.settings.get("size")
-        self.style = Style(self.settings.get("accent"), "default" if size == "auto" else size,
-                           self._want_dark())
+        self.style = Style(self.seed(), "default" if size == "auto" else size, self._want_dark(),
+                           self._preset())
         self.style.set_reduce_motion(self.settings.get("reduce-motion"))
         self.settings.connect(self._on_setting)
         self._update_app_icon()
@@ -101,12 +104,41 @@ class Application(Gtk.Application):
 
     def _on_scheme_changed(self):
         self.style.recolor(dark=self._want_dark())
+        self._update_app_icon()
+
+    def _preset(self):
+        p = self.settings.get("palette")
+        return p if p in theme.PRESETS else ""
+
+    def seed(self):
+        """The accent to use, as six hex digits, or "" for the palette's own.
+        The accent setting is a colour, "desktop" or "palette"."""
+        accent, preset = self.settings.get("accent"), self._preset()
+        if accent == "desktop":
+            color, _where = self.desktop_accent.value()
+            if color:
+                return color.lstrip("#")
+            return "" if preset else theme.DEFAULT_SEED
+        if accent == "palette":
+            return "" if preset else theme.DEFAULT_SEED
+        return theme.valid_seed(accent)
+
+    def effective_seed(self):
+        """The accent actually shown, for the app icon."""
+        return self.seed() or theme.preset_accent(self._preset(), self._want_dark())
+
+    def _on_desktop_accent(self):
+        if self.settings.get("accent") == "desktop":
+            self.style.recolor(self.seed())
+            self._update_app_icon()
+        for cb in list(self.accent_listeners):
+            cb()
 
     def _on_setting(self, key):
         if key == "theme":
             self.style.recolor(dark=self._want_dark())
-        elif key == "accent":
-            self.style.recolor(self.settings.get("accent"))
+        elif key in ("accent", "palette"):
+            self.style.recolor(self.seed(), preset=self._preset())
             self._update_app_icon()
         elif key == "themed-icon":
             self._update_app_icon()
@@ -116,7 +148,7 @@ class Application(Gtk.Application):
     def _update_app_icon(self):
         from . import app_icon
         from .ui.dialogs import run_bg
-        seed, themed = self.settings.get("accent"), self.settings.get("themed-icon")
+        seed, themed = self.effective_seed(), self.settings.get("themed-icon")
         run_bg(lambda: app_icon.update(seed, themed))
 
     def _show_tab(self, key):

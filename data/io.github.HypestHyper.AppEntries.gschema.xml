@@ -54,7 +54,22 @@
     <key name="accent" type="s">
       <default>"53dbb0"</default>
       <summary>Accent colour</summary>
-      <description>Six hex digits. The whole palette is derived from it.</description>
+      <description>Six hex digits; "desktop" to follow the desktop's accent colour; or "palette" for the chosen palette's own accent.</description>
+    </key>
+    <key name="palette" type="s">
+      <choices>
+        <choice value="generated"/>
+        <choice value="catppuccin"/>
+        <choice value="gruvbox"/>
+        <choice value="nord"/>
+        <choice value="rosepine"/>
+        <choice value="tokyonight"/>
+        <choice value="everforest"/>
+        <choice value="solarized"/>
+      </choices>
+      <default>"generated"</default>
+      <summary>Colour palette</summary>
+      <description>"generated" builds every colour from the accent; the others use a well-known colour scheme.</description>
     </key>
     <key name="themed-icon" type="b">
       <default>true</default>

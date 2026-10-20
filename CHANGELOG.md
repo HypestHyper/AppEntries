@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Accent from your desktop: follows GNOME's and KDE's accent setting, or the colours theme tools like Noctalia, matugen and wallust write to ~/.config/gtk-4.0/gtk.css, and changes live with them.
+- Palettes: Catppuccin, Gruvbox, Nord, Rosé Pine, Tokyo Night, Everforest and Solarized, in light and dark.
+- Any accent colour, with a colour picker.
+
 ## 1.0.2 — 2026-10-20
 
 - Default apps tab: choose which app opens links, email, folders, text, PDFs, pictures, videos, music and archives.
