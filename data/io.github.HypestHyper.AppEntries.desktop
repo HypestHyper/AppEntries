@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=App Entries
+GenericName=Application Menu Editor
+Comment=Hide, show and edit app launcher entries
+Exec=io.github.HypestHyper.AppEntries
+Icon=io.github.HypestHyper.AppEntries
+Terminal=false
+Categories=Settings;DesktopSettings;GTK;
+Keywords=launcher;applications;desktop;hide;menu;apps;entries;autostart;startup;web app;appimage;icon;default apps;open with;mime;
+StartupNotify=true
+StartupWMClass=io.github.HypestHyper.AppEntries
+X-GNOME-UsesNotifications=true

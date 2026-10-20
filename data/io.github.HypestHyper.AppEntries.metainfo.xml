@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.HypestHyper.AppEntries</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT AND OFL-1.1 AND Apache-2.0</project_license>
+  <name>App Entries</name>
+  <summary>Hide, show and edit app launcher entries</summary>
+  <developer id="io.github.hypesthyper">
+    <name>HypestHyper</name>
+  </developer>
+  <description>
+    <p>
+      A GTK 4 app with a Material 3 Expressive style for choosing which installed
+      applications appear in your app launcher. It uses standard freedesktop.org
+      desktop-entry overrides in your own folder, so system files are never changed.
+    </p>
+    <ul>
+      <li>Every installed app in one searchable grid, including Flatpak, Snap and AppImage apps</li>
+      <li>Hide or show apps with one switch, or several at once, with Undo</li>
+      <li>Edit any app's entry, and find leftover files, missing programs and duplicates</li>
+      <li>Make launchers for scripts and commands, and web apps that open a site in its own window</li>
+      <li>Styled icons from thousands of symbols or your own SVGs</li>
+      <li>Turn login programs on and off</li>
+      <li>Choose which app opens links, folders and each kind of file</li>
+      <li>Remove AppImages and everything set up for them</li>
+      <li>A history of every change, each with Undo</li>
+      <li>Export your changes to another computer, and update from GitHub with one button</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.HypestHyper.AppEntries.desktop</launchable>
+  <url type="homepage">https://github.com/HypestHyper/AppEntries</url>
+  <content_rating type="oars-1.1"/>
+  <categories>
+    <category>Settings</category>
+    <category>DesktopSettings</category>
+  </categories>
+  <provides>
+    <binary>io.github.HypestHyper.AppEntries</binary>
+  </provides>
+  <releases>
+    <release version="1.0.2" date="2026-10-20">
+      <description>
+        <ul>
+          <li>Default apps: choose which app opens links, email, folders, PDFs, pictures, videos, music and archives</li>
+          <li>Web apps: dark mode, and a window name for docks and window rules</li>
+          <li>Cleaner edges on bordered icon tiles</li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.0.1" date="2026-10-20">
+      <description>
+        <ul>
+          <li>History of every change, each with Undo, kept between sessions</li>
+          <li>Web apps can be deleted from their card</li>
+          <li>Paste SVG lists where to find icons</li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.0.0" date="2026-10-20">
+      <description>
+        <p>First release.</p>
+        <ul>
+          <li>Hide, show and edit app entries, one at a time or several at once</li>
+          <li>Launchers, web apps and styled icons</li>
+          <li>Autostart, AppImage removal, export and import, and updates</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+</component>

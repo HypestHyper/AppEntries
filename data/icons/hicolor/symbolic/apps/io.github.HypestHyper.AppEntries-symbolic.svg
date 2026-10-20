@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <g fill="#2e3436">
+    <!-- rounded square -->
+    <path fill-rule="evenodd" d="M3 1h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2zm.25 1.5a.75.75 0 0 0-.75.75v1.5c0 .41.34.75.75.75h1.5c.41 0 .75-.34.75-.75v-1.5a.75.75 0 0 0-.75-.75z"/>
+    <!-- circle -->
+    <path fill-rule="evenodd" d="M12 1a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm0 1.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/>
+    <!-- dashed circle: the hidden entry -->
+    <circle cx="4" cy="9.6" r=".8"/>
+    <circle cx="6.08" cy="10.8" r=".8"/>
+    <circle cx="6.08" cy="13.2" r=".8"/>
+    <circle cx="4" cy="14.4" r=".8"/>
+    <circle cx="1.92" cy="13.2" r=".8"/>
+    <circle cx="1.92" cy="10.8" r=".8"/>
+    <!-- plus -->
+    <rect x="11.25" y="9" width="1.5" height="6" rx=".75"/>
+    <rect x="9" y="11.25" width="6" height="1.5" rx=".75"/>
+  </g>
+</svg>

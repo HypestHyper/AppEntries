@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <title>App Entries</title>
+  <defs><linearGradient id="g" x1="0" y1="14" x2="0" y2="114" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#45d8aa"/><stop offset="1" stop-color="#25b185"/></linearGradient></defs>
+  <g fill="none" stroke="url(#g)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="18" y="18" width="38" height="38" rx="12"/>
+    <rect x="72" y="18" width="38" height="38" rx="19"/>
+    <rect x="18" y="72" width="38" height="38" rx="19" stroke-dasharray="9 9"/>
+    <path d="M91 76v30M76 91h30"/>
+  </g>
+</svg>

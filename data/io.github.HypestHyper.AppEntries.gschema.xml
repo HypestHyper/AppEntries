@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="app-entries">
+  <schema id="io.github.HypestHyper.AppEntries" path="/io/github/HypestHyper/AppEntries/">
+    <key name="filter" type="s">
+      <choices>
+        <choice value="all"/>
+        <choice value="hidden"/>
+        <choice value="system"/>
+        <choice value="customised"/>
+        <choice value="issues"/>
+        <choice value="mine"/>
+        <choice value="autostart"/>
+        <choice value="defaults"/>
+        <choice value="settings"/>
+        <choice value="updates"/>
+      </choices>
+      <default>"all"</default>
+      <summary>Which apps to list</summary>
+      <description>"all", "hidden" (only apps hidden from launchers) or "system" (only apps installed outside your home folder).</description>
+    </key>
+    <key name="source" type="s">
+      <choices>
+        <choice value="any"/>
+        <choice value="system"/>
+        <choice value="flatpak"/>
+        <choice value="snap"/>
+        <choice value="appimage"/>
+        <choice value="steam"/>
+        <choice value="webapp"/>
+        <choice value="user"/>
+      </choices>
+      <default>"any"</default>
+      <summary>Only list apps from this source</summary>
+    </key>
+    <key name="show-hidden" type="b">
+      <default>true</default>
+      <summary>List hidden apps in All apps and System</summary>
+    </key>
+    <key name="show-no-display" type="b">
+      <default>true</default>
+      <summary>Include apps not shown in menus</summary>
+      <description>Also list entries marked NoDisplay=true.</description>
+    </key>
+    <key name="theme" type="s">
+      <choices>
+        <choice value="system"/>
+        <choice value="light"/>
+        <choice value="dark"/>
+      </choices>
+      <default>"system"</default>
+      <summary>Light or dark</summary>
+      <description>"system" follows the desktop's dark mode setting.</description>
+    </key>
+    <key name="accent" type="s">
+      <default>"53dbb0"</default>
+      <summary>Accent colour</summary>
+      <description>Six hex digits. The whole palette is derived from it.</description>
+    </key>
+    <key name="themed-icon" type="b">
+      <default>true</default>
+      <summary>Colour the app icon with the accent</summary>
+      <description>Writes a copy of the app icon in the accent colour to your icon folder, so launchers show it.</description>
+    </key>
+    <key name="size" type="s">
+      <choices>
+        <choice value="auto"/>
+        <choice value="compact"/>
+        <choice value="default"/>
+        <choice value="large"/>
+      </choices>
+      <default>"auto"</default>
+      <summary>Interface size</summary>
+    </key>
+    <key name="reduce-motion" type="b">
+      <default>false</default>
+      <summary>Turn off animations</summary>
+    </key>
+    <key name="window-controls" type="b">
+      <default>true</default>
+      <summary>Show minimize, maximize and close buttons</summary>
+    </key>
+    <key name="window-width" type="i">
+      <default>1100</default>
+      <summary>Window width</summary>
+    </key>
+    <key name="window-height" type="i">
+      <default>760</default>
+      <summary>Window height</summary>
+    </key>
+    <key name="maximized" type="b">
+      <default>false</default>
+      <summary>Window maximized</summary>
+    </key>
+    <key name="check-updates" type="b">
+      <default>true</default>
+      <summary>Look for updates when App Entries starts</summary>
+      <description>Asks GitHub for the release list at most once every six hours. Nothing about you is sent.</description>
+    </key>
+    <key name="update-notify" type="b">
+      <default>true</default>
+      <summary>Show a notification when there's a new version</summary>
+    </key>
+    <key name="update-test" type="b">
+      <default>false</default>
+      <summary>Include test versions</summary>
+      <description>Also offer releases marked as pre-releases on GitHub.</description>
+    </key>
+    <key name="last-update-check" type="x">
+      <default>0</default>
+      <summary>When updates were last checked (Unix time)</summary>
+    </key>
+    <key name="recent-colors" type="as">
+      <default>[]</default>
+      <summary>Colours recently used for icons</summary>
+      <description>Newest first, as #rrggbb. Shown in the icon picker.</description>
+    </key>
+    <key name="latest-version" type="s">
+      <default>""</default>
+      <summary>The newest version found by the last check</summary>
+    </key>
+  </schema>
+</schemalist>
