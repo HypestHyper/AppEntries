@@ -89,3 +89,14 @@ def test_adding_an_app_and_a_command(cfg):
 def test_desktops_that_dont_run_autostart():
     assert not au.runs_autostart({"XDG_CURRENT_DESKTOP": "Hyprland"})
     assert au.runs_autostart({"XDG_CURRENT_DESKTOP": "KDE"})
+
+
+def test_how_to_run_says_what_fits_this_system():
+    gnome = {"XDG_CURRENT_DESKTOP": "GNOME"}
+    assert au.how_to_run(gnome) == ""   # GNOME runs them itself
+    hypr = {"XDG_CURRENT_DESKTOP": "Hyprland"}
+    with_systemd = au.how_to_run(hypr, systemd=True, have_dex=True)
+    assert "uwsm" in with_systemd and "exec-once = dex -a" in with_systemd
+    without = au.how_to_run(hypr, systemd=False, have_dex=False)
+    assert "doesn't use systemd" in without and "install dex" in without and "uwsm" not in without
+    assert 'spawn-at-startup "dex" "-a"' in au.how_to_run({"XDG_CURRENT_DESKTOP": "niri"}, False, True)

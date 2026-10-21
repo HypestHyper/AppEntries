@@ -116,6 +116,45 @@ def runs_autostart(env=None) -> bool:
     return not any(d.upper() in NO_AUTOSTART for d in de.current_desktops(env))
 
 
+# How each window manager runs a command at login, for the dex line.
+_STARTUP_LINE = {
+    "HYPRLAND": "exec-once = dex -a",
+    "SWAY": "exec dex -a",
+    "I3": "exec --no-startup-id dex -a",
+    "NIRI": 'spawn-at-startup "dex" "-a"',
+    "RIVER": "riverctl spawn 'dex -a'",
+    "WAYFIRE": "autostart_dex = dex -a  (in the [autostart] section)",
+    "LABWC": "dex -a &  (in ~/.config/labwc/autostart)",
+    "BSPWM": "dex -a &  (in bspwmrc)",
+    "OPENBOX": "dex -a &  (in ~/.config/openbox/autostart)",
+}
+
+
+def has_systemd() -> bool:
+    """Whether systemd is the running init (the check its own tools use)."""
+    return os.path.isdir("/run/systemd/system")
+
+
+def how_to_run(env=None, systemd: Optional[bool] = None, have_dex: Optional[bool] = None) -> str:
+    """What makes these entries run on this desktop, in plain words, or ""
+    when the desktop runs them itself."""
+    if runs_autostart(env):
+        return ""
+    import shutil
+    desktops = de.current_desktops(env)
+    name = desktops[0] if desktops else "This desktop"
+    systemd = has_systemd() if systemd is None else systemd
+    have_dex = bool(shutil.which("dex")) if have_dex is None else have_dex
+    line = next((_STARTUP_LINE[d.upper()] for d in desktops if d.upper() in _STARTUP_LINE), "dex -a")
+    dex = ("add this to your config: %s" % line) if have_dex else \
+        ("install dex (it's in most distributions' repositories) and add this to your config: %s" % line)
+    if systemd:
+        return ("%s doesn't start these by itself. They run if your session starts them: through uwsm, "
+                "systemd's xdg-autostart support, or dex. For dex, %s." % (name, dex))
+    return ("%s doesn't start these by itself, and this system doesn't use systemd, so dex is the way to run "
+            "them: %s." % (name, dex))
+
+
 # ---------------------------------------------------------------------------
 # Planning
 

@@ -6,7 +6,6 @@ from gettext import gettext as _
 from gi.repository import Gio, GLib, Gtk, Pango
 
 from .. import autostart
-from .. import desktop_entries as de
 from .app_card import gicon_for
 from .dialogs import Dialog, run_bg
 from .widgets import Clamp, Toggle, button, card, clear, hbox, icon, label, option_button, section, vbox
@@ -35,7 +34,6 @@ class AutostartPage(Gtk.ScrolledWindow):
         page = vbox(0)
         page.set_margin_bottom(32)
 
-        here = (de.current_desktops() or [_("this desktop")])[0]
         page.append(section(_("Starts when you log in"),
                             _("Programs your desktop starts for you at login. Turning one off doesn't uninstall "
                               "anything; turning a system one off writes a small file to your own autostart "
@@ -43,11 +41,11 @@ class AutostartPage(Gtk.ScrolledWindow):
         add_app = button(_("Add an app…"), "add", "tonal", lambda *_a: self._add_app(), small=True)
         add_cmd = button(_("Add a command…"), "terminal", "tonal", lambda *_a: self._add_command(), small=True)
         page.append(hbox(10, add_app, add_cmd))
-        if not autostart.runs_autostart():
-            hint = label(_("{desktop} doesn't start these by itself. They run if your session starts them: "
-                           "with uwsm or systemd (its xdg-autostart support), or a line like exec-once = dex -a "
-                           "in your config. The switches still work, for whatever does start them.")
-                         .format(desktop=here), ("small", "warn-text"), wrap=True, chars=80)
+        how = autostart.how_to_run()
+        if how:
+            hint = label(_(how) + " " + _("The switches here work either way."), ("small", "warn-text"),
+                         wrap=True, chars=80)
+            hint.set_selectable(True)
             hint.set_margin_top(10)
             page.append(hint)
         self.list = vbox(10)
