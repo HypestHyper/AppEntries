@@ -1,10 +1,12 @@
 # Changelog
 
-## Unreleased
+## 1.0.3 — 2026-10-21
 
 - Accent from your desktop: follows GNOME's and KDE's accent setting, or the colours theme tools like Noctalia, matugen and wallust write to ~/.config/gtk-4.0/gtk.css, and changes live with them.
 - Palettes: Catppuccin, Gruvbox, Nord, Rosé Pine, Tokyo Night, Everforest and Solarized, in light and dark.
 - Any accent colour, with a colour picker.
+- Settings are kept on systems without a D-Bus session.
+- Autostart says exactly how to run login programs on window managers, including systems without systemd.
 
 ## 1.0.2 — 2026-10-20
 

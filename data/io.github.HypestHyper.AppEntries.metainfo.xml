@@ -38,6 +38,15 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.0.3" date="2026-10-21">
+      <description>
+        <ul>
+          <li>The accent colour can follow your desktop's, live</li>
+          <li>Palettes: Catppuccin, Gruvbox, Nord, Rosé Pine, Tokyo Night, Everforest and Solarized</li>
+          <li>Settings are kept on systems without a D-Bus session</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.0.2" date="2026-10-20">
       <description>
         <ul>
