@@ -1,7 +1,8 @@
 """Preferences, stored in GSettings when the schema is installed.
 
-When running from a source checkout without an installed schema, values
-fall back to a JSON file in $XDG_CONFIG_HOME/io.github.HypestHyper.AppEntries/.
+When running from a source checkout without an installed schema, or where
+GSettings can't save (no D-Bus session), values go in a JSON file in
+$XDG_CONFIG_HOME/io.github.HypestHyper.AppEntries/.
 """
 import json
 import os
@@ -46,12 +47,27 @@ def _schema_source():
     return default
 
 
+def _can_save_to_dconf() -> bool:
+    """GSettings saves through dconf, which needs a D-Bus session. Without one
+    (a bare window manager started without dbus-run-session, on any init
+    system), changes would be lost when the app closes."""
+    if "dconf" not in Gio.SettingsBackend.get_default().__gtype__.name.lower():
+        return True  # a keyfile or memory backend, chosen on purpose
+    try:
+        Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        return True
+    except GLib.Error:
+        return False
+
+
 class Settings:
     def __init__(self):
         self._listeners = []
         self._gs = None
         src = _schema_source()
         schema = src.lookup(APP_ID, True) if src else None
+        if schema is not None and not _can_save_to_dconf():
+            schema = None  # use the settings file instead
         if schema is not None:
             self._gs = Gio.Settings.new_full(schema, None, None)
             self._gs.connect("changed", lambda _s, key: self._notify(key))
