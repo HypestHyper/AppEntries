@@ -296,6 +296,9 @@ button.pick-row {{ padding: 6px 10px; border-radius: 12px; }}
 .history-row.is-off .app-name {{ color: {ON_SURFACE_VARIANT}; }}
 .autostart-row.is-off .icon-tile {{ opacity: .55; }}
 .autostart-row.is-off .app-name {{ color: {ON_SURFACE_VARIANT}; }}
+.helper-row.is-off .icon-tile {{ opacity: .55; }}
+.helper-row.is-off .app-name, .helper-row.is-off .dim {{ color: {ON_SURFACE_VARIANT}; }}
+.helper-row.is-off {{ background: transparent; box-shadow: inset 0 0 0 1px {OUTLINE_VARIANT}; }}
 list.pick-list {{ background: none; }}
 list.pick-list > row {{ padding: 6px 8px; border-radius: 12px; }}
 list.pick-list > row:hover {{ background: alpha({ON_SURFACE}, .06); }}

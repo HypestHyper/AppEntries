@@ -10,7 +10,7 @@ from gi.repository import Gdk, Gio, GLib, Gtk
 from .. import helpers, pkgmanagers, terminal, uninstall
 from .app_card import gicon_for
 from .dialogs import Dialog, error_dialog, run_bg
-from .widgets import button, card, hbox, label, vbox
+from .widgets import button, card, hbox, icon, label, vbox
 
 FLATSEAL_BUS = ("com.github.tchx84.Flatseal", "/com/github/tchx84/Flatseal")
 
@@ -68,10 +68,31 @@ class HelpersWindow(Gtk.Window):
                             "like. Each opens that app, on {name} where it can.").format(name=app.name),
                           ("small", "dim"), wrap=True, chars=60))
         items = shortcuts_for(app, apps)
+        have = [x for x in items if x.installed]
+        missing = [x for x in items if not x.installed]
         if not items:
             page.append(label(_("No helper apps fit {name}.").format(name=app.name), ("body", "dim"), wrap=True))
-        for s in items:
-            page.append(self._row(s))
+        elif not have:
+            page.append(label(_("None of the helper apps for {name} are installed yet.").format(name=app.name),
+                              ("body", "dim"), wrap=True, chars=50))
+        for x in have:
+            page.append(self._row(x))
+        if missing:
+            more = vbox(10)
+            for x in missing:
+                more.append(self._row(x))
+            reveal = Gtk.Revealer(child=more, reveal_child=False,
+                                  transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
+            add = Gtk.ToggleButton(halign=Gtk.Align.START)
+            add.set_child(hbox(6, icon("add"), Gtk.Label(label=_("Helper apps you don't have ({n})")
+                                                         .format(n=len(missing)))))
+            add.add_css_class("tonal")
+            add.add_css_class("small")
+            add.set_tooltip_text(_("Show helper apps that would fit but aren't installed"))
+            add.connect("toggled", lambda b: reveal.set_reveal_child(b.get_active()))
+            add.set_margin_top(4)
+            page.append(add)
+            page.append(reveal)
         scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
         scroll.set_child(page)
         self.set_child(scroll)
@@ -93,6 +114,9 @@ class HelpersWindow(Gtk.Window):
             b = button(_("Install…"), "download", "tonal", small=True, cb=lambda *_a: self._install(s))
         b.set_valign(Gtk.Align.CENTER)
         c = card()
+        c.add_css_class("helper-row")
+        if not s.installed:
+            c.add_css_class("is-off")
         c.append(hbox(14, _tile(s.icon), text, b))
         return c
 
