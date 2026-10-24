@@ -347,6 +347,10 @@ class AppCard(Gtk.Box):
                 "delete", _("Delete this launcher"),
                 _("Deletes this launcher file from your applications folder. "
                   "The program itself isn't touched. You can undo this."), act("delete"), danger=True))
+        box.append(option_button(
+            "open_in_new", _("Helper apps…"),
+            _("Shortcuts to apps that change its permissions, versions or setup, like Flatseal. Each opens that "
+              "app."), act("helpers")))
         kind = uninstall.kind_of(a)
         if kind:
             box.append(option_button(

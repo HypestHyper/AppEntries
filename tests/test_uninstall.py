@@ -367,3 +367,32 @@ def test_history_keeps_the_reinstall_command(xdg):
     assert again.reinstall == [["sudo", "pacman", "-S", "gimp"]]
     with pytest.raises(history.UndoError):
         history.undo(again.id, xdg.env)
+
+
+def test_helper_shortcuts_fit_the_app_and_offer_missing_ones(xdg):
+    from app_entries import helpers
+    app = de.App(id="com.example.Chat.desktop", name="Chat")
+    have = {"com.github.tchx84.Flatseal.desktop"}
+    got = helpers.for_app(app, "flatpak", have, {"XDG_CURRENT_DESKTOP": "KDE"}, which_only("flatpak", "kcmshell6"),
+                          uri_handler=lambda s: "Discover" if s == "appstream" else "",
+                          flatpak_id="com.example.Chat", kde_module="kcm_app-permissions")
+    by = {s.key: s for s in got}
+    assert by["flatseal"].installed and by["flatseal"].action == ("flatseal", "com.github.tchx84.Flatseal.desktop",
+                                                                   "com.example.Chat")
+    assert not by["warehouse"].installed
+    assert by["warehouse"].install == ["flatpak", "install", "flathub", "io.github.flattool.Warehouse"]
+    assert by["kde-permissions"].action == ("kde-permissions", "com.example.Chat", "kcm_app-permissions")
+    assert by["software"].action == ("uri", "appstream://com.example.Chat")
+    assert [s.installed for s in got] == sorted((s.installed for s in got), reverse=True)
+    assert helpers.kde_argv("x", "app/x/x86_64/stable", "kcm_app-permissions", which_only("kcmshell6")) == \
+        ["kcmshell6", "kcm_app-permissions", "--args", "app/x/x86_64/stable"]
+
+    img = helpers.for_app(de.App(id="tool.desktop", name="Tool"), "appimage", {"it.mijorus.gearlever.desktop"},
+                          {}, which_only(), appimage="/home/me/Tool.AppImage")
+    assert img[0].action == ("desktop", "it.mijorus.gearlever.desktop", ["/home/me/Tool.AppImage"])
+    gnome = helpers.for_app(de.App(id="org.gnome.Maps.desktop", name="Maps"), "package", set(),
+                            {"XDG_CURRENT_DESKTOP": "GNOME"}, which_only("gnome-control-center"))
+    assert gnome[0].action == ("argv", ["gnome-control-center", "applications", "org.gnome.Maps"])
+    steam = helpers.for_app(de.App(id="g.desktop", name="G"), "steam", set(), {}, which_only(), steam_id="620")
+    assert ("uri", "steam://nav/games/details/620") in [s.action for s in steam]
+    assert not [s for s in steam if not s.installed]   # no flatpak, so nothing to offer installing

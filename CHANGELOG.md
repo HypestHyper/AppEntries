@@ -9,6 +9,8 @@
 - Uninstall several apps at once from Select: one command per package manager.
 - History keeps a Reinstall button for uninstalled apps; `--uninstall` on the command line.
 - Apps exported from Distrobox containers get their own source badge.
+- Helper apps…: shortcuts to Flatseal, Warehouse, Gear Lever, ProtonUp-Qt, Protontricks, BoxBuddy, DistroShelf, GNOME Settings, KDE's app permissions, your software centre and Steam, opened on the app where they allow it.
+- Commands that need a password go to your terminal as they are; the terminal handles the rest.
 
 ## 1.0.3 — 2026-10-21
 

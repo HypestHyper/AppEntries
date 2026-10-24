@@ -14,6 +14,7 @@ from .autostart_page import AutostartPage
 from .defaults_page import DefaultsPage
 from .dialogs import Dialog, choose_file, error_dialog, run_bg
 from .editor import EditWindow
+from .helpers_window import HelpersWindow
 from .history_window import HistoryWindow
 from .uninstall_window import BatchUninstallWindow, UninstallWindow
 from .icon_picker import IconPicker
@@ -946,6 +947,8 @@ class MainWindow(Gtk.ApplicationWindow):
                          glyph_color=self.style.palette["ON_SURFACE"]).present()
         elif action == "uninstall":
             self.uninstall(app)
+        elif action == "helpers":
+            HelpersWindow(self, app, self._all_apps()).present()
         elif action == "edit" and app.created:
             text = overrides.read_text(app.override_path)
             LauncherWindow(self, self._save_launcher, self._save_raw, did=app.id, text=text,
