@@ -210,9 +210,15 @@ def check(apps: List[de.App], env=None) -> Report:
     )
 
 
-def scan_and_check(env=None):
+def scan_and_check(env=None, owners=True):
+    """Scan and check. `owners` also asks the package manager which package
+    each app with a missing program came from (slow: one query each)."""
+    from . import timing
     apps = de.scan(env)
+    timing.mark("  apps scanned (%d)" % len(apps))
     report = check(apps, env)
-    report.owners = packages.owners(report.missing)
+    timing.mark("  apps checked")
+    if owners:
+        report.owners = packages.owners(report.missing)
     return apps, report
 

@@ -7,7 +7,7 @@ from gettext import ngettext
 from gi.repository import Gdk, Gio, GLib, Gtk
 
 from .. import (APP_ID, APP_NAME, appimages, autostart, desktop_entries, editing, health, history, icon_lookup,
-               launcher_refresh, launchers, overrides, profile, symbols, terminal, timing, trash, uninstall, webapps)
+               launcher_refresh, launchers, overrides, packages, profile, symbols, terminal, timing, trash, uninstall, webapps)
 from ..model import AppItem, AppStore
 from .app_card import AppCard
 from .dialogs import Dialog, choose_file, error_dialog, run_bg
@@ -682,6 +682,8 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.chip.set(_("Couldn't read apps"), "error")
                 return
             apps, report = result
+            if not self._loaded:
+                timing.mark("  list being filled")
             self._keeping_place(lambda: self.apps.sync(apps))
             self._update_sources()
             if self.defaults is not None:
@@ -702,7 +704,23 @@ class MainWindow(Gtk.ApplicationWindow):
                 GLib.idle_add(lambda: (self.grid.grab_focus(), False)[1])
 
         icon_lookup.clear_cache()
-        run_bg(health.scan_and_check, done)
+        # Which package each app with a missing program came from is only for
+        # the Issues page, and asks the package manager once per app, so it's
+        # looked up after the list is shown.
+        def owners_found(found):
+            if gen != self._scan_gen or isinstance(found, Exception) or self.report is None:
+                return
+            self.report.owners = found
+            if self.issues is not None:
+                self.issues.update(self.report)
+
+        def scanned(result):
+            done(result)
+            if not isinstance(result, Exception) and result[1].missing:
+                missing = list(result[1].missing)
+                run_bg(lambda: packages.owners(missing), owners_found)
+
+        run_bg(lambda: health.scan_and_check(owners=False), scanned)
         if self.autostart is not None:
             self.autostart.reload()
 
