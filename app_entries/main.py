@@ -69,6 +69,11 @@ class Application(Gtk.Application):
         timing.mark("GTK started")
         Gtk.Application.do_startup(self)
         timing.mark("GtkApplication start-up")
+        # Asking for the icon theme starts loading it on another thread, so
+        # it's ready by the time the list shows app icons. Nothing before
+        # the first frame looks an icon up, so nothing waits for it.
+        from gi.repository import Gdk
+        Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
         from .settings import Settings
         from .ui import fonts
         from .ui.appearance import ColorScheme
