@@ -8,6 +8,7 @@ import sys
 # GTK's GL renderer starts faster than Vulkan, which newer GTK versions use
 # by default (about a tenth of a second on some machines). GSK_RENDERER
 # still chooses another.
+_OUR_RENDERER = "GSK_RENDERER" not in os.environ
 os.environ.setdefault("GSK_RENDERER", "ngl")
 
 import gi  # noqa: E402
@@ -19,6 +20,12 @@ gi.require_version("Graphene", "1.0")
 from gi.repository import Gio, GLib, Gtk  # noqa: E402
 
 from . import APP_ID, APP_NAME, VERSION, theme  # noqa: E402
+
+# GTK 4.20 (4.19.2) renamed its GL renderer from "ngl" to "gl", and warns
+# about the old name. The renderer is only picked when the window is
+# shown, so this is still in time.
+if _OUR_RENDERER and (Gtk.get_major_version(), Gtk.get_minor_version(), Gtk.get_micro_version()) >= (4, 19, 2):
+    os.environ["GSK_RENDERER"] = "gl"
 
 timing.mark("Python and GTK loaded")
 
@@ -68,15 +75,20 @@ class Application(Gtk.Application):
         from .ui.style import Style
 
         fonts.register()
+        timing.mark("  fonts")
 
         self.settings = Settings()
+        timing.mark("  settings")
         self.scheme = ColorScheme(self._on_scheme_changed)
+        timing.mark("  light or dark (portal)")
         from .ui.appearance import DesktopAccent
         self.desktop_accent = DesktopAccent(self._on_desktop_accent)
+        timing.mark("  desktop accent")
         size = self.settings.get("size")
         self.style = Style(self.seed(), "default" if size == "auto" else size, self._want_dark(),
                            self._preset())
         self.style.set_reduce_motion(self.settings.get("reduce-motion"))
+        timing.mark("  styles")
         self.settings.connect(self._on_setting)
         self._update_app_icon()
         from .ui.updates import UpdateManager

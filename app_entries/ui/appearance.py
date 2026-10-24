@@ -23,6 +23,29 @@ def _unwrap(value):
     return value
 
 
+def _new_scheme_setting(settings) -> bool:
+    """GTK 4.20 replaced gtk-application-prefer-dark-theme with this."""
+    return hasattr(Gtk, "InterfaceColorScheme") and settings.find_property("gtk-interface-color-scheme") is not None
+
+
+def gtk_prefers_dark(settings) -> bool:
+    if settings is None:
+        return False
+    if _new_scheme_setting(settings):
+        return settings.get_property("gtk-interface-color-scheme") == Gtk.InterfaceColorScheme.DARK
+    return bool(settings.get_property("gtk-application-prefer-dark-theme"))
+
+
+def set_gtk_dark(settings, dark: bool) -> None:
+    if settings is None:
+        return
+    if _new_scheme_setting(settings):
+        scheme = Gtk.InterfaceColorScheme.DARK if dark else Gtk.InterfaceColorScheme.LIGHT
+        settings.set_property("gtk-interface-color-scheme", scheme)
+    else:
+        settings.set_property("gtk-application-prefer-dark-theme", dark)
+
+
 class ColorScheme:
     """Calls on_change() whenever the answer to is_dark() may have changed."""
 
@@ -34,7 +57,7 @@ class ColorScheme:
 
         # Read GTK's own setting now: the app sets it later to match its choice.
         gtk = Gtk.Settings.get_default()
-        self._gtk_dark = bool(gtk and gtk.get_property("gtk-application-prefer-dark-theme"))
+        self._gtk_dark = gtk_prefers_dark(gtk)
         if gtk is not None:
             gtk.connect("notify::gtk-theme-name", lambda *_: self._cb())
 

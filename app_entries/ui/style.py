@@ -443,9 +443,8 @@ class Style:
 
     def _set_gtk_dark(self, dark):
         # So the few stock GTK windows (About) match the app.
-        settings = Gtk.Settings.get_default()
-        if settings is not None:
-            settings.set_property("gtk-application-prefer-dark-theme", dark)
+        from .appearance import set_gtk_dark
+        set_gtk_dark(Gtk.Settings.get_default(), dark)
 
     def recolor(self, seed: str = None, dark: bool = None, animate: bool = True, preset: str = None):
         """Switch accent, palette and/or light/dark, blending over ~300 ms."""
