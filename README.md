@@ -5,7 +5,7 @@
 <h1 align="center">App Entries</h1>
 
 <p align="center">
-  A GTK 4 app for Linux that hides, shows and edits app launcher entries. It can also make launchers and web apps, manage autostart entries, choose default apps and remove AppImages. It only changes files in your home folder.
+  A GTK 4 app for Linux that hides, shows and edits app launcher entries. It can also make launchers and web apps, manage autostart entries, choose default apps and uninstall apps. It only changes files in your home folder; uninstalling a package runs your package manager in your own terminal.
 </p>
 
 <p align="center">
@@ -34,10 +34,10 @@
 **Apps**
 - Every installed app in one searchable grid: system packages, Flatpak, Snap, AppImage, Steam and your own launchers. Filter by source; badges show where each app comes from and why it's hidden.
 - Hide or show an app with one switch. Hidden apps still open links and files, and stay in "Open With".
-- **Select several** to hide, show, restore or restyle many apps at once.
+- **Select several** to hide, show, restore, restyle or uninstall many apps at once.
 - **Edit** any entry (name, icon, command, environment, folders, desktops, quick actions) with a live view of the file. Editing a system app saves your own copy; *Restore original* puts it back.
 - **Issues** finds leftover files, missing programs and duplicates, and explains each with a button to fix it.
-- **Remove AppImage…** removes the AppImage (to the Trash) and every entry, icon and file type set up for it, after listing each file. Its settings folders are offered separately.
+- **Uninstall…** for Flatpak, Snap, AppImage, Steam, Distrobox and system packages (pacman, apt, dnf, zypper, rpm-ostree, xbps, apk, eopkg, Portage and Nix). Before anything runs it shows what goes, which other apps and packages need it or go with it, whether it's a default app or starts at login, and the exact command. Data folders and advanced options (like removing what depends on it) are off unless you turn them on, with warnings. Commands that need a password run in your terminal; packages the system or your desktop needs are never offered. History keeps a Reinstall button.
 
 **Launchers**
 - **New launcher** for any script or command, with terminal options and a live preview.
@@ -53,7 +53,7 @@
 - A **command line** for scripts, and full keyboard and screen reader support.
 - Light and dark themes and a responsive layout. The accent can follow your desktop's (GNOME and KDE settings, or the colours Noctalia, matugen, wallust and other theme tools write for GTK apps), and palettes like Catppuccin, Gruvbox, Nord, Rosé Pine, Tokyo Night, Everforest and Solarized restyle the whole app.
 
-Nothing happens by itself: every option is explained, nothing is written until you press a button, and every change can be undone. System files are never changed.
+Nothing happens by itself: every option is explained, nothing is written until you press a button, and every change can be undone. App Entries never changes system files itself; only a package manager you run from it, in your terminal, does.
 
 ## Installation
 
@@ -81,6 +81,7 @@ app-entries --hide steam discord     # by ID or name
 app-entries --unhide steam
 app-entries --export ~/apps.json     # and --import, which lists the changes first
 app-entries --refresh-launchers
+app-entries --uninstall discord      # shows what goes and the command, then asks
 ```
 
 Add `--yes` to skip questions in scripts. See `app-entries --help`.

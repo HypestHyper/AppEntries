@@ -1,12 +1,13 @@
 """The main window."""
 import os
+import subprocess
 from gettext import gettext as _
 from gettext import ngettext
 
 from gi.repository import Gdk, Gio, GLib, Gtk
 
 from .. import (APP_ID, APP_NAME, appimages, autostart, desktop_entries, editing, health, history, icon_lookup,
-               launcher_refresh, launchers, overrides, profile, symbols, trash, webapps)
+               launcher_refresh, launchers, overrides, profile, symbols, terminal, trash, uninstall, webapps)
 from ..model import AppItem, AppStore
 from .app_card import AppCard
 from .autostart_page import AutostartPage
@@ -14,6 +15,7 @@ from .defaults_page import DefaultsPage
 from .dialogs import Dialog, choose_file, error_dialog, run_bg
 from .editor import EditWindow
 from .history_window import HistoryWindow
+from .uninstall_window import BatchUninstallWindow, UninstallWindow
 from .icon_picker import IconPicker
 from .issues import IssuesPage
 from .launcher_window import LauncherWindow
@@ -257,12 +259,16 @@ class MainWindow(Gtk.ApplicationWindow):
         self.sel_style = button(_("Style icons"), "palette", "tonal", small=True,
                                 tooltip=_("Give the selected apps' styled icons one colour, background and border"),
                                 cb=lambda *_: self._batch("style"))
+        self.sel_uninstall = button(_("Uninstall"), "delete_forever", "tonal", small=True,
+                                    tooltip=_("Uninstall the selected apps. Shows everything that goes first."),
+                                    cb=lambda *_: self._batch("uninstall"))
         all_btn = button(_("Select all"), "select_all", "text", small=True,
                          tooltip=_("Select every app in the list as it's filtered now"),
                          cb=lambda *_: self._select_all())
         done = button(icon_name="close", style="text", small=True, tooltip=_("Stop selecting (Esc)"),
                       cb=lambda *_: self.set_selecting(False))
-        bar = hbox(8, self.sel_count, all_btn, self.sel_hide, self.sel_show, self.sel_restore, self.sel_style, done)
+        bar = hbox(8, self.sel_count, all_btn, self.sel_hide, self.sel_show, self.sel_restore, self.sel_style,
+                   self.sel_uninstall, done)
         bar.add_css_class("selection-bar")
         self.sel_bar = Gtk.Revealer(child=bar, transition_type=Gtk.RevealerTransitionType.SLIDE_UP,
                                     halign=Gtk.Align.CENTER, valign=Gtk.Align.END, reveal_child=False)
@@ -676,10 +682,10 @@ class MainWindow(Gtk.ApplicationWindow):
 
         run_bg(work, done)
 
-    def _record(self, text, changes, trashed=()):
+    def _record(self, text, changes, trashed=(), reinstall=None, reinstall_steam=False):
         """Log a change in the history and show it with Undo."""
-        entry = history.record(text, changes, list(trashed))
-        if entry is not None:
+        entry = history.record(text, changes, list(trashed), reinstall=reinstall, reinstall_steam=reinstall_steam)
+        if entry is not None and entry.can_undo:
             self.snackbar.show(text, _("Undo"), lambda: self.undo_entry(entry.id))
         else:
             self.snackbar.show(text)
@@ -720,7 +726,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def show_history(self, *_a):
         if self.history_window is None:
-            self.history_window = HistoryWindow(self, self.undo_entry)
+            self.history_window = HistoryWindow(self, self.undo_entry, self.reinstall_entry)
             self.history_window.connect("destroy", lambda *_x: setattr(self, "history_window", None))
         self.history_window.present()
 
@@ -841,77 +847,80 @@ class MainWindow(Gtk.ApplicationWindow):
         Dialog(self, _("Delete {name}?").format(name=app.name), body, buttons,
                on_response, icon_name="delete", icon_class="error-text", detail=app.override_path).present()
 
-    def _remove_appimage(self, app):
-        home = os.path.expanduser("~")
+    # ------------------------------------------------------------ uninstalling
 
-        def short(p):
-            return "~" + p[len(home):] if p.startswith(home + os.sep) else p
+    def _all_apps(self):
+        return [i.app for i in self.apps.items()]
 
-        def planned(result):
+    def uninstall(self, app):
+        UninstallWindow(self, app, self._all_apps(), self.finish_uninstall).present()
+
+    def finish_uninstall(self, items, message, done):
+        """Once apps are uninstalled: remove the files App Entries keeps for
+        them and the ones they were given, move the chosen data to the Trash,
+        and record it all in History with the reinstall commands.
+        done(error or None) is called afterwards."""
+        apps = self._all_apps()
+        reinstall, steam = [], False
+        for p, opts in items:
+            reinstall += p.reinstall(opts)
+            steam = steam or p.kind == "steam"
+
+        def work():
+            changes = []
+            for p, _opts in items:
+                changes += uninstall.file_changes(p, apps)
+            applied = overrides.apply_all(changes)
+            trashed, errors = [], []
+            for p, opts in items:
+                for path in uninstall.to_trash(p, opts):
+                    try:
+                        trashed.append(trash.move(path))
+                    except trash.TrashError as e:
+                        errors.append(str(e))
+            if any("/mime/packages/" in c.path for c in applied):
+                appimages.refresh_mime()
+            return applied, trashed, errors
+
+        def finished(result):
+            self.queue_rescan(0)
             if isinstance(result, Exception):
-                error_dialog(self, _("Couldn't look at {name}").format(name=app.name), str(result))
+                why = ("%s (%s)" % (result.reason, result.path) if isinstance(result, overrides.OverrideError)
+                       else str(result))
+                self._record(message, [], [], reinstall, steam)
+                done(why)
                 return
-            r = result
-            why = appimages.problem(r)
-            if why:
-                error_dialog(self, _("Couldn't remove {name}").format(name=app.name), why, r.appimage)
-                return
-            exists = os.path.isfile(r.appimage)
-            lines = []
-            if exists:
-                lines.append(_("{file} ({size}), to the Trash").format(file=short(r.appimage),
-                                                                         size=GLib.format_size(r.size)))
-            lines += [short(p) for p in r.entries + r.icons + r.others]
-            if r.settings:
-                lines.append("")
-                lines.append(_("Only with “Remove with settings”, to the Trash:"))
-                lines += [short(p) for p in r.settings]
-            if exists:
-                body = _("This removes {name} and everything set up for it, so nothing of it is left in your "
-                         "menus or in Open With. The AppImage goes to the Trash, where you can restore it; "
-                         "the rest comes back with Undo.").format(name=app.name)
-            else:
-                body = _("The AppImage itself is already gone. What was set up for it is removed, and comes "
-                         "back with Undo.")
-            if r.settings:
-                body += " " + _("Folders that look like its settings are listed last. They're only a guess from "
-                                "the name, so they're kept unless you choose Remove with settings.")
-            if r.blocked:
-                body += " " + ngettext(
-                    "One more entry outside your folder starts it and can't be removed here: {files}.",
-                    "{n} more entries outside your folder start it and can't be removed here: {files}.",
-                    len(r.blocked)).format(n=len(r.blocked), files=", ".join(r.blocked))
+            applied, trashed, errors = result
+            self._record(message, applied, trashed, reinstall, steam)
+            done("; ".join(errors) if errors else None)
 
-            def on_response(resp):
-                if resp not in ("remove", "remove-all"):
+        run_bg(work, finished)
+
+    def reinstall_entry(self, entry_id):
+        e = next((x for x in history.load() if x.id == entry_id), None)
+        if e is None or not e.reinstall:
+            return
+        if e.reinstall_steam:
+            for argv in e.reinstall:
+                try:
+                    subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                     stderr=subprocess.DEVNULL, start_new_session=True)
+                except OSError as err:
+                    error_dialog(self, _("Couldn't open Steam"), str(err.strerror or err))
                     return
-                to_trash = ([r.appimage] if exists else []) + (r.settings if resp == "remove-all" else [])
-
-                def after(_result):
-                    trashed = []
-                    for p in to_trash:
-                        try:
-                            trashed.append(trash.move(p))
-                        except trash.TrashError as e:
-                            error_dialog(self, _("Couldn't move it to the Trash"), str(e), p)
-                    if r.others:
-                        run_bg(appimages.refresh_mime)
-                    return trashed
-
-                self._run_changes(lambda: appimages.changes(r, app.id, app.name),
-                                  lambda n: _("Removed {name}").format(name=app.name),
-                                  _("Couldn't remove {name}").format(name=app.name), after=after,
-                                  allow_empty=bool(to_trash))
-
-            buttons = [("cancel", _("Cancel"), "tonal"), ("remove", _("Remove"), "danger")]
-            if r.settings:
-                buttons = [("cancel", _("Cancel"), "tonal"), ("remove", _("Remove"), "tonal"),
-                           ("remove-all", _("Remove with settings"), "danger")]
-            Dialog(self, _("Remove {name}?").format(name=app.name), body, buttons,
-                   on_response, icon_name="delete_forever", icon_class="error-text",
-                   detail="\n".join(lines[:18]) + ("\n…" if len(lines) > 18 else "")).present()
-
-        run_bg(lambda: appimages.plan(app), planned)
+            self.snackbar.show(_("Opened Steam to install it again"))
+            return
+        try:
+            terminal.start(_("installing again: {what}").format(what=e.message), e.reinstall)
+        except terminal.NoTerminal:
+            error_dialog(self, _("No terminal app was found"),
+                         _("Run this in a terminal to install it again:"), terminal.shown(e.reinstall))
+            return
+        except OSError as err:
+            error_dialog(self, _("The terminal couldn't be started"), str(err.strerror or err),
+                         terminal.shown(e.reinstall))
+            return
+        self.snackbar.show(_("Opened your terminal to install it again"))
 
     def _on_card_action(self, item, action):
         app = item.app
@@ -935,8 +944,8 @@ class MainWindow(Gtk.ApplicationWindow):
         elif action == "edit" and app.created and self._web_spec(app):
             WebAppWindow(self, self._save_launcher, did=app.id, text=overrides.read_text(app.override_path),
                          glyph_color=self.style.palette["ON_SURFACE"]).present()
-        elif action == "remove-appimage":
-            self._remove_appimage(app)
+        elif action == "uninstall":
+            self.uninstall(app)
         elif action == "edit" and app.created:
             text = overrides.read_text(app.override_path)
             LauncherWindow(self, self._save_launcher, self._save_raw, did=app.id, text=text,
@@ -1039,10 +1048,18 @@ class MainWindow(Gtk.ApplicationWindow):
         self.sel_show.set_sensitive(any(a.hidden for a in apps))
         self.sel_restore.set_sensitive(any(a.has_override and a.system for a in apps))
         self.sel_style.set_sensitive(bool(apps))
+        self.sel_uninstall.set_sensitive(any(uninstall.kind_of(a) for a in apps))
 
     def _batch(self, what):
         apps = self._selected()
         n_ = ngettext
+        if what == "uninstall":
+            chosen = [a for a in apps if uninstall.kind_of(a)]
+            if len(chosen) == 1:
+                self.uninstall(chosen[0])
+            elif chosen:
+                BatchUninstallWindow(self, chosen, self._all_apps(), self.finish_uninstall).present()
+            return
         if what == "hide":
             targets = [a for a in apps if not a.hidden and a.id != SELF_ID]
             self._run_changes(lambda: [overrides.plan_set_hidden(a, True) for a in targets],

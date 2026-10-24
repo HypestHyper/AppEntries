@@ -30,10 +30,14 @@ class Entry:
     trashed: List[trash.Trashed] = field(default_factory=list)
     undone: float = 0.0          # when it was undone, 0 if it wasn't
     too_big: bool = False        # its files weren't kept, so it can't be undone
+    # Commands that install again what was uninstalled (run in a terminal),
+    # and whether they open Steam instead.
+    reinstall: List[List[str]] = field(default_factory=list)
+    reinstall_steam: bool = False
 
     @property
     def can_undo(self) -> bool:
-        return not self.undone and not self.too_big
+        return not self.undone and not self.too_big and bool(self.changes or self.trashed)
 
     @property
     def paths(self) -> List[str]:
@@ -68,6 +72,7 @@ def _to_json(e: Entry) -> dict:
         "changes": [{"app_id": c.app_id, "app_name": c.app_name, "path": c.path, "before": _enc(c.before),
                      "after": _enc(c.after), "hidden": c.hidden} for c in e.changes],
         "trashed": [{"original": t.original, "file": t.file, "info": t.info} for t in e.trashed],
+        "reinstall": e.reinstall, "reinstall_steam": e.reinstall_steam,
     }
 
 
@@ -78,6 +83,8 @@ def _from_json(d: dict) -> Entry:
         changes=[Change(c["app_id"], c["app_name"], c["path"], _dec(c["before"]), _dec(c["after"]),
                         bool(c["hidden"])) for c in d.get("changes", [])],
         trashed=[trash.Trashed(t["original"], t["file"], t["info"]) for t in d.get("trashed", [])],
+        reinstall=[[str(w) for w in c] for c in d.get("reinstall") or [] if isinstance(c, list)],
+        reinstall_steam=bool(d.get("reinstall_steam")),
     )
 
 
@@ -110,15 +117,16 @@ def _save(entries: List[Entry], env=None) -> None:
 
 
 def record(message: str, changes: List[Change], trashed: Optional[List[trash.Trashed]] = None,
-           env=None) -> Optional[Entry]:
+           env=None, reinstall: Optional[List[List[str]]] = None, reinstall_steam: bool = False) -> Optional[Entry]:
     """Add an entry. Returns it, or None if there was nothing to record or
     the log couldn't be written (the change itself is already made)."""
     trashed = list(trashed or [])
-    if not changes and not trashed:
+    if not changes and not trashed and not reinstall:
         return None
     entries = load(env)
     e = Entry(id=(entries[0].id + 1) if entries else 1, when=time.time(), message=message,
-              changes=list(changes), trashed=trashed)
+              changes=list(changes), trashed=trashed, reinstall=list(reinstall or []),
+              reinstall_steam=reinstall_steam)
     size = sum(len(c.before or "") + len(c.after or "") for c in e.changes)
     if size > MAX_ENTRY:
         e.too_big = True
@@ -162,6 +170,9 @@ def undo(entry_id: int, env=None) -> Entry:
         raise UndoError("That change was already undone.")
     if e.too_big:
         raise UndoError("That change was too large to keep a copy of, so it can't be undone here.")
+    if not e.changes and not e.trashed:
+        raise UndoError("App Entries didn't change any files for this, so there's nothing to undo. Use "
+                        "Reinstall to get the app back.")
     for t in e.trashed:
         if not os.path.lexists(t.file):
             raise UndoError("%s isn't in the Trash any more, so this can't be undone." % t.original, t.original)

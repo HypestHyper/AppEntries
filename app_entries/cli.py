@@ -10,7 +10,8 @@ from . import APP_NAME, VERSION, history, launcher_refresh, profile
 from . import desktop_entries as de
 from .overrides import NeedsConfirmation, OverrideError, apply_all, plan_set_hidden
 
-COMMANDS = ("--list", "--hide", "--unhide", "--show", "--export", "--import", "--refresh-launchers", "-h", "--help")
+COMMANDS = ("--list", "--hide", "--unhide", "--show", "--export", "--import", "--uninstall", "--refresh-launchers",
+            "-h", "--help")
 
 
 def wants_cli(argv: List[str]) -> bool:
@@ -29,12 +30,17 @@ def _parser():
     g.add_argument("--unhide", "--show", nargs="+", metavar="APP", dest="unhide", help="show hidden apps again")
     g.add_argument("--export", metavar="FILE", help="save your hidden apps, edits and launchers to FILE")
     g.add_argument("--import", metavar="FILE", dest="import_", help="apply an export file; shows what changes first")
+    g.add_argument("--uninstall", metavar="APP",
+                   help="uninstall an app (Flatpak, Snap, AppImage, Steam, Distrobox or a package); shows "
+                        "everything that goes and the command first")
     g.add_argument("--refresh-launchers", action="store_true",
                    help="ask the desktop to reload its app list (for launchers that don't notice changes)")
     p.add_argument("--hidden", action="store_true", help="with --list: only hidden apps")
     p.add_argument("--shown", action="store_true", help="with --list: only apps in menus")
     p.add_argument("--all-files", action="store_true",
                    help="with --export: also include files in your folder that App Entries didn't make")
+    p.add_argument("--with-data", action="store_true",
+                   help="with --uninstall: also move its data folders to the Trash")
     p.add_argument("-y", "--yes", action="store_true", help="don't ask before changing files")
     return p
 
@@ -161,6 +167,81 @@ def _import(apps, args):
     return 0
 
 
+def _uninstall(apps, args):
+    import subprocess
+    from . import health, trash, uninstall
+    from .terminal import shown
+    health.check(apps, dict(os.environ))
+    found = find(apps, args.uninstall)
+    if len(found) != 1:
+        print("No app matches %r. Try --list to see IDs." % args.uninstall if not found else
+              "%r matches more than one app: %s. Use the ID." % (args.uninstall, ", ".join(a.id for a in found)),
+              file=sys.stderr)
+        return 1
+    app = found[0]
+    try:
+        p = uninstall.plan(app, apps)
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    if p.blocked:
+        print(p.blocked, file=sys.stderr)
+        return 1
+    opts = p.defaults() + (["data"] if args.with_data and "data" in p.folders else [])
+    p.update(opts)
+    print("%s  (%s%s)" % (app.name, p.kind_label, ", " + p.target if p.target else ""))
+    for line in p.removes:
+        print("  remove: " + line.text)
+    for f in uninstall.to_trash(p, opts):
+        print("  to the Trash: " + f)
+    if p.goes_too:
+        print("  These apps go too: " + ", ".join(p.goes_too))
+    if p.preview is not None and p.preview.dependents and p.preview.dependents_go:
+        print("  Removed with it, because they need it: " + ", ".join(p.preview.dependents))
+    if p.stop_working:
+        print("  These stay in your menus but stop working: " + ", ".join(p.stop_working))
+    for n in p.notes:
+        print("  " + n)
+    if p.stops:
+        print(p.stops, file=sys.stderr)
+        return 1
+    cmds = p.commands(opts)
+    if cmds:
+        print("Runs:\n  " + shown(cmds).replace("\n", "\n  "))
+    if not _confirm("Uninstall %s?" % app.name, args.yes):
+        return 1
+    for argv in cmds:
+        if argv[0].startswith("#"):
+            print(" ".join(argv))
+            continue
+        try:
+            if p.opens_steam:
+                subprocess.Popen(argv, start_new_session=True)
+                print("Steam asks you to confirm. Run this again once Steam has removed it, to tidy up.")
+                return 0
+            code = subprocess.call(argv)
+        except OSError as e:
+            print("Couldn't run %s: %s" % (argv[0], e.strerror or e), file=sys.stderr)
+            return 1
+        if code != 0:
+            print("It stopped with exit code %d. Nothing else was changed." % code, file=sys.stderr)
+            return code
+    if not p.gone():
+        print("%s is still installed. Nothing else was changed." % app.name, file=sys.stderr)
+        return 1
+    changes = apply_all(uninstall.file_changes(p, apps))
+    trashed = []
+    for f in uninstall.to_trash(p, opts):
+        try:
+            trashed.append(trash.move(f))
+        except trash.TrashError as e:
+            print(str(e), file=sys.stderr)
+    history.record("Uninstalled %s (command line)" % app.name, changes, trashed, reinstall=p.reinstall(opts),
+                   reinstall_steam=p.kind == "steam")
+    print("Uninstalled %s. It's in History, where its files can be put back and it can be reinstalled." % app.name)
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     args = _parser().parse_args((argv or sys.argv)[1:])
     try:
@@ -179,6 +260,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return _export(apps, args)
         if args.import_:
             return _import(apps, args)
+        if args.uninstall:
+            return _uninstall(apps, args)
     except (OverrideError, profile.ProfileError) as e:
         print(str(e), file=sys.stderr)
         return 1

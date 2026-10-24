@@ -12,7 +12,7 @@ from . import APP_ID, packages
 from . import desktop_entries as de
 from .overrides import is_minimal_managed, is_pristine
 
-SOURCES = ("system", "flatpak", "snap", "appimage", "steam", "webapp", "user")
+SOURCES = ("system", "flatpak", "snap", "appimage", "steam", "distrobox", "webapp", "user")
 
 
 @dataclass
@@ -49,6 +49,8 @@ def source_of(app: de.App) -> str:
         return "webapp"
     if exec_line.startswith("steam steam://") or "steam://rungameid" in exec_line:
         return "steam"
+    if "distrobox-enter " in exec_line or "distrobox enter " in exec_line:
+        return "distrobox"
     return "system" if app.system else "user"
 
 

@@ -22,7 +22,7 @@
       <li>Styled icons from thousands of symbols or your own SVGs</li>
       <li>Turn login programs on and off</li>
       <li>Choose which app opens links, folders and each kind of file</li>
-      <li>Remove AppImages and everything set up for them</li>
+      <li>Uninstall Flatpak, Snap, AppImage, Steam and package-manager apps, showing what else uses them first</li>
       <li>A history of every change, each with Undo</li>
       <li>Export your changes to another computer, and update from GitHub with one button</li>
     </ul>

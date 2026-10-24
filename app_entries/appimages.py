@@ -150,11 +150,17 @@ _KEEP = {"app-entries", "applications", "icons", "mime", "trash", "fonts", "them
 def settings_folders(app_name: str, path: str, env=None) -> List[str]:
     """Folders in ~/.config, ~/.local/share and ~/.cache named like the app.
     Only a guess, so they're shown and removed only when asked."""
+    return folders_named(_names(app_name, path), env)
+
+
+def folders_named(wanted, env=None) -> List[str]:
+    """Folders in ~/.config, ~/.local/share and ~/.cache with one of these
+    names (any case)."""
     env = os.environ if env is None else env
     home = env.get("HOME") or os.path.expanduser("~")
     config = env.get("XDG_CONFIG_HOME") or os.path.join(home, ".config")
     cache = env.get("XDG_CACHE_HOME") or os.path.join(home, ".cache")
-    wanted = _names(app_name, path)
+    wanted = {n.casefold() for n in wanted if len(n) >= 3}
     found = []
     for base in (config, de.user_data_dir(env), cache):
         try:

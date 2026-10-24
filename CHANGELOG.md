@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Uninstall apps, whatever installed them: Flatpak, Snap, AppImage, Steam, Distrobox, or the system's package manager (pacman, apt, dnf, zypper, rpm-ostree, xbps, apk, eopkg, Portage, Nix). It replaces Remove AppImage.
+- Before anything runs, it shows what goes, the packages and apps that need it or go with it, apps that stay but stop working, and whether it's a default app or starts at login, along with the exact command. Package managers are asked first with their own dry run.
+- Data folders, unused Flatpak runtimes and advanced options (like removing what depends on it, or skipping dependency checks) are off unless turned on, each with a warning.
+- Commands that need a password open in your terminal, so the package manager asks there. Packages the system, your desktop or App Entries needs are never offered.
+- Uninstall several apps at once from Select: one command per package manager.
+- History keeps a Reinstall button for uninstalled apps; `--uninstall` on the command line.
+- Apps exported from Distrobox containers get their own source badge.
+
 ## 1.0.3 — 2026-10-21
 
 - Accent from your desktop: follows GNOME's and KDE's accent setting, or the colours theme tools like Noctalia, matugen and wallust write to ~/.config/gtk-4.0/gtk.css, and changes live with them.

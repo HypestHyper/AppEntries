@@ -5,7 +5,7 @@ from gettext import gettext as _
 
 from gi.repository import Gdk, Gtk, Pango
 
-from .. import history
+from .. import history, terminal
 from .dialogs import Dialog, run_bg
 from .widgets import button, card, clear, hbox, icon, label, vbox
 
@@ -27,13 +27,15 @@ def _short(p):
 
 
 class HistoryWindow(Gtk.Window):
-    """`undo(entry_id)` undoes an entry (the main window's undo_entry)."""
+    """`undo(entry_id)` undoes an entry (the main window's undo_entry);
+    `reinstall(entry_id)` installs again what an entry uninstalled."""
 
-    def __init__(self, parent, undo):
+    def __init__(self, parent, undo, reinstall=None):
         super().__init__(transient_for=parent, title=_("History"))
         self.add_css_class("prefs")
         self.set_default_size(620, 640)
         self._undo = undo
+        self._reinstall = reinstall
 
         hb = Gtk.HeaderBar()
         hb.set_show_title_buttons(False)
@@ -96,14 +98,26 @@ class HistoryWindow(Gtk.Window):
         detail.set_tooltip_text("\n".join(files))
         text = vbox(2, title, when, detail)
         text.set_hexpand(True)
+        action = vbox(6)
         if e.undone:
-            action = label(_("Undone"), ("small", "dim"))
-            action.set_tooltip_text(_when(e.undone))
+            done = label(_("Undone"), ("small", "dim"))
+            done.set_tooltip_text(_when(e.undone))
+            action.append(done)
         elif e.too_big:
-            action = label(_("Too large to undo"), ("small", "dim"))
-            action.set_tooltip_text(_("The files were too large to keep a copy of."))
-        else:
-            action = button(_("Undo"), "undo", "tonal", small=True, cb=lambda *_a, i=e.id: self._undo(i))
+            big = label(_("Too large to undo"), ("small", "dim"))
+            big.set_tooltip_text(_("The files were too large to keep a copy of."))
+            action.append(big)
+        elif e.can_undo:
+            undo = button(_("Undo"), "undo", "tonal", small=True, cb=lambda *_a, i=e.id: self._undo(i))
+            if e.reinstall:
+                undo.set_tooltip_text(_("Puts back the files App Entries removed. Reinstall brings back the app."))
+            action.append(undo)
+        if e.reinstall and self._reinstall is not None:
+            again = button(_("Reinstall"), "download", "tonal", small=True,
+                           cb=lambda *_a, i=e.id: self._reinstall(i))
+            again.set_tooltip_text((_("Opens Steam to install it again:") if e.reinstall_steam else
+                                    _("Opens your terminal running:")) + "\n" + terminal.shown(e.reinstall))
+            action.append(again)
         action.set_valign(Gtk.Align.CENTER)
         c = card()
         c.add_css_class("history-row")

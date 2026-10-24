@@ -65,3 +65,5 @@ star
 expand_more
 wallpaper
 colorize
+progress_activity
+radio_button_unchecked

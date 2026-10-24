@@ -4,7 +4,7 @@ from gettext import gettext as _
 
 from gi.repository import Gdk, Gio, Gtk, Pango
 
-from .. import APP_ID, appimages, desktop_entries, icon_lookup, packages
+from .. import APP_ID, desktop_entries, icon_lookup, packages, uninstall
 from .widgets import Toggle, WrapBox, glyph, hbox, icon, label, option_button, set_text, vbox
 
 
@@ -69,10 +69,25 @@ SOURCES = {
     "snap": ("package_2", N_("Snap"), N_("Installed as a Snap.")),
     "appimage": ("deployed_code", N_("AppImage"), N_("Starts an AppImage file rather than an installed program.")),
     "steam": ("sports_esports", N_("Steam"), N_("A game shortcut that Steam added to your applications folder.")),
+    "distrobox": ("deployed_code", N_("Distrobox"), N_("Runs inside a Distrobox container, added to your menus "
+                                                       "with distrobox-export.")),
     "webapp": ("language", N_("Web app"), N_("A site that opens in its own window, without the browser's address "
                                             "bar. Made with App Entries.")),
     "user": ("person", N_("Local"), N_("A launcher in your own applications folder (~/.local/share/applications), "
                                        "not installed by a package.")),
+}
+
+
+# What Uninstall does, by how the app was installed. Each shows the full list first.
+UNINSTALL_HINTS = {
+    "flatpak": N_("Removes the Flatpak and everything set up for it. Shows the full list first."),
+    "snap": N_("Removes the snap with snap's own command, in your terminal. Shows the full list first."),
+    "appimage": N_("Moves the AppImage to the Trash and removes its menu entries, icons and file types. Shows "
+                   "the full list first."),
+    "steam": N_("Asks Steam to uninstall the game, then removes its menu entry. Shows the full list first."),
+    "distrobox": N_("Removes what distrobox-export added to your menus. Shows the full list first."),
+    "package": N_("Removes its package with your package manager, in your terminal. Shows what else goes, and "
+                  "which apps need it, first."),
 }
 
 
@@ -332,12 +347,11 @@ class AppCard(Gtk.Box):
                 "delete", _("Delete this launcher"),
                 _("Deletes this launcher file from your applications folder. "
                   "The program itself isn't touched. You can undo this."), act("delete"), danger=True))
-        if appimages.appimage_of(a.exec):
+        kind = uninstall.kind_of(a)
+        if kind:
             box.append(option_button(
-                "delete_forever", _("Remove AppImage…"),
-                _("Removes the AppImage and everything set up for it: its menu entries, icons and file types. "
-                  "Shows the full list first. The AppImage goes to the Trash."), act("remove-appimage"),
-                danger=True))
+                "delete_forever", _("Uninstall {name}…").format(name=a.name),
+                _(UNINSTALL_HINTS[kind]), act("uninstall"), danger=True))
         box.append(option_button(
             "folder_open", _("Open file location"),
             _("Opens the folder that holds this app's entry file in your file manager."), act("open-folder")))
