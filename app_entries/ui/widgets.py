@@ -176,6 +176,13 @@ class WrapBox(Gtk.Widget):
     def append(self, child):
         child.set_parent(self)
 
+    def remove_all(self):
+        c = self.get_first_child()
+        while c is not None:
+            nxt = c.get_next_sibling()
+            c.unparent()
+            c = nxt
+
     def do_dispose(self):
         c = self.get_first_child()
         while c is not None:

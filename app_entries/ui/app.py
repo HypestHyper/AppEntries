@@ -13,7 +13,8 @@ from .app_card import AppCard, forget_icons
 from .dialogs import Dialog, choose_file, error_dialog, run_bg
 from .style import SIZES
 from .app_card import label_for_source
-from .widgets import Chip, Clamp, SearchField, Snackbar, spinner, TabBar, Toggle, button, hbox, icon, label, set_text, vbox
+from .widgets import (Chip, Clamp, SearchField, Snackbar, TabBar, Toggle, WrapBox, button, hbox, icon,
+                      label, set_text, spinner, vbox)
 
 
 def _lazy(module, name):
@@ -203,7 +204,11 @@ class MainWindow(Gtk.ApplicationWindow):
         self.empty_title = label("", ("title",), xalign=0.5)
         self.empty_body = label("", ("body", "dim"), wrap=True, xalign=0.5, chars=50)
         self.empty_body.set_justify(Gtk.Justification.CENTER)
-        empty = vbox(10, icon("search_off", ("big", "empty-icon")), self.empty_title, self.empty_body)
+        self.empty_actions = WrapBox(8, 8)
+        self.empty_actions.set_halign(Gtk.Align.CENTER)
+        self.empty_actions.set_margin_top(8)
+        empty = vbox(10, icon("search_off", ("big", "empty-icon")), self.empty_title, self.empty_body,
+                     self.empty_actions)
         empty.set_valign(Gtk.Align.CENTER)
         empty.set_halign(Gtk.Align.CENTER)
         empty.set_margin_bottom(60)
@@ -492,17 +497,21 @@ class MainWindow(Gtk.ApplicationWindow):
     def _matches_query(self, item):
         return all(t in item.search for t in self._query.split())
 
-    def _match(self, item):
+    def _match(self, item, lift=()):
+        """Whether the app is listed on this tab. `lift` names filters to
+        ignore: query, source, hidden, nodisplay."""
         a = item.app
-        if not self._visible_base(a) or not self._matches_query(item):
+        if "nodisplay" not in lift and not self._visible_base(a):
+            return False
+        if "query" not in lift and not self._matches_query(item):
             return False
         source = self.settings.get("source")
-        if source != "any" and a.source != source:
+        if "source" not in lift and source != "any" and a.source != source:
             return False
         f = self.settings.get("filter")
         if f == "hidden":
             return a.hidden
-        if a.hidden and not self.settings.get("show-hidden"):
+        if a.hidden and not self.settings.get("show-hidden") and "hidden" not in lift:
             return False
         if f == "customised":
             return a.customised
@@ -551,11 +560,16 @@ class MainWindow(Gtk.ApplicationWindow):
         self.tabs.set_count("hidden", sum(1 for i in items if i.app.hidden))
         self.tabs.set_count("customised", sum(1 for i in listed if i.app.customised))
         self.tabs.set_count("mine", sum(1 for i in listed if i.app.created))
-        total = [i for i in self.apps.items() if self._visible_base(i.app)]
+        # Every app, whatever the filters: it's the total.
+        total = self.apps.items()
         hidden = sum(1 for i in total if i.app.hidden)
         if self._loaded:
             text = _("{n} apps · {h} hidden").format(n=len(total), h=hidden)
             self.chip.set(text, "ok")
+            # A list that stays empty doesn't say it changed, so the empty
+            # page's filter buttons are brought up to date here.
+            if self.stack.get_visible_child_name() == "empty":
+                self._update_state()
 
     def _update_state(self):
         if not self._loaded:
@@ -568,7 +582,31 @@ class MainWindow(Gtk.ApplicationWindow):
             page = self.settings.get("filter")
         elif page == "empty":
             f = self.settings.get("filter")
-            if self._query:
+            self.empty_actions.remove_all()
+            n_out, lifts, kept = self._filters_hiding_apps()
+            if lifts:
+                q = self.search_entry.get_text().strip()
+                if kept:
+                    set_text(self.empty_title, _("Nothing here with these filters"))
+                    set_text(self.empty_body, ngettext("{n} app matching “{q}” is left out by the filters.",
+                                                       "{n} apps matching “{q}” are left out by the filters.", n_out)
+                             .format(n=n_out, q=q))
+                elif self._query and len(lifts) == 1:
+                    set_text(self.empty_title, _("No apps match “{q}”").format(q=q))
+                    set_text(self.empty_body, _("Try a different name, command or file ID."))
+                else:
+                    set_text(self.empty_title, _("Nothing here with these filters"))
+                    set_text(self.empty_body, ngettext("{n} app on this tab is left out by the filters.",
+                                                       "{n} apps on this tab are left out by the filters.", n_out)
+                             .format(n=n_out))
+                row = self.empty_actions
+                for text, do in lifts:
+                    row.append(button(text, style="tonal", small=True, cb=lambda *_a, do=do: do()))
+                if len(lifts) > 1:
+                    row.append(button((_("Show all matches ({n})") if kept else _("Clear all filters ({n})"))
+                                      .format(n=n_out), style="filled", small=True,
+                                      cb=lambda *_a: [do() for _t, do in lifts]))
+            elif self._query:
                 set_text(self.empty_title, _("No apps match “{q}”").format(q=self.search_entry.get_text().strip()))
                 set_text(self.empty_body, _("Try a different name, command or file ID."))
             elif f == "customised":
@@ -591,6 +629,48 @@ class MainWindow(Gtk.ApplicationWindow):
         if self.stack.get_visible_child_name() != page:
             self._ensure_page(page)
             self.stack.set_visible_child_name(page)
+
+    def _filters_hiding_apps(self):
+        """What the filters leave out of this tab, for the empty page:
+        (apps left out, [(button text, how to lift it)], whether a search
+        is kept). While searching, only apps that match the search count,
+        and the search stays unless nothing would match it anyway. An app
+        can be left out by more than one filter at once (hidden and not in
+        menus), so a filter plays a part if lifting all but it shows fewer."""
+        items = self.apps.items()
+
+        def clear_query():
+            self.search_entry.set_text("")
+            self._on_search(self.search_entry)
+
+        others = [(key, text, do) for key, on, text, do in (
+            ("source", self.settings.get("source") != "any", _("Show all sources"),
+             lambda: self.settings.set("source", "any")),
+            ("hidden", not self.settings.get("show-hidden") and self.settings.get("filter") != "hidden",
+             _("Show hidden apps"), lambda: self.settings.set("show-hidden", True)),
+            ("nodisplay", not self.settings.get("show-no-display"), _("Show apps not in menus"),
+             lambda: self.settings.set("show-no-display", True)),
+        ) if on]
+        query = [("query", _("Clear the search"), clear_query)] if self._query else []
+
+        def count(lift):
+            return sum(1 for i in items if self._match(i, lift))
+
+        if query and not count(tuple(k for k, _t, _d in others)) and count(("query",)):
+            # Nothing matches the search, whatever the other filters: just that.
+            return count(("query",)), [(query[0][1] + " (%d)" % count(("query",)), clear_query)], False
+        for active, kept in ((others, bool(query)), (query + others, False)):
+            keys = tuple(k for k, _t, _d in active)
+            n = count(keys) if keys else 0
+            if not n:
+                continue
+            out = []
+            for key, text, do in active:
+                if count(tuple(k for k in keys if k != key)) < n:
+                    alone = count((key,))
+                    out.append((text + (" (%d)" % alone if alone else ""), do))
+            return n, out, kept
+        return 0, [], False
 
     # ---------------------------------------------------------------- scan
 
