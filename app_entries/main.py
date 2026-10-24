@@ -135,7 +135,11 @@ class Application(Gtk.Application):
             GLib.idle_add(lambda: (self.updates.startup(), False)[1])
 
     def _watch_first_frame(self, window):
-        timing.mark("  window created, renderer ready")
+        if timing.ON:
+            native = window.get_renderer() if hasattr(window, "get_renderer") else None
+            timing.mark("  window created, renderer ready (%s, icon %s)" % (
+                type(native).__name__ if native is not None else "?",
+                "skipped" if getattr(self, "_icon_unset", False) else "looked up"))
         clock = window.get_frame_clock()
         if clock is None:
             return
