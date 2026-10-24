@@ -149,15 +149,17 @@ class MainWindow(Gtk.ApplicationWindow):
         self.hidden_switch.update_property([Gtk.AccessibleProperty.LABEL], [_("Show hidden apps")])
         root.append(self.tabs)
         # Where apps come from: a package manager, Flatpak, Snap, AppImage, …
-        self._sources = [("any", _("All sources"))] + [(k, label_for_source(k)) for k in health.SOURCES]
-        self.source_menu = Gtk.DropDown.new_from_strings([t for _k, t in self._sources])
-        keys = [k for k, _t in self._sources]
+        # Only the sources you have apps from are listed (see _update_sources).
         current = self.settings.get("source")
-        self.source_menu.set_selected(keys.index(current) if current in keys else 0)
+        self._sources = [("any", _("All sources"))] + ([(current, label_for_source(current))]
+                                                         if current in health.SOURCES else [])
+        self._sources_quiet = False
+        self.source_menu = Gtk.DropDown.new_from_strings([t for _k, t in self._sources])
+        self.source_menu.set_selected(len(self._sources) - 1 if current in health.SOURCES else 0)
         self.source_menu.set_valign(Gtk.Align.CENTER)
-        self.source_menu.set_tooltip_text(_("Only list apps from one source: your package manager, Flatpak, "
-                                            "Snap, AppImage, Steam, or local launchers in your home folder. "
-                                            "Search looks within it."))
+        self.source_menu.set_tooltip_text(_("Only list apps from one source, like your package manager, Flatpak "
+                                            "or Snap. Only sources you have apps from are listed. Search looks "
+                                            "within it."))
         self.source_menu.update_property([Gtk.AccessibleProperty.LABEL], [_("Source")])
         self.source_menu.connect("notify::selected", self._on_source)
         self.select_btn = Gtk.ToggleButton(valign=Gtk.Align.CENTER)
@@ -325,7 +327,23 @@ class MainWindow(Gtk.ApplicationWindow):
 
     # -------------------------------------------------------------- settings
 
+    def _update_sources(self):
+        """List the sources that have apps, plus the chosen one."""
+        current = self.settings.get("source")
+        have = {i.app.source for i in self.apps.items()} | {current}
+        sources = [("any", _("All sources"))] + [(k, label_for_source(k)) for k in health.SOURCES if k in have]
+        if sources == self._sources:
+            return
+        self._sources = sources
+        keys = [k for k, _t in sources]
+        self._sources_quiet = True
+        self.source_menu.set_model(Gtk.StringList.new([t for _k, t in sources]))
+        self.source_menu.set_selected(keys.index(current) if current in keys else 0)
+        self._sources_quiet = False
+
     def _on_source(self, dropdown, _p):
+        if self._sources_quiet or dropdown.get_selected() >= len(self._sources):
+            return
         key = self._sources[dropdown.get_selected()][0]
         GLib.idle_add(lambda: (self.settings.set("source", key), False)[1])
 
@@ -338,6 +356,8 @@ class MainWindow(Gtk.ApplicationWindow):
             self._update_tab_controls()
             self._update_state()
         elif key == "source":
+            if self._loaded:
+                self._update_sources()
             self.filter.changed(Gtk.FilterChange.DIFFERENT)
             self._update_counts()
         elif key == "show-hidden":
@@ -601,6 +621,7 @@ class MainWindow(Gtk.ApplicationWindow):
                 return
             apps, report = result
             self._keeping_place(lambda: self.apps.sync(apps))
+            self._update_sources()
             self.defaults.reload()
             self.report = report
             self.issues.update(report)
