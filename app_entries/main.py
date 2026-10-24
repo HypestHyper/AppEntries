@@ -123,6 +123,10 @@ class Application(Gtk.Application):
             self.window = MainWindow(self, self.settings, self.style)
             timing.mark("window built")
             self.window.connect("realize", self._watch_first_frame)
+            # Creating the window looks up its icon, which waits for the whole
+            # icon theme (a third of a second with Papirus on Wayland). The
+            # icon is given back once the window is up.
+            self._icon_unset = _unset_default_icon()
             if timing.ON:
                 self.window.connect("map", lambda *_a: timing.mark("  window mapped"))
         self.window.present()
@@ -158,6 +162,8 @@ class Application(Gtk.Application):
 
     def after_first_frame(self):
         """Work that can wait until the window is on screen."""
+        if getattr(self, "_icon_unset", False):
+            Gtk.Window.set_default_icon_name(APP_ID)   # GTK gives it to the open window too
         if self.window is not None:
             self.window.after_first_frame()
 
@@ -227,6 +233,27 @@ class Application(Gtk.Application):
 
     def _on_updates(self, *_):
         self._show_tab("updates")
+
+
+def _unset_default_icon() -> bool:
+    """Clear the default window icon name (PyGObject won't pass None here).
+    Returns whether it worked."""
+    try:
+        import ctypes
+        for lib in (None, "libgtk-4.so.1"):
+            try:
+                fn = ctypes.CDLL(lib).gtk_window_set_default_icon_name
+                break
+            except (OSError, AttributeError):
+                continue
+        else:
+            return False
+        fn.argtypes = [ctypes.c_char_p]
+        fn.restype = None
+        fn(None)
+        return Gtk.Window.get_default_icon_name() is None
+    except Exception:  # noqa: BLE001 - only an optimisation
+        return False
 
 
 def main(argv=None):
