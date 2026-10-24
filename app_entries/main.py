@@ -123,16 +123,29 @@ class Application(Gtk.Application):
             self.window = MainWindow(self, self.settings, self.style)
             timing.mark("window built")
             self.window.connect("realize", self._watch_first_frame)
+            if timing.ON:
+                self.window.connect("map", lambda *_a: timing.mark("  window mapped"))
         self.window.present()
         if first:
             timing.mark("window shown")
             GLib.idle_add(lambda: (self.updates.startup(), False)[1])
 
     def _watch_first_frame(self, window):
+        timing.mark("  window created, renderer ready")
         clock = window.get_frame_clock()
         if clock is None:
             return
         handler = []
+        steps = []
+        if timing.ON:
+            # The first frame's stages, each marked once.
+            for signal, name, after in (("layout", "  laying out begins", False),
+                                        ("paint", "  laid out, drawing begins", False)):
+                def once(*_a, name=name):
+                    if name not in steps:
+                        steps.append(name)
+                        timing.mark(name)
+                (clock.connect_after if after else clock.connect)(signal, once)
 
         def painted(*_a):
             clock.disconnect(handler[0])
