@@ -3,7 +3,7 @@ import json
 import os
 from gettext import gettext as _
 
-from gi.repository import GLib, GObject, Graphene, Gsk, Gtk, Pango
+from gi.repository import Gdk, GLib, GObject, Graphene, Gsk, Gtk, Pango
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 with open(os.path.join(_HERE, "icons.json"), encoding="utf-8") as _f:
@@ -281,11 +281,114 @@ def set_text(lb: Gtk.Label, text: str):
         lb.set_label(text)
 
 
+def spinner():
+    """A spinning progress glyph. GTK's Spinner draws its icon from the icon
+    theme, which can hold up the first frame."""
+    s = icon("progress_activity", ("spinner-glyph", "accent"))
+    s.set_halign(Gtk.Align.CENTER)
+    return s
+
+
+class SearchField(Gtk.Box):
+    """A search box drawn with the app's own icons. GTK's SearchEntry looks
+    its icons up in the icon theme, which waits until the whole theme has
+    loaded (a tenth of a second or more with big themes, before the window
+    can first appear); this doesn't. It works like SearchEntry:
+    "search-changed" a moment after typing stops, "search-activate" on
+    Enter, Esc clears it, and set_key_capture_widget() starts a search when
+    you type anywhere in that widget."""
+    __gsignals__ = {
+        "search-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
+        "search-activate": (GObject.SignalFlags.RUN_FIRST, None, ()),
+    }
+    DELAY = 150   # ms, as SearchEntry
+
+    def __init__(self, placeholder="", width_chars=14, label_text=""):
+        super().__init__(spacing=10, hexpand=True, valign=Gtk.Align.CENTER)
+        self.add_css_class("search-field")
+        self.append(icon("search", ("dim",)))
+        self.text = Gtk.Text(hexpand=True, width_chars=width_chars, placeholder_text=placeholder,
+                             valign=Gtk.Align.CENTER)
+        if label_text:
+            self.text.update_property([Gtk.AccessibleProperty.LABEL], [label_text])
+        self.append(self.text)
+        self.clear_btn = button(icon_name="close", style="text", small=True, tooltip=_("Clear the search"),
+                                cb=lambda *_a: (self.set_text(""), self.text.grab_focus()))
+        self.clear_btn.set_visible(False)
+        self.clear_btn.set_valign(Gtk.Align.CENTER)
+        self.append(self.clear_btn)
+        self._timer = 0
+        self.text.connect("changed", self._changed)
+        self.text.connect("activate", lambda *_a: self._fire() or self.emit("search-activate"))
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self._key)
+        self.text.add_controller(keys)
+        click = Gtk.GestureClick()
+        click.connect("pressed", lambda *_a: self.text.grab_focus())
+        self.add_controller(click)
+
+    def get_text(self):
+        return self.text.get_text()
+
+    def set_text(self, value):
+        self.text.set_text(value)
+        self.text.set_position(-1)
+
+    def grab_focus(self):
+        return self.text.grab_focus()
+
+    def _changed(self, *_a):
+        self.clear_btn.set_visible(bool(self.text.get_text()))
+        if self._timer:
+            GLib.source_remove(self._timer)
+        self._timer = GLib.timeout_add(self.DELAY, self._fire)
+
+    def _fire(self):
+        if self._timer:
+            GLib.source_remove(self._timer)
+            self._timer = 0
+            self.emit("search-changed")
+        return False
+
+    def _key(self, _c, keyval, _code, _state):
+        if keyval == Gdk.KEY_Escape and self.text.get_text():
+            self.set_text("")
+            return True
+        return False
+
+    def set_key_capture_widget(self, widget):
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self._captured, widget)
+        widget.add_controller(keys)
+
+    def _captured(self, _c, keyval, _code, state, widget):
+        if state & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.ALT_MASK | Gdk.ModifierType.SUPER_MASK):
+            return False
+        root = widget.get_root()
+        focus = root.get_focus() if root is not None else None
+        if isinstance(focus, Gtk.Editable) or (focus is not None and focus.is_ancestor(self)):
+            return False
+        ch = chr(Gdk.keyval_to_unicode(keyval) or 0)
+        if not ch.isprintable() or ch in ("", " ", "\x00"):
+            return False
+        self.text.grab_focus()
+        self.set_text(self.text.get_text() + ch)
+        return True
+
+
 class Toggle(Gtk.Switch):
     """A switch whose callback fires only on user changes."""
 
     def __init__(self, active=False, cb=None):
         super().__init__(active=active, valign=Gtk.Align.CENTER)
+        # The on/off icons inside are transparent in this app's style, but
+        # drawing them still looks them up in the icon theme, which holds up
+        # the first frame until the whole theme has loaded. So they're hidden.
+        child = self.get_first_child()
+        while child is not None:
+            if isinstance(child, Gtk.Image):
+                child.set_visible(False)
+            child = child.get_next_sibling()
         self._quiet = False
         self._cb = cb
         self.connect("notify::active", self._changed)

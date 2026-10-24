@@ -140,6 +140,8 @@ mkdir -p "$APPDIR" "$BINDIR" "$SCHEMADIR" \
 
 cp -r "$SRC/app_entries" "$APPDIR/app_entries"
 find "$APPDIR/app_entries" -name '__pycache__' -type d -prune -exec rm -rf {} +
+# Compiled now, so the first start after installing doesn't compile everything.
+python3 -m compileall -q "$APPDIR/app_entries" >/dev/null 2>&1 || true
 # Launchers often run without ~/.local/bin in PATH, so name the program by its full path.
 case "$BINDIR" in
     *" "*) EXEC="\"$BINDIR/$APP_ID\"" ;;

@@ -8,9 +8,7 @@ import html.parser
 import os
 import shlex
 import shutil
-import urllib.error
 import urllib.parse
-import urllib.request
 from typing import List, Optional, Tuple
 
 from . import APP_ID, VERSION
@@ -193,6 +191,7 @@ def icon_candidates(page_url: str, html_text: str) -> List[str]:
 
 
 def _get(url: str, limit: int) -> Tuple[bytes, str]:
+    import urllib.request   # here, as it takes a while to load
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (%s %s)" % (APP_ID, VERSION)})
     with urllib.request.urlopen(req, timeout=15) as r:
         data = r.read(limit + 1)
@@ -204,6 +203,7 @@ def _get(url: str, limit: int) -> Tuple[bytes, str]:
 def fetch_icon(url: str) -> Tuple[bytes, str]:
     """The site's best icon: (data, kind), kind being svg, png or other
     (ico, jpeg, webp: for the caller to convert). Raises ValueError."""
+    import urllib.error
     url = normalize(url)
     page = ""
     try:

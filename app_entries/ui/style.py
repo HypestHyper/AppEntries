@@ -209,6 +209,10 @@ entry > image {{ color: {ON_SURFACE_VARIANT}; }}
 entry selection {{ background: alpha({PRIMARY}, .35); }}
 .search-entry {{ border-radius: 24px; min-height: 48px; padding: 0 16px; font-size: 15px; }}
 .search-entry:focus-within {{ box-shadow: inset 0 0 0 2px {PRIMARY}; }}
+.search-field {{ background: {SURFACE_CONTAINER_HIGHEST}; color: {ON_SURFACE}; border-radius: 24px; min-height: 48px;
+  padding: 0 8px 0 16px; font-size: 15px; caret-color: {PRIMARY}; }}
+.search-field:focus-within {{ box-shadow: inset 0 0 0 2px {PRIMARY}; }}
+.search-field text selection {{ background: alpha({PRIMARY}, .35); }}
 searchbar, searchbar > revealer > box {{ background: transparent; border: none; box-shadow: none; padding: 0; }}
 
 /* Popovers and menus */
@@ -313,6 +317,10 @@ button.option:active {{ border-radius: 8px; }}
 button.option .option-title {{ font-weight: 600; }}
 button.option-danger .option-title, button.option-danger .icon {{ color: {ERROR}; }}
 popover.options > contents {{ padding: 6px; }}
+button.source-item {{ border-radius: 10px; min-height: 36px; padding: 0 12px; }}
+button.source-item:hover {{ background: {SECONDARY_CONTAINER}; }}
+.spinner-glyph {{ font-size: 32px; animation: spin 1s linear infinite; }}
+@keyframes spin {{ to {{ transform: rotate(1turn); }} }}
 .issue-row {{ padding: 2px 0; }}
 .icon-tile.small-tile {{ padding: 4px; border-radius: 12px; }}
 

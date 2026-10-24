@@ -7,25 +7,37 @@ from gettext import ngettext
 from gi.repository import Gdk, Gio, GLib, Gtk
 
 from .. import (APP_ID, APP_NAME, appimages, autostart, desktop_entries, editing, health, history, icon_lookup,
-               launcher_refresh, launchers, overrides, profile, symbols, terminal, trash, uninstall, webapps)
+               launcher_refresh, launchers, overrides, profile, symbols, terminal, timing, trash, uninstall, webapps)
 from ..model import AppItem, AppStore
 from .app_card import AppCard
-from .autostart_page import AutostartPage
-from .defaults_page import DefaultsPage
 from .dialogs import Dialog, choose_file, error_dialog, run_bg
-from .editor import EditWindow
-from .helpers_window import HelpersWindow
-from .history_window import HistoryWindow
-from .uninstall_window import BatchUninstallWindow, UninstallWindow
-from .icon_picker import IconPicker
-from .issues import IssuesPage
-from .launcher_window import LauncherWindow
-from .settings_page import SettingsPage
-from .webapp_window import WebAppWindow
-from .updates import UpdatesPage
 from .style import SIZES
 from .app_card import label_for_source
-from .widgets import Chip, Clamp, Snackbar, TabBar, Toggle, button, hbox, icon, label, set_text, vbox
+from .widgets import Chip, Clamp, SearchField, Snackbar, spinner, TabBar, Toggle, button, hbox, icon, label, set_text, vbox
+
+
+def _lazy(module, name):
+    """A window class loaded the first time it's opened, so its code doesn't
+    slow down start-up."""
+    def make(*args, **kwargs):
+        import importlib
+        return getattr(importlib.import_module(module, __package__), name)(*args, **kwargs)
+    return make
+
+
+EditWindow = _lazy(".editor", "EditWindow")
+HelpersWindow = _lazy(".helpers_window", "HelpersWindow")
+HistoryWindow = _lazy(".history_window", "HistoryWindow")
+UninstallWindow = _lazy(".uninstall_window", "UninstallWindow")
+BatchUninstallWindow = _lazy(".uninstall_window", "BatchUninstallWindow")
+IconPicker = _lazy(".icon_picker", "IconPicker")
+LauncherWindow = _lazy(".launcher_window", "LauncherWindow")
+WebAppWindow = _lazy(".webapp_window", "WebAppWindow")
+IssuesPage = _lazy(".issues", "IssuesPage")
+AutostartPage = _lazy(".autostart_page", "AutostartPage")
+DefaultsPage = _lazy(".defaults_page", "DefaultsPage")
+SettingsPage = _lazy(".settings_page", "SettingsPage")
+UpdatesPage = _lazy(".updates", "UpdatesPage")
 
 FILTERS = [
     ("all", _("All apps"), "apps"),
@@ -80,9 +92,10 @@ class MainWindow(Gtk.ApplicationWindow):
         hb = Gtk.HeaderBar()
         hb.set_show_title_buttons(False)
         hb.set_title_widget(Gtk.Box())
-        logo = Gtk.Image(icon_name=APP_ID, pixel_size=40, accessible_role=Gtk.AccessibleRole.PRESENTATION)
+        self.logo = Gtk.Image(pixel_size=40, accessible_role=Gtk.AccessibleRole.PRESENTATION)
+        self.refresh_logo()
         title = label(APP_NAME, ("app-title",))
-        self._start = hbox(12, logo, title)
+        self._start = hbox(12, self.logo, title)
         self._start.set_margin_start(4)
         hb.pack_start(self._start)
 
@@ -119,16 +132,11 @@ class MainWindow(Gtk.ApplicationWindow):
         self.tabs = TabBar(FILTERS, self.settings.get("filter"))
         self.tabs.connect("changed", lambda _t, key: self.settings.set("filter", key))
         # Always-visible search; typing anywhere in the window starts it.
-        self.search_entry = Gtk.SearchEntry(hexpand=True, width_chars=14,
-                                            placeholder_text=_("Search apps"))
-        self.search_entry.add_css_class("search-entry")
-        self.search_entry.set_valign(Gtk.Align.CENTER)
+        self.search_entry = SearchField(_("Search apps"), 14, _("Search apps"))
         self.search_entry.set_tooltip_text(_("Search by name, description, command or file ID (Ctrl+F)"))
-        self.search_entry.update_property([Gtk.AccessibleProperty.LABEL], [_("Search apps")])
         self.search_entry.set_key_capture_widget(self)
         self.search_entry.connect("search-changed", self._on_search)
-        self.search_entry.connect("activate", self._on_search_activate)
-        self.search_entry.connect("stop-search", lambda e: e.set_text(""))
+        self.search_entry.connect("search-activate", self._on_search_activate)
 
         self.nodisplay_switch = Toggle(self.settings.get("show-no-display"),
                                        lambda v: self.settings.set("show-no-display", v))
@@ -153,15 +161,18 @@ class MainWindow(Gtk.ApplicationWindow):
         current = self.settings.get("source")
         self._sources = [("any", _("All sources"))] + ([(current, label_for_source(current))]
                                                          if current in health.SOURCES else [])
-        self._sources_quiet = False
-        self.source_menu = Gtk.DropDown.new_from_strings([t for _k, t in self._sources])
-        self.source_menu.set_selected(len(self._sources) - 1 if current in health.SOURCES else 0)
-        self.source_menu.set_valign(Gtk.Align.CENTER)
+        # A menu button with the app's own arrow: GTK's DropDown draws its arrow
+        # from the icon theme, which holds up the first frame.
+        self.source_label = Gtk.Label(label=self._sources[-1][1])
+        self.source_menu = Gtk.MenuButton(valign=Gtk.Align.CENTER)
+        self.source_menu.set_child(hbox(4, self.source_label, icon("expand_more")))
+        self.source_menu.add_css_class("tonal")
+        self.source_menu.add_css_class("source-menu")
         self.source_menu.set_tooltip_text(_("Only list apps from one source, like your package manager, Flatpak "
                                             "or Snap. Only sources you have apps from are listed. Search looks "
                                             "within it."))
         self.source_menu.update_property([Gtk.AccessibleProperty.LABEL], [_("Source")])
-        self.source_menu.connect("notify::selected", self._on_source)
+        self.source_menu.set_create_popup_func(self._source_popup)
         self.select_btn = Gtk.ToggleButton(valign=Gtk.Align.CENTER)
         self.select_btn.set_child(hbox(6, icon("checklist"), label(_("Select"))))
         self.select_btn.add_css_class("tonal")
@@ -198,7 +209,7 @@ class MainWindow(Gtk.ApplicationWindow):
         empty.set_halign(Gtk.Align.CENTER)
         empty.set_margin_bottom(60)
 
-        loading = vbox(12, Gtk.Spinner(spinning=True, width_request=32, height_request=32),
+        loading = vbox(12, spinner(),
                        label(_("Looking for apps…"), ("body", "dim"), xalign=0.5))
         loading.set_valign(Gtk.Align.CENTER)
         loading.set_halign(Gtk.Align.CENTER)
@@ -208,19 +219,10 @@ class MainWindow(Gtk.ApplicationWindow):
         self.stack.add_named(loading, "loading")
         self.stack.add_named(grid_scroll, "grid")
         self.stack.add_named(empty, "empty")
-        self.issues = IssuesPage(self._fix, self._toggle_app, self._copy_text)
-        self.stack.add_named(self.issues, "issues")
-        self.autostart = AutostartPage(self, self._run_changes, lambda: [i.app for i in self.apps.items()])
-        self.stack.add_named(self.autostart, "autostart")
-        self.defaults = DefaultsPage(self, self._run_changes, lambda: [i.app for i in self.apps.items()])
-        self.stack.add_named(self.defaults, "defaults")
-        self.stack.add_named(SettingsPage(self, self.settings), "settings")
+        # The other tabs' pages are built the first time they're opened
+        # (_ensure_page), so they don't slow down start-up.
+        self.issues = self.autostart = self.defaults = None
         updates = self.get_application().updates
-        up = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
-        page = UpdatesPage(updates, self.settings)
-        page.set_margin_bottom(24)
-        up.set_child(Clamp(page, 760))
-        self.stack.add_named(up, "updates")
         updates.connect(lambda: self.tabs.set_count("updates", "1" if updates.release else ""))
         self.report = None
 
@@ -244,6 +246,31 @@ class MainWindow(Gtk.ApplicationWindow):
         self._update_tab_controls()
         root.append(overlay)
         self.set_child(root)
+
+    def _ensure_page(self, name):
+        """Build a tab's page the first time it's shown."""
+        if name not in PAGES or self.stack.get_child_by_name(name) is not None:
+            return
+        apps = lambda: [i.app for i in self.apps.items()]  # noqa: E731
+        if name == "issues":
+            self.issues = page = IssuesPage(self._fix, self._toggle_app, self._copy_text)
+            if self.report is not None:
+                page.update(self.report)
+        elif name == "autostart":
+            self.autostart = page = AutostartPage(self, self._run_changes, apps)
+        elif name == "defaults":
+            self.defaults = page = DefaultsPage(self, self._run_changes, apps)
+            page.reload()   # it's filled from the app list, which may be in already
+        elif name == "settings":
+            page = SettingsPage(self, self.settings)
+        elif name == "updates":
+            inner = UpdatesPage(self.get_application().updates, self.settings)
+            inner.set_margin_bottom(24)
+            page = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
+            page.set_child(Clamp(inner, 760))
+        else:
+            return
+        self.stack.add_named(page, name)
 
     def _setup_card(self, _f, list_item):
         list_item.set_child(AppCard(self._on_toggle, self._on_card_action, lambda: self._selecting))
@@ -331,20 +358,29 @@ class MainWindow(Gtk.ApplicationWindow):
         """List the sources that have apps, plus the chosen one."""
         current = self.settings.get("source")
         have = {i.app.source for i in self.apps.items()} | {current}
-        sources = [("any", _("All sources"))] + [(k, label_for_source(k)) for k in health.SOURCES if k in have]
-        if sources == self._sources:
-            return
-        self._sources = sources
-        keys = [k for k, _t in sources]
-        self._sources_quiet = True
-        self.source_menu.set_model(Gtk.StringList.new([t for _k, t in sources]))
-        self.source_menu.set_selected(keys.index(current) if current in keys else 0)
-        self._sources_quiet = False
+        self._sources = [("any", _("All sources"))] + [(k, label_for_source(k)) for k in health.SOURCES
+                                                         if k in have]
+        set_text(self.source_label, dict(self._sources).get(current, self._sources[0][1]))
 
-    def _on_source(self, dropdown, _p):
-        if self._sources_quiet or dropdown.get_selected() >= len(self._sources):
-            return
-        key = self._sources[dropdown.get_selected()][0]
+    def _source_popup(self, menu_button):
+        current = self.settings.get("source")
+        box = vbox(2)
+        box.set_size_request(200, -1)
+        for key, text in self._sources:
+            b = Gtk.Button()
+            b.add_css_class("flat")
+            b.add_css_class("source-item")
+            mark = icon("check", ("accent",))
+            mark.set_opacity(1 if key == current else 0)
+            b.set_child(hbox(10, mark, label(text, ("body",))))
+            b.connect("clicked", lambda _b, k=key: (menu_button.popdown(), self._choose_source(k)))
+            box.append(b)
+        pop = Gtk.Popover()
+        pop.add_css_class("options")
+        pop.set_child(box)
+        menu_button.set_popover(pop)
+
+    def _choose_source(self, key):
         GLib.idle_add(lambda: (self.settings.set("source", key), False)[1])
 
     def _on_setting(self, key):
@@ -525,6 +561,7 @@ class MainWindow(Gtk.ApplicationWindow):
     def _update_state(self):
         if not self._loaded:
             if self.settings.get("filter") in ("autostart", "defaults", "settings", "updates"):
+                self._ensure_page(self.settings.get("filter"))
                 self.stack.set_visible_child_name(self.settings.get("filter"))
             return
         page = "grid" if self.sorted.get_n_items() else "empty"
@@ -553,6 +590,7 @@ class MainWindow(Gtk.ApplicationWindow):
                 set_text(self.empty_title, _("No apps found"))
                 set_text(self.empty_body, _("No application entries were found in your XDG data folders."))
         if self.stack.get_visible_child_name() != page:
+            self._ensure_page(page)
             self.stack.set_visible_child_name(page)
 
     # ---------------------------------------------------------------- scan
@@ -578,6 +616,28 @@ class MainWindow(Gtk.ApplicationWindow):
         walk(self.grid)
         out.sort(key=lambda t: t[0])
         return [(item, y) for y, item in out]
+
+    def refresh_logo(self):
+        """The logo in the accent colour, drawn from its own file. Looking it
+        up in the icon theme would hold up the first frame until the whole
+        theme has loaded."""
+        from .. import app_icon, theme
+        app = self.get_application()
+        seed = app.effective_seed() if app is not None else theme.DEFAULT_SEED
+        folder = os.path.join(GLib.get_user_runtime_dir() or GLib.get_user_cache_dir(), "app-entries")
+        path = os.path.join(folder, "logo-%s.svg" % seed.lstrip("#"))
+        try:
+            if not os.path.isfile(path):
+                os.makedirs(folder, exist_ok=True)
+                with open(path + ".tmp", "w", encoding="utf-8") as f:
+                    f.write(app_icon.render(seed, marker=False))
+                os.replace(path + ".tmp", path)
+            self.logo.set_from_paintable(Gtk.IconPaintable.new_for_file(Gio.File.new_for_path(path), 40, 2))
+        except (OSError, GLib.Error):
+            self.logo.set_from_icon_name(APP_ID)
+
+    def after_first_frame(self):
+        """Called once the window has drawn for the first time."""
 
     def _keeping_place(self, change):
         """Make a change to the list without moving the view: the card at the
@@ -622,12 +682,18 @@ class MainWindow(Gtk.ApplicationWindow):
             apps, report = result
             self._keeping_place(lambda: self.apps.sync(apps))
             self._update_sources()
-            self.defaults.reload()
+            if self.defaults is not None:
+                self.defaults.reload()
             self.report = report
-            self.issues.update(report)
+            if self.issues is not None:
+                self.issues.update(report)
             self.tabs.set_count("issues", report.count)
             first = not self._loaded
             self._loaded = True
+            if first:
+                timing.mark("apps listed")
+                if timing.QUIT == "listed":
+                    GLib.idle_add(lambda: (self.get_application().quit(), False)[1])
             self._update_counts()
             self._update_state()
             if first and self.sorted.get_n_items():
@@ -635,7 +701,8 @@ class MainWindow(Gtk.ApplicationWindow):
 
         icon_lookup.clear_cache()
         run_bg(health.scan_and_check, done)
-        self.autostart.reload()
+        if self.autostart is not None:
+            self.autostart.reload()
 
     def queue_rescan(self, delay=300):
         if self._rescan_timer:

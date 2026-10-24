@@ -10,8 +10,6 @@ import base64
 import os
 import re
 import shutil
-import urllib.parse
-import urllib.request
 import xml.etree.ElementTree as ET
 from typing import List, Optional
 
@@ -114,8 +112,10 @@ def add_file(path: str, env=None) -> str:
     return target
 
 
-def download(url: str, env=None, opener=urllib.request.urlopen) -> str:
+def download(url: str, env=None, opener=None) -> str:
     """Download an SVG or PNG into the library and return its path."""
+    import urllib.request   # here, as it takes a while to load
+    opener = opener or urllib.request.urlopen
     parsed = urllib.parse.urlparse(url.strip())
     if parsed.scheme not in ("https", "http"):
         raise IconError("The link has to start with https://")

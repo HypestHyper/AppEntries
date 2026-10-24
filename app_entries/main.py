@@ -1,18 +1,26 @@
 """Application entry point."""
+from . import timing  # noqa: I001 - first, so its clock starts early
 import gettext
 import locale
 import os
 import sys
 
-import gi
+# GTK's GL renderer starts faster than Vulkan, which newer GTK versions use
+# by default (about a tenth of a second on some machines). GSK_RENDERER
+# still chooses another.
+os.environ.setdefault("GSK_RENDERER", "ngl")
+
+import gi  # noqa: E402
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 gi.require_version("Gsk", "4.0")
 gi.require_version("Graphene", "1.0")
-from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Gio, GLib, Gtk  # noqa: E402
 
 from . import APP_ID, APP_NAME, VERSION, theme  # noqa: E402
+
+timing.mark("Python and GTK loaded")
 
 DOMAIN = "app-entries"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -32,6 +40,11 @@ def setup_i18n(localedir=None):
 class Application(Gtk.Application):
     def __init__(self):
         super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+        # There are no bundled GResources. Without a base path GtkApplication
+        # doesn't add an icon search path for them at start-up, which waits
+        # for the whole icon theme to load (a quarter of a second with
+        # Papirus) before anything else can happen.
+        self.set_resource_base_path(None)
         self.add_main_option("version", ord("v"), GLib.OptionFlags.NONE, GLib.OptionArg.NONE,
                              gettext.gettext("Print the version and exit"), None)
         self.window = None
@@ -46,17 +59,15 @@ class Application(Gtk.Application):
         return -1
 
     def do_startup(self):
+        timing.mark("GTK started")
         Gtk.Application.do_startup(self)
+        timing.mark("GtkApplication start-up")
         from .settings import Settings
         from .ui import fonts
         from .ui.appearance import ColorScheme
         from .ui.style import Style
 
         fonts.register()
-        dev_icons = os.path.join(SOURCE_ROOT, "data", "icons")
-        if os.path.isdir(dev_icons):
-            Gtk.IconTheme.get_for_display(Gdk.Display.get_default()).add_search_path(dev_icons)
-        Gtk.Window.set_default_icon_name(APP_ID)
 
         self.settings = Settings()
         self.scheme = ColorScheme(self._on_scheme_changed)
@@ -82,6 +93,7 @@ class Application(Gtk.Application):
             self.add_action(act)
             if accels:
                 self.set_accels_for_action("app." + name, accels)
+        timing.mark("settings, fonts and styles")
         self.set_accels_for_action("win.search", ["<Control>f"])
         self.set_accels_for_action("win.new-launcher", ["<Control>n"])
         self.set_accels_for_action("win.new-web-app", ["<Control><Shift>n"])
@@ -92,11 +104,37 @@ class Application(Gtk.Application):
             self.set_accels_for_action("win.filter::" + key, ["<Alt>%d" % i])
 
     def do_activate(self):
-        if self.window is None:
+        first = self.window is None
+        if first:
             from .ui.app import MainWindow
+            timing.mark("window code loaded")
             self.window = MainWindow(self, self.settings, self.style)
-            self.updates.startup()
+            timing.mark("window built")
+            self.window.connect("realize", self._watch_first_frame)
         self.window.present()
+        if first:
+            timing.mark("window shown")
+            GLib.idle_add(lambda: (self.updates.startup(), False)[1])
+
+    def _watch_first_frame(self, window):
+        clock = window.get_frame_clock()
+        if clock is None:
+            return
+        handler = []
+
+        def painted(*_a):
+            clock.disconnect(handler[0])
+            timing.mark("first frame")
+            self.after_first_frame()
+            if timing.QUIT == "1":
+                GLib.idle_add(lambda: (self.quit(), False)[1])
+
+        handler.append(clock.connect("after-paint", painted))
+
+    def after_first_frame(self):
+        """Work that can wait until the window is on screen."""
+        if self.window is not None:
+            self.window.after_first_frame()
 
     def _want_dark(self):
         choice = self.settings.get("theme")
@@ -150,6 +188,8 @@ class Application(Gtk.Application):
         from .ui.dialogs import run_bg
         seed, themed = self.effective_seed(), self.settings.get("themed-icon")
         run_bg(lambda: app_icon.update(seed, themed))
+        if self.window is not None:
+            self.window.refresh_logo()
 
     def _show_tab(self, key):
         if self.window is None:
@@ -166,12 +206,19 @@ class Application(Gtk.Application):
 
 def main(argv=None):
     setup_i18n()
-    from . import cli
-    if cli.wants_cli(sys.argv if argv is None else argv):
-        return cli.main(sys.argv if argv is None else argv)
+    args = sys.argv if argv is None else argv
+    # The command line's code loads only when an option asks for it.
+    if any(a.startswith("-") for a in args[1:]):
+        from . import cli
+        if cli.wants_cli(args):
+            return cli.main(args)
     # X11 WM_CLASS and the Wayland app ID both match StartupWMClass this way.
     GLib.set_prgname(APP_ID)
-    return Application().run(sys.argv if argv is None else argv)
+    # GtkApplication looks for an icon named after the app unless one is set,
+    # and that waits until the whole icon theme has loaded (a third of a
+    # second with big themes like Papirus). Naming it first skips the wait.
+    Gtk.Window.set_default_icon_name(APP_ID)
+    return Application().run(args)
 
 
 if __name__ == "__main__":

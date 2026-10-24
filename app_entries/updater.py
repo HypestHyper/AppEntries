@@ -14,8 +14,6 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -57,6 +55,8 @@ def is_newer(candidate: str, current: str = VERSION) -> bool:
 
 
 def _get(url: str, timeout: float = 15):
+    import urllib.error   # here, as they take a while to load
+    import urllib.request
     req = urllib.request.Request(url, headers={
         "Accept": "application/vnd.github+json",
         "User-Agent": "%s/%s" % (APP_ID, VERSION),
@@ -145,6 +145,8 @@ def location(here: str = HERE) -> Install:
 
 
 def _download(url: str, dest: str) -> None:
+    import urllib.error
+    import urllib.request
     req = urllib.request.Request(url, headers={"User-Agent": "%s/%s" % (APP_ID, VERSION)})
     try:
         with urllib.request.urlopen(req, timeout=60) as r, open(dest, "wb") as f:
