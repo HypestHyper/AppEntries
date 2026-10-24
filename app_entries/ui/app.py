@@ -186,6 +186,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.grid.update_property([Gtk.AccessibleProperty.LABEL], [_("Applications")])
         grid_scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
         grid_scroll.set_child(self.grid)
+        self.grid_scroll = grid_scroll
 
         self.empty_title = label("", ("title",), xalign=0.5)
         self.empty_body = label("", ("body", "dim"), wrap=True, xalign=0.5, chars=50)
@@ -536,6 +537,58 @@ class MainWindow(Gtk.ApplicationWindow):
 
     # ---------------------------------------------------------------- scan
 
+    def _cards_in_view(self):
+        """(item, y) for each card on screen, top first; y is from the top of
+        the visible area."""
+        out = []
+        height = self.grid_scroll.get_height()
+
+        def walk(w):
+            if isinstance(w, AppCard):
+                if w.item is not None and w.get_mapped():
+                    ok, r = w.compute_bounds(self.grid_scroll)
+                    if ok and r.get_y() + r.get_height() > 0 and r.get_y() < height:
+                        out.append((r.get_y(), w.item))
+                return
+            c = w.get_first_child()
+            while c is not None:
+                walk(c)
+                c = c.get_next_sibling()
+
+        walk(self.grid)
+        out.sort(key=lambda t: t[0])
+        return [(item, y) for y, item in out]
+
+    def _keeping_place(self, change):
+        """Make a change to the list without moving the view: the card at the
+        top before stays where it was afterwards. GTK can otherwise jump,
+        often to the top, when the card that has focus (the one whose switch
+        was just clicked) leaves the list, and pixel positions shift as cards
+        above change height, so the place is kept by card, not by pixels."""
+        before = self._cards_in_view() if self.grid_scroll.get_vadjustment().get_value() > 0 else []
+        change()
+        anchors = [(item, y) for item, y in before
+                   if self.apps.by_id.get(item.app.id) is item and self.filter.match(item)]
+        if not anchors:
+            return
+        item, y0 = anchors[0]
+        adj = self.grid_scroll.get_vadjustment()
+        frames = [0]
+
+        def hold(*_a):
+            frames[0] += 1
+            now = next((y for it, y in self._cards_in_view() if it is item), None)
+            if now is None:
+                # Off screen: bring it into view first, then line it up.
+                pos = next((i for i in range(self.sorted.get_n_items()) if self.sorted.get_item(i) is item), -1)
+                if pos >= 0 and hasattr(self.grid, "scroll_to"):
+                    self.grid.scroll_to(pos, Gtk.ListScrollFlags.NONE, None)
+            elif abs(now - y0) > 1:
+                adj.set_value(adj.get_value() + (now - y0))
+            return frames[0] < 30
+
+        self.grid.add_tick_callback(hold)
+
     def rescan(self, *_args):
         self._scan_gen += 1
         gen = self._scan_gen
@@ -547,7 +600,7 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.chip.set(_("Couldn't read apps"), "error")
                 return
             apps, report = result
-            self.apps.sync(apps)
+            self._keeping_place(lambda: self.apps.sync(apps))
             self.defaults.reload()
             self.report = report
             self.issues.update(report)

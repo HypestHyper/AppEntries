@@ -682,7 +682,7 @@ class BatchUninstallWindow(_Base):
                     aware.append(_("Stops working: {apps}.").format(apps=", ".join(p.stop_working)))
                 aware += p.notes
                 for a in aware:
-                    w = hbox(8, icon("warning", ("warn-text",)), label(a, ("small", "warn-text"), wrap=True,
+                    w = hbox(8, icon("warning", ("error-text",)), label(a, ("small", "error-text"), wrap=True,
                                                                          chars=56))
                     w.set_margin_start(44)
                     c.append(w)
@@ -761,7 +761,7 @@ class BatchUninstallWindow(_Base):
             left = [p.app.name for p in self.batch.plans if p not in self._gone]
             body = vbox(14)
             body.set_margin_top(40)
-            i = icon("check_circle" if not left else "warning", ("big", "accent" if not left else "warn-text"))
+            i = icon("check_circle" if not left else "warning", ("big", "accent" if not left else "error-text"))
             i.set_halign(Gtk.Align.CENTER)
             body.append(i)
             body.append(label(ngettext("{n} app uninstalled", "{n} apps uninstalled", len(self._gone))

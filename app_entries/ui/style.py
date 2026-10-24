@@ -124,7 +124,7 @@ button.filter:active {{ border-radius: 8px; }}
 .card-inner {{ background: {SURFACE_CONTAINER_HIGH}; border-radius: 20px; padding: 16px; }}
 .hero {{ background: {PRIMARY_CONTAINER}; color: {ON_PRIMARY_CONTAINER}; border-radius: 32px; padding: 20px 24px; }}
 .hero .dim {{ color: {ON_PRIMARY_CONTAINER}; opacity: .8; }}
-.warn-card {{ background: {TERTIARY_CONTAINER}; color: {ON_TERTIARY_CONTAINER}; border-radius: 20px; padding: 16px; }}
+.warn-card {{ background: {ERROR_CONTAINER}; color: {ON_ERROR_CONTAINER}; border-radius: 20px; padding: 16px; }}
 expander.advanced > title {{ font-weight: 600; }}
 .floating-toolbar {{ background: {SURFACE_CONTAINER_HIGHEST}; border-radius: 28px; box-shadow: 0 4px 16px {SHADOW_M}; }}
 separator {{ background: {OUTLINE_VARIANT}; min-height: 1px; min-width: 1px; }}
