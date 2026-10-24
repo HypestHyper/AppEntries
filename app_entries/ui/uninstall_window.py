@@ -77,7 +77,6 @@ class _Base(Gtk.Window):
         self._scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
         self.set_child(self._scroll)
         self._busy = False
-        self._job = None
         self._timer = 0
         keys = Gtk.EventControllerKey()
         keys.connect("key-pressed", lambda _c, kv, *_a: kv == Gdk.KEY_Escape and not self._busy
@@ -210,49 +209,50 @@ class _Base(Gtk.Window):
             after_here(0)
 
     def _in_terminal(self, title, cmds, on_done):
+        """Hand the commands to the user's terminal, which handles everything
+        from there. This waits until what was uninstalled is gone."""
         self._print(_("Opened in your terminal:"))
-        for line in terminal.shown(cmds).splitlines():
-            self._print("$ " + line)
+        for text in terminal.shown(cmds).splitlines():
+            self._print("$ " + text)
         try:
-            self._job = terminal.start(title, cmds)
+            terminal.start(cmds)
         except terminal.NoTerminal:
-            on_done(False, _("No terminal app was found. Run the command yourself in a terminal, then check "
-                             "here again."), copy=terminal.shown(cmds))
+            on_done(False, _("No terminal app was found. Run the command yourself in a terminal."),
+                    copy=terminal.shown(cmds))
             return
         except OSError as e:
             on_done(False, _("The terminal couldn't be started: {why}.").format(why=e.strerror or e))
             return
-        set_text(self._wait_label, _("Waiting for the terminal to finish. Follow what it asks there."))
+        set_text(self._wait_label, _("Follow what your terminal asks. This continues once it's uninstalled; "
+                                     "the terminal stays open so you can read what it printed."))
+        self._wait_for_gone(on_done)
+
+    def _wait_for_gone(self, on_done):
+        checking = [False]
+
+        def finish(gone):
+            self._stop_timer()
+            self._set_buttons()
+            on_done(True if gone else None, "")
+
         stop = button(_("Stop waiting"), style="tonal", small=True,
-                      tooltip=_("For when you closed the terminal. App Entries then checks whether it was "
-                                "uninstalled."), cb=lambda *_a: finish(None))
+                      tooltip=_("For when it stopped or you closed the terminal. App Entries checks once more "
+                                "whether it was uninstalled."),
+                      cb=lambda *_a: run_bg(self._check_gone, lambda g: finish(g is True)))
         self._set_buttons(("start", stop))
 
-        def finish(code):
-            self._stop_timer()
-            job, self._job = self._job, None
-            if job is not None:
-                job.clean()
-            self._set_buttons()
-            on_done(code == 0 if code is not None else None,
-                    "" if code in (0, None) else _("It stopped with exit code {code}.").format(code=code))
+        def checked(gone):
+            checking[0] = False
+            if gone is True and self._timer:
+                finish(True)
 
         def poll():
-            job = self._job
-            if job is None:
-                return False
-            code = job.code()
-            if code is not None:
-                self._timer = 0
-                finish(code)
-                return False
-            if job.closed_early():
-                self._timer = 0
-                finish(1)
-                return False
+            if not checking[0]:
+                checking[0] = True
+                run_bg(self._check_gone, checked)
             return True
 
-        self._timer = GLib.timeout_add(700, poll)
+        self._timer = GLib.timeout_add(1500, poll)
 
     def _in_steam(self, cmds, on_done):
         for argv in cmds:
@@ -264,23 +264,7 @@ class _Base(Gtk.Window):
                 on_done(False, _("Steam couldn't be opened: {why}.").format(why=e.strerror or e))
                 return
         set_text(self._wait_label, _("Confirm in Steam's window. This continues once Steam has removed it."))
-        stop = button(_("Stop waiting"), style="tonal", small=True, cb=lambda *_a: done(None))
-        self._set_buttons(("start", stop))
-
-        def done(_v):
-            self._stop_timer()
-            self._set_buttons()
-            on_done(None, "")
-
-        def poll():
-            if self._check_gone():
-                self._timer = 0
-                self._set_buttons()
-                on_done(True, "")
-                return False
-            return True
-
-        self._timer = GLib.timeout_add(2000, poll)
+        self._wait_for_gone(on_done)
 
     def _check_gone(self):
         return False
@@ -793,6 +777,12 @@ class BatchUninstallWindow(_Base):
             self._set_buttons(("end", button(_("Close"), style="filled", small=True, cb=lambda *_a: self.close())))
 
         self._run(_("uninstalling {n} apps").format(n=len(self.batch.plans)), here, term, [], ran)
+
+    def _check_gone(self):
+        try:
+            return all(p.gone() for p in self.batch.plans)
+        except Exception:  # noqa: BLE001 - keep waiting
+            return False
 
     def _failed(self, message, copy=""):
         self._busy = False

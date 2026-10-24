@@ -911,7 +911,7 @@ class MainWindow(Gtk.ApplicationWindow):
             self.snackbar.show(_("Opened Steam to install it again"))
             return
         try:
-            terminal.start(_("installing again: {what}").format(what=e.message), e.reinstall)
+            terminal.start(e.reinstall)
         except terminal.NoTerminal:
             error_dialog(self, _("No terminal app was found"),
                          _("Run this in a terminal to install it again:"), terminal.shown(e.reinstall))

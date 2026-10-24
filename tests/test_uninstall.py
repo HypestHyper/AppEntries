@@ -210,27 +210,17 @@ def test_terminal_choice_and_script(tmp_path):
     with pytest.raises(terminal.NoTerminal):
         terminal.find({}, which_only())
 
-    result = str(tmp_path / "r")
-    text = terminal.script("test", [["#", "a note"], ["true"], ["sh", "-c", "exit 3"], ["touch", str(tmp_path / "no")]],
-                           result)
-    out = subprocess.run(["sh", "-c", text], input="\n", capture_output=True, text=True)
-    assert open(result).read().strip() == "3" and "a note" in out.stdout
+    cmds = [["#", "a note"], ["true"], ["sh", "-c", "exit 3"], ["touch", str(tmp_path / "no")]]
+    assert terminal.line(cmds) == "true && sh -c 'exit 3' && touch " + str(tmp_path / "no")
+    subprocess.run(["sh", "-c", terminal.line(cmds)])
     assert not (tmp_path / "no").exists()     # stops at the first that fails
 
 
-def test_terminal_start_writes_a_script_and_the_job_reports(tmp_path):
+def test_terminal_gets_the_command_and_keeps_a_shell_open():
     started = []
-    env = {"XDG_RUNTIME_DIR": str(tmp_path), "TERMINAL": "kitty"}
-
-    def popen(argv, **_kw):
-        started.append(argv)
-        subprocess.run(argv[1:], input="\n", capture_output=True, text=True)
-        return subprocess.Popen(["true"])
-
-    job = terminal.start("x", [["true"]], env, which_only("kitty"), popen)
-    assert started[0][:2] == ["kitty", "/bin/sh"] and job.code() == 0
-    job.clean()
-    assert not os.path.exists(job.script)
+    terminal.start([["sudo", "pacman", "-R", "gimp"]], {"TERMINAL": "kitty"}, which_only("kitty"),
+                   lambda argv, **_kw: started.append(argv))
+    assert started == [["kitty", "/bin/sh", "-c", 'sudo pacman -R gimp; exec "${SHELL:-/bin/sh}"']]
 
 
 # ---------------------------------------------------------------------------
