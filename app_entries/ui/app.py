@@ -74,7 +74,6 @@ class MainWindow(Gtk.ApplicationWindow):
         self.set_default_size(settings.get("window-width"), settings.get("window-height"))
         if settings.get("maximized"):
             self.maximize()
-        self.set_icon_name(APP_ID)
 
         self._build_header()
         self._build_body()
@@ -633,8 +632,11 @@ class MainWindow(Gtk.ApplicationWindow):
                     f.write(app_icon.render(seed, marker=False))
                 os.replace(path + ".tmp", path)
             self.logo.set_from_paintable(Gtk.IconPaintable.new_for_file(Gio.File.new_for_path(path), 40, 2))
-        except (OSError, GLib.Error):
-            self.logo.set_from_icon_name(APP_ID)
+            timing.mark("  logo drawn from %s" % path)
+        except Exception as e:  # noqa: BLE001 - only the logo
+            # Not from the icon theme even then: that would hold up the window.
+            self.logo.clear()
+            timing.mark("  logo couldn't be drawn: %r" % e)
 
     def after_first_frame(self):
         """Called once the window has drawn for the first time."""
