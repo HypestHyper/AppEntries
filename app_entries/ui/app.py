@@ -9,7 +9,7 @@ from gi.repository import Gdk, Gio, GLib, Gtk
 from .. import (APP_ID, APP_NAME, appimages, autostart, desktop_entries, editing, health, history, icon_lookup,
                launcher_refresh, launchers, overrides, packages, profile, symbols, terminal, timing, trash, uninstall, webapps)
 from ..model import AppItem, AppStore
-from .app_card import AppCard
+from .app_card import AppCard, forget_icons
 from .dialogs import Dialog, choose_file, error_dialog, run_bg
 from .style import SIZES
 from .app_card import label_for_source
@@ -704,6 +704,7 @@ class MainWindow(Gtk.ApplicationWindow):
                 GLib.idle_add(lambda: (self.grid.grab_focus(), False)[1])
 
         icon_lookup.clear_cache()
+        forget_icons()
         # Which package each app with a missing program came from is only for
         # the Issues page, and asks the package manager once per app, so it's
         # looked up after the list is shown.

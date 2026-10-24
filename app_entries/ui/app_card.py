@@ -1,8 +1,10 @@
 """The card shown for each application."""
 import os
+import queue
+import threading
 from gettext import gettext as _
 
-from gi.repository import Gdk, Gio, Gtk, Pango
+from gi.repository import Gdk, Gio, GLib, Gtk, Pango
 
 from .. import APP_ID, desktop_entries, icon_lookup, packages, uninstall
 from .widgets import Toggle, WrapBox, glyph, hbox, icon, label, option_button, set_text, vbox
@@ -34,6 +36,54 @@ def gicon_for(name: str) -> Gio.Icon:
     if path:
         return Gio.FileIcon.new(Gio.File.new_for_path(path))
     return Gio.ThemedIcon.new(FALLBACK_ICON)
+
+
+# Icons for the list, looked up off the main thread. The first lookup waits
+# until the whole icon theme has loaded (about 0.4 s with Papirus), and ones
+# the theme doesn't have are searched for in the icon folders; done here, the
+# list appears at once and each icon fills in when it's found. GTK's icon
+# theme allows lookups from other threads.
+_found = {}       # icon name -> Gio.Icon
+_waiting = {}     # icon name -> callbacks
+_todo = queue.Queue()
+_worker = []
+
+
+def _look_up():
+    while True:
+        name = _todo.get()
+        try:
+            found = gicon_for(name)
+        except Exception:  # noqa: BLE001 - a missing icon mustn't stop the rest
+            found = Gio.ThemedIcon.new(FALLBACK_ICON)
+        GLib.idle_add(_deliver, name, found)
+
+
+def _deliver(name, found):
+    _found[name] = found
+    for cb in _waiting.pop(name, []):
+        cb(found)
+    return False
+
+
+def gicon_later(name: str, apply) -> None:
+    """apply(gicon) now if the icon is known, else once it's been found."""
+    name = name or ""
+    if name in _found:
+        apply(_found[name])
+        return
+    _waiting.setdefault(name, []).append(apply)
+    if len(_waiting[name]) == 1:
+        _todo.put(name)
+        if not _worker:
+            t = threading.Thread(target=_look_up, daemon=True, name="icon lookups")
+            _worker.append(t)
+            t.start()
+
+
+def forget_icons() -> None:
+    """Look icons up again next time (after installs and removals)."""
+    _found.clear()
 
 
 class Badge(Gtk.Box):
@@ -223,8 +273,13 @@ class AppCard(Gtk.Box):
         set_text(self.secondary, second or _("No description"))
         set_text(self.tertiary, a.id)
         if a.icon != self._icon_name:
-            self._icon_name = a.icon
-            self.image.set_from_gicon(gicon_for(a.icon))
+            self._icon_name = name = a.icon
+            self.image.clear()
+
+            def show(gicon, name=name):
+                if self._icon_name == name:
+                    self.image.set_from_gicon(gicon)
+            gicon_later(name, show)
 
         self.hidden_badge.set_visible(a.hidden)
         if a.hidden:
