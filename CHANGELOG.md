@@ -3,7 +3,7 @@
 ## Unreleased
 
 - When a tab is empty because of the filters (search, source, Hidden or Not in menus), it says how many apps they leave out and offers to lift each one, or all at once. While searching, it counts only apps that match the search.
-- The number of apps at the top is the total, whatever the filters.
+- The counts on the tabs and at the top are totals: the search, the source and the Hidden and Not in menus switches don't change them.
 - Starts about twice as fast, most of all with large icon themes like Papirus: nothing waits for the icon theme before the window appears, and pages, windows and network code load when they're first used.
 - Uninstall apps, whatever installed them: Flatpak, Snap, AppImage, Steam, Distrobox, or the system's package manager (pacman, apt, dnf, zypper, rpm-ostree, xbps, apk, eopkg, Portage, Nix). It replaces Remove AppImage.
 - Before anything runs, it shows what goes, the packages and apps that need it or go with it, apps that stay but stop working, and whether it's a default app or starts at login, along with the exact command. Package managers are asked first with their own dry run.

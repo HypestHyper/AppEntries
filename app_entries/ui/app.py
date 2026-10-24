@@ -552,17 +552,13 @@ class MainWindow(Gtk.ApplicationWindow):
     # ---------------------------------------------------------------- state
 
     def _update_counts(self):
-        source = self.settings.get("source")
-        items = [i for i in self.apps.items() if self._visible_base(i.app) and self._matches_query(i)
-                 and (source == "any" or i.app.source == source)]
-        listed = items if self.settings.get("show-hidden") else [i for i in items if not i.app.hidden]
-        self.tabs.set_count("all", len(listed))
-        self.tabs.set_count("hidden", sum(1 for i in items if i.app.hidden))
-        self.tabs.set_count("customised", sum(1 for i in listed if i.app.customised))
-        self.tabs.set_count("mine", sum(1 for i in listed if i.app.created))
-        # Every app, whatever the filters: it's the total.
+        # Each tab's total, whatever the search, source and switches.
         total = self.apps.items()
         hidden = sum(1 for i in total if i.app.hidden)
+        self.tabs.set_count("all", len(total))
+        self.tabs.set_count("hidden", hidden)
+        self.tabs.set_count("customised", sum(1 for i in total if i.app.customised))
+        self.tabs.set_count("mine", sum(1 for i in total if i.app.created))
         if self._loaded:
             text = _("{n} apps · {h} hidden").format(n=len(total), h=hidden)
             self.chip.set(text, "ok")
