@@ -12,8 +12,9 @@ menus, and it appears in Issues.
 Agreed direction (must work with any desktop and launcher):
 
 - **Hiding:** `TryExec` isn't enough on its own. GNOME, KDE and Xfce honour
-  it, but Quickshell (Noctalia and other Quickshell shells) only reads
-  `NoDisplay` and `Hidden`, and other launchers vary. So the copy itself gets
+  it, but Noctalia 5 (C++, src/system/desktop_entry.cpp) and Quickshell
+  (older Noctalia, other Quickshell shells) only read `NoDisplay`, `Hidden`
+  and OnlyShowIn/NotShowIn, and other launchers vary. So the copy itself gets
   `NoDisplay=true`, which every launcher honours, like the Hide switch does.
 - **A setting, so it isn't done by itself:** "Hide edited apps when they're
   uninstalled", in Settings, explained. When on, a scan that finds a copy
