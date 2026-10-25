@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Launchers can run commands: write them as in a terminal (paru -Syu && flatpak update, pipes, loops, whole scripts) and pick the shell (sh, bash, zsh or fish). Add more sets of commands to open each in its own terminal. They're kept in a small script file, so they work in any launcher.
+- A program launcher has one field for the program and what goes after it; the separate Arguments field is gone. Shell syntax like && there is caught, with a button to run it as commands instead.
+- The launcher window is larger.
 - When a tab is empty because of the filters (search, source, Hidden or Not in menus), it says how many apps they leave out and offers to lift each one, or all at once. While searching, it counts only apps that match the search.
 - The counts on the tabs and at the top are totals: the search, the source and the Hidden and Not in menus switches don't change them.
 - Starts about twice as fast, most of all with large icon themes like Papirus: nothing waits for the icon theme before the window appears, and pages, windows and network code load when they're first used.

@@ -44,7 +44,7 @@ class LauncherWindow(Gtk.Window):
         super().__init__(transient_for=parent, modal=True,
                          title=_("Edit launcher") if editing_existing else _("New launcher"))
         self.add_css_class("prefs")
-        self.set_default_size(640, 760)
+        self.set_default_size(760, 860)
         self.did = did
         self._on_save = on_save
         self._on_save_raw = on_save_raw
@@ -55,6 +55,11 @@ class LauncherWindow(Gtk.Window):
         self.spec = spec or launchers.Spec()
         if not text:
             self.spec.icon = symbols.IconChoice("terminal", "outlined", "rounded", "#2e9e7e")
+        if self.spec.kind == "program" and self.spec.args.strip():
+            # One field now: older launchers' arguments join the program.
+            self.spec.program = (self.spec.program.strip() + " " + self.spec.args.strip()).strip()
+            self.spec.args = ""
+        self._frames = []   # (frame, text view, header label, remove button) for each set of commands
 
         hb = Gtk.HeaderBar()
         hb.set_show_title_buttons(False)
@@ -115,22 +120,53 @@ class LauncherWindow(Gtk.Window):
         # What it runs
         page.append(section(_("What it runs")))
         c = card()
-        self.program = _entry(s.program, _("A script or program file, or a command like htop"), mono=True)
+        self.kind = Group([("program", _("A program or script"), "deployed_code"),
+                           ("commands", _("Commands"), "terminal")], s.kind, lambda _v: self._kind_changed())
+        c.append(_explained(_("Kind"), _("A program or script file runs as it is. Commands are written as in a "
+                                         "terminal and run by a shell: several in a row (paru -Syu && flatpak "
+                                         "update), pipes, loops, a whole script."), self.kind))
+
+        # A program or script
+        self.program = _entry(s.program, _("htop --tree, or ~/bin/backup.sh --quick"), mono=True)
         choose = button(_("Choose…"), "folder_open", "tonal", self._choose_program, small=True)
         choose.set_valign(Gtk.Align.CENTER)
-        c.append(_explained(_("Script or program"), _("The file to run when you open the launcher. Any script "
-                                                      "works (shell, Python, …) as long as it's executable."),
-                            hbox(10, self.program, choose)))
+        self.program_box = vbox(10)
+        self.program_box.append(_explained(
+            _("Program or script"), _("The file to run, or a command on your PATH, with anything that goes after "
+                                      "it. Quote paths or words with spaces. Scripts need to be executable."),
+            hbox(10, self.program, choose)))
         self.status = label("", ("small",), wrap=True, chars=60)
-        c.append(self.status)
+        self.as_commands = button(_("Run it as commands"), "terminal", "tonal", small=True,
+                                  cb=lambda *_a: self._to_commands())
+        self.as_commands.set_halign(Gtk.Align.START)
+        self.program_box.append(self.status)
+        self.program_box.append(self.as_commands)
         self.exec_box, self.make_exec = _switch(
             _("Make it executable when saving"),
             _("The file isn't marked as runnable yet. With this on, App Entries marks it executable (like chmod +x) "
               "when you press Create. That step isn't undone by Undo."), True, lambda _v: self._changed())
-        c.append(self.exec_box)
-        self.args = _entry(s.args, _("For example: --verbose \"My Folder\""), mono=True)
-        c.append(_explained(_("Arguments"), _("Added after the program, written as in a terminal. Quote anything "
-                                              "with spaces."), self.args))
+        self.program_box.append(self.exec_box)
+        c.append(self.program_box)
+
+        # Commands
+        shells = launchers.available_shells()
+        if s.shell not in shells:
+            shells.append(s.shell)
+        self.shell = Group([(n, n) for n in shells], s.shell, lambda _v: self._changed())
+        self.frames = vbox(10)
+        add = button(_("Add commands in another terminal"), "add", "tonal", small=True,
+                     cb=lambda *_a: (self._add_frame(""), self._changed()))
+        add.set_halign(Gtk.Align.START)
+        self.commands_box = vbox(10, _explained(
+            _("Shell"), _("What runs the commands. sh is on every system; the others are listed when they're "
+                          "installed."), self.shell),
+            label(_("Commands"), ("body", "option-title")), self.frames, add,
+            label(_("Written as in a terminal, one or more lines. Each set opens in its own terminal when there's "
+                    "more than one. They're kept in a small script file the launcher runs, so they work in any "
+                    "launcher."), ("small", "dim"), wrap=True, chars=60))
+        for text in (s.commands or [""]):
+            self._add_frame(text)
+        c.append(self.commands_box)
         self.workdir = _entry(s.workdir, _("Your home folder"), mono=True)
         pick_dir = button(_("Choose…"), "folder_open", "tonal", self._choose_folder, small=True)
         pick_dir.set_valign(Gtk.Align.CENTER)
@@ -138,7 +174,8 @@ class LauncherWindow(Gtk.Window):
                             hbox(10, self.workdir, pick_dir)))
         box, self.files = _switch(_("Pass files opened with it"),
                                   _("Files you open with the launcher (from a file manager's Open With, or by "
-                                    "dropping them on it) are added as arguments."), s.accepts_files,
+                                    "dropping them on it) are added as arguments. Commands get them as \"$@\" "
+                                    "($argv in fish)."), s.accepts_files,
                                   lambda _v: self._changed())
         c.append(box)
         page.append(c)
@@ -159,6 +196,9 @@ class LauncherWindow(Gtk.Window):
             _("Waits for you to press Enter before closing, and shows whether it succeeded, so you can read the "
               "output."), s.keep_open, lambda _v: self._changed())
         c.append(self.keep_box)
+        self.several_note = label(_("With commands in more than one terminal, each set opens in its own "
+                                    "terminal."), ("small", "dim"), wrap=True, chars=60)
+        c.append(self.several_note)
         c.append(box)
         page.append(c)
 
@@ -227,11 +267,61 @@ class LauncherWindow(Gtk.Window):
                             "~/.local/share/icons. You can undo right after.").format(path=where),
                           ("small", "faint"), wrap=True, chars=60))
 
-        for e in (self.program, self.args, self.workdir, self.name, self.comment, self.keywords):
+        for e in (self.program, self.workdir, self.name, self.comment, self.keywords):
             e.connect("changed", lambda *_: self._changed())
         scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
         scroll.set_child(page)
         return scroll
+
+    def _add_frame(self, text):
+        view = Gtk.TextView(monospace=True, wrap_mode=Gtk.WrapMode.WORD_CHAR, top_margin=10, bottom_margin=10,
+                            left_margin=12, right_margin=12, accepts_tab=False)
+        view.add_css_class("textarea")
+        view.get_buffer().set_text(text)
+        view.get_buffer().connect("changed", lambda *_a: self._changed())
+        view.update_property([Gtk.AccessibleProperty.LABEL], [_("Commands")])
+        scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, min_content_height=150,
+                                    max_content_height=420, propagate_natural_height=True)
+        scroll.set_child(view)
+        head = label("", ("small", "option-title"))
+        head.set_hexpand(True)
+        remove = button(icon_name="close", style="text", small=True, tooltip=_("Remove these commands"))
+        frame = vbox(6, hbox(8, head, remove), scroll)
+        entry = (frame, view, head, remove)
+        remove.connect("clicked", lambda *_a: self._remove_frame(entry))
+        self._frames.append(entry)
+        self.frames.append(frame)
+        view.grab_focus()
+
+    def _remove_frame(self, entry):
+        if len(self._frames) > 1:
+            self._frames.remove(entry)
+            self.frames.remove(entry[0])
+            self._changed()
+
+    def _commands(self):
+        out = []
+        for _f, view, _h, _r in self._frames:
+            buf = view.get_buffer()
+            out.append(buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False))
+        return out
+
+    def _kind_changed(self):
+        # Commands like paru -Syu need a terminal to ask for a password and
+        # show what they do, so a new launcher starts with one.
+        if self.kind.active() == "commands" and self.did is None and not self.terminal.get_active():
+            self.terminal.set_active(True)
+            self.keep_open.set_active(True)
+        self._changed()
+
+    def _to_commands(self):
+        """Move what's in the program field into the commands."""
+        text = self.program.get_text().strip()
+        first = self._frames[0][1].get_buffer()
+        if not first.get_text(first.get_start_iter(), first.get_end_iter(), False).strip():
+            first.set_text(text)
+        self.kind.set_active("commands")
+        self._kind_changed()
 
     def _build_raw(self):
         page = vbox(10)
@@ -262,11 +352,13 @@ class LauncherWindow(Gtk.Window):
         return launchers.Spec(
             name=self.name.get_text(),
             comment=self.comment.get_text(),
+            kind=self.kind.active() or "program",
             program=self.program.get_text(),
-            args=self.args.get_text(),
+            commands=self._commands(),
+            shell=self.shell.active() or "sh",
             workdir=self.workdir.get_text(),
-            terminal=self.terminal.get_active(),
-            keep_open=self.terminal.get_active() and self.keep_open.get_active(),
+            terminal=self.terminal.get_active() or (self.kind.active() == "commands" and len(self._frames) > 1),
+            keep_open=(self.terminal.get_active() or len(self._frames) > 1) and self.keep_open.get_active(),
             accepts_files=self.files.get_active(),
             categories=[k for k, b in self.cat_buttons.items() if b.get_active()],
             keywords=[k.strip() for k in self.keywords.get_text().split(",") if k.strip()],
@@ -291,6 +383,17 @@ class LauncherWindow(Gtk.Window):
             self.save.set_sensitive(not errors)
             return
         spec = self.form_spec()
+        is_commands = spec.kind == "commands"
+        self.program_box.set_visible(not is_commands)
+        self.commands_box.set_visible(is_commands)
+        several = len(self._frames) > 1
+        for n, (_f, _v, head, remove) in enumerate(self._frames, 1):
+            set_text(head, _("Terminal {n}").format(n=n) if several else "")
+            head.set_visible(several)
+            remove.set_visible(several)
+        shell_syntax = not is_commands and launchers.uses_shell_syntax(spec.program) and \
+            not os.path.exists(os.path.expanduser(spec.program.strip()))
+        self.as_commands.set_visible(shell_syntax)
         status = launchers.program_status(spec.program)
         msg = {
             "ok": _("Found, and executable."),
@@ -303,9 +406,20 @@ class LauncherWindow(Gtk.Window):
             self.status.remove_css_class(cls)
         self.status.add_css_class({"ok": "accent", "command": "accent", "not-executable": "warn-text"}
                                   .get(status, "error-text"))
+        if shell_syntax:
+            set_text(self.status, _("This is more than one command, or uses shell syntax like && or |, which only "
+                                    "a shell understands. Run as a program, it would all go to the first one as "
+                                    "arguments."))
+            for cls in ("accent", "warn-text"):
+                self.status.remove_css_class(cls)
+            self.status.add_css_class("error-text")
+            msg = "x"
         self.status.set_visible(bool(msg))
-        self.exec_box.set_visible(status == "not-executable")
-        self.keep_box.set_sensitive(self.terminal.get_active())
+        self.exec_box.set_visible(status == "not-executable" and not is_commands)
+        several_terminals = is_commands and len([c for c in spec.commands if c.strip()]) > 1
+        self.several_note.set_visible(several_terminals)
+        self.terminal.set_sensitive(not several_terminals)
+        self.keep_box.set_sensitive(self.terminal.get_active() or several_terminals)
         is_symbol = spec.icon_kind == "symbol"
         self.symbol_row.set_visible(is_symbol)
         self.theme_row.set_visible(not is_symbol)
@@ -319,7 +433,9 @@ class LauncherWindow(Gtk.Window):
         else:
             self.prev_icon.set_from_gicon(gicon_for(spec.icon_value or "application-x-executable"))
         set_text(self.prev_name, spec.name.strip() or _("Launcher name"))
-        set_text(self.prev_comment, spec.comment.strip() or (os.path.basename(spec.program.strip()) or " "))
+        set_text(self.prev_comment, spec.comment.strip() or (
+            (spec.commands[0].strip().splitlines() or [" "])[0] if is_commands
+            else os.path.basename(spec.program.strip()) or " "))
 
         problems = launchers.problems(spec)
         try:

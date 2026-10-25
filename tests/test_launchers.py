@@ -118,7 +118,7 @@ def test_editing_keeps_the_id_and_switching_to_a_theme_icon_drops_ours(xdg):
 
 def test_problems(xdg):
     assert ln.problems(ln.Spec()) == ["Give the launcher a name.", "Choose the script or program it runs."]
-    assert ln.problems(ln.Spec(name="x", program="y", args="'open")) == ["The arguments have an unclosed quote."]
+    assert ln.problems(ln.Spec(name="x", program="y", args="'open")) == ["There's a quote without its closing quote."]
     assert ln.problems(ln.Spec(name="x", program="y", workdir=str(xdg.tmp / "nope"))) == \
         ["The working folder doesn't exist."]
     with pytest.raises(ValueError):
@@ -186,3 +186,69 @@ def test_every_icon_option_round_trips(xdg):
     spec = ln.Spec(name="X", program="sh", icon=ic)
     back = ln.read_spec(ln.build_entry(spec, "app-entries-x.desktop", xdg.env))
     assert back.icon == ic
+
+
+def apply(changes):
+    from app_entries import overrides
+    overrides.apply_all(changes)
+
+
+def test_commands_run_through_their_shell(xdg, tmp_path):
+    out = tmp_path / "out"
+    spec = ln.Spec(name="Update all", kind="commands", shell="sh",
+                   commands=["echo one > %s && echo two >> %s\nfor x in a b; do echo $x >> %s; done" % (out, out, out)])
+    assert ln.problems(spec) == []
+    did, changes = ln.plan_save(spec, env=xdg.env)
+    apply(changes)
+    text = (xdg.user / did).read_text()
+    exec_line = de.unescape(de.DesktopFile(text).group_dict()["Exec"])
+    argv = ln.parse_exec(exec_line)
+    assert argv[0] == "sh" and argv[1].endswith(".sh") and "app-entries/scripts" in argv[1]
+    subprocess.run(argv, check=True)
+    assert out.read_text().split() == ["one", "two", "a", "b"]
+    again = ln.read_spec(text)
+    assert again.kind == "commands" and again.commands == spec.commands and again.shell == "sh"
+
+
+def test_several_commands_each_open_in_a_terminal(xdg, tmp_path):
+    out = tmp_path / "out"
+    spec = ln.Spec(name="Two", kind="commands", shell="sh", terminal=True,
+                   commands=["echo first >> %s" % out, "echo second >> %s" % out])
+    did, changes = ln.plan_save(spec, env=xdg.env)
+    apply(changes)
+    d = de.DesktopFile((xdg.user / did).read_text()).group_dict()
+    assert d["Terminal"] == "false"   # the starter opens the terminals itself
+    argv = ln.parse_exec(de.unescape(d["Exec"]))
+    assert argv[0] == "sh" and argv[1].endswith("-start.sh")
+    fake = tmp_path / "fake-term"
+    fake.write_text('#!/bin/sh\n[ "$1" = "-e" ] && shift\nexec "$@"\n')
+    os.chmod(fake, 0o755)
+    subprocess.run(argv, check=True, env=dict(os.environ, TERMINAL=str(fake)), timeout=20)
+    assert sorted(out.read_text().split()) == ["first", "second"]
+    spec2 = ln.read_spec((xdg.user / did).read_text())
+    assert spec2.commands == spec.commands and spec2.terminal
+
+    # Back to one set: the second file and the starter go.
+    spec2.commands = spec2.commands[:1]
+    _did, changes = ln.plan_save(spec2, did, env=xdg.env)
+    gone = [c.path for c in changes if c.after is None]
+    assert any(p.endswith("-start.sh") for p in gone) and any(p.endswith("-2.sh") for p in gone)
+
+
+def test_deleting_a_commands_launcher_takes_its_files(xdg):
+    spec = ln.Spec(name="Gone", kind="commands", commands=["true", "true"])
+    did, changes = ln.plan_save(spec, env=xdg.env)
+    apply(changes)
+    apps = {a.id: a for a in de.scan(xdg.env)}
+    paths = [c.path for c in ln.plan_delete(apps[did], xdg.env)]
+    assert len([p for p in paths if "/scripts/" in p]) == 3
+
+
+def test_shell_syntax_in_a_program_line_is_caught():
+    assert ln.uses_shell_syntax("paru -Syu && flatpak update")
+    assert ln.uses_shell_syntax("ls | less")
+    assert ln.uses_shell_syntax("echo $(date)")
+    assert not ln.uses_shell_syntax("htop --tree")
+    assert not ln.uses_shell_syntax("notify-send 'a && b'")
+    p = ln.problems(ln.Spec(name="x", program="paru -Syu && flatpak update"))
+    assert p and "Choose Commands" in p[0]

@@ -58,12 +58,23 @@ def icon_from(d) -> symbols.IconChoice:
     return ic
 
 
+# Shells commands can be written for: (name, how files opened with the
+# launcher reach the commands).
+SHELLS = [("sh", '"$@"'), ("bash", '"$@"'), ("zsh", '"$@"'), ("fish", "$argv")]
+
+
 @dataclass
 class Spec:
     name: str = ""
     comment: str = ""
-    program: str = ""            # the script or program file, or a command name
-    args: str = ""               # arguments, written as in a shell
+    kind: str = "program"        # program (a file or command) or commands (run by a shell)
+    program: str = ""            # the script or program file, or a command, with its arguments
+    args: str = ""               # more arguments, written as in a shell (web apps; older launchers)
+    # With kind commands: what to run, as typed in a terminal. Each item opens
+    # in its own terminal when there's more than one.
+    commands: List[str] = field(default_factory=list)
+    shell: str = "sh"            # with kind commands: the shell that runs them
+    scripts: List[str] = field(default_factory=list)   # the files they're kept in (set when saving)
     workdir: str = ""            # working folder, empty for the user's home
     terminal: bool = False
     keep_open: bool = False      # with terminal: wait for Enter when it finishes
@@ -110,8 +121,113 @@ def quote_arg(arg: str) -> str:
     return '"%s"' % inner
 
 
-def build_exec(spec: Spec) -> str:
+def scripts_dir(env=None) -> str:
+    return os.path.join(de.user_data_dir(env), "app-entries", "scripts")
+
+
+def script_paths(did: str, shell: str = "sh", count: int = 1, env=None) -> List[str]:
+    """Where a commands launcher keeps its commands, one file for each."""
+    stem = os.path.join(scripts_dir(env), did[:-len(".desktop")])
+    ext = ".fish" if shell == "fish" else ".sh"
+    return [stem + ext] + ["%s-%d%s" % (stem, n, ext) for n in range(2, count + 1)]
+
+
+def starter_path(did: str, env=None) -> str:
+    """The script that opens each set of commands in its own terminal."""
+    return os.path.join(scripts_dir(env), did[:-len(".desktop")] + "-start.sh")
+
+
+SCRIPT_NOTE = "# Commands for the %s launcher, made with App Entries. Change them there."
+
+
+def script_text(spec: Spec, n: int = 0) -> str:
+    return "#!/usr/bin/env %s\n%s\n%s\n" % (spec.shell, SCRIPT_NOTE % spec.name.strip(),
+                                              spec.commands[n].rstrip("\n"))
+
+
+def commands_of(text: str) -> str:
+    """The commands in a script file written by script_text."""
+    lines = text.split("\n")
+    if lines and lines[0].startswith("#!"):
+        lines = lines[1:]
+    if lines and lines[0].startswith("# Commands for the ") and "made with App Entries" in lines[0]:
+        lines = lines[1:]
+    return "\n".join(lines).rstrip("\n")
+
+
+_KEEP_OPEN = '; status=$?; printf "\\n[Finished with exit code %s. Press Enter to close.]" "$status"; read _'
+
+
+def _run_argv(spec: Spec, script: str) -> List[str]:
+    """How one set of commands is run: by its shell, waiting for Enter at the
+    end when the terminal is kept open."""
+    argv = [spec.shell, script]
+    if spec.terminal and spec.keep_open:
+        return ["sh", "-c", shlex.join(argv) + ' "$@"' + _KEEP_OPEN, "sh"]
+    return argv
+
+
+def starter_text(spec: Spec) -> str:
+    """A script that opens each set of commands in its own terminal. Desktop
+    entries open at most one terminal, so with several sets the launcher runs
+    this. The terminal is found when it runs ($TERMINAL first, then
+    xdg-terminal-exec, then known ones), so changing terminals doesn't break it."""
+    from .terminal import TERMINALS
+    lines = ["#!/bin/sh",
+             "# Opens each set of commands of the %s launcher in its own terminal. Made with App Entries; "
+             "change it there." % spec.name.strip(),
+             "open_terminal() {",
+             '  if [ -n "$TERMINAL" ] && command -v "${TERMINAL%% *}" >/dev/null 2>&1; then',
+             '    case "$(basename "${TERMINAL%% *}")" in']
+    for name, prefix in TERMINALS.items():
+        lines.append('      %s) $TERMINAL %s"$@" & return ;;' % (name, "".join(shlex.quote(p) + " " for p in prefix)))
+    lines += ['      *) $TERMINAL -e "$@" & return ;;', "    esac", "  fi"]
+    for name, prefix in TERMINALS.items():
+        lines.append('  if command -v %s >/dev/null 2>&1; then %s %s"$@" & return; fi'
+                     % (name, name, "".join(shlex.quote(p) + " " for p in prefix)))
+    lines += ['  echo "No terminal app was found." >&2', "  return 1", "}"]
+    for script in spec.scripts:
+        lines.append("open_terminal %s \"$@\"" % shlex.join(_run_argv(spec, script)))
+    lines += ["wait", ""]
+    return "\n".join(lines)
+
+
+def available_shells(which=shutil.which) -> List[str]:
+    """The shells installed here; sh is always there."""
+    return [name for name, _f in SHELLS if name == "sh" or which(name)]
+
+
+# Shell syntax that only a shell understands: run as a program, it would be
+# passed to the program as arguments (paru gets "&&" as a package name).
+_SHELL_WORDS = re.compile(r"(^|\s)(&&|\|\||;|\||&|>>?|<|2>)(\s|$)|\$\(|`")
+
+
+def uses_shell_syntax(command: str) -> bool:
+    """Whether a program line holds commands only a shell can run, outside quotes."""
+    unquoted = re.sub(r"'[^']*'|\"(?:\\.|[^\"\\])*\"", "''", command)
+    return bool(_SHELL_WORDS.search(unquoted))
+
+
+def several(spec: Spec) -> bool:
+    """Commands in more than one terminal."""
+    return spec.kind == "commands" and len([c for c in spec.commands if c.strip()]) > 1
+
+
+def build_exec(spec: Spec, did: str = "") -> str:
     """The Exec value (before string escaping) for a spec."""
+    if spec.kind == "commands":
+        if several(spec):
+            # Next to the commands' files (so it follows the same folders).
+            first = spec.scripts[0] if spec.scripts else os.path.join(scripts_dir(), "…")
+            stem = os.path.splitext(os.path.basename(first))[0]
+            argv = ["sh", os.path.join(os.path.dirname(first), stem + "-start.sh")]
+        else:
+            script = spec.scripts[0] if spec.scripts else os.path.join(scripts_dir(), "…")
+            argv = _run_argv(spec, script)
+        line = " ".join(quote_arg(a) for a in argv)
+        if spec.accepts_files:
+            line += " %F"
+        return line
     program, args = split_program(spec.program, spec.args)
     try:
         extra = shlex.split(args)
@@ -186,12 +302,23 @@ def problems(spec: Spec) -> List[str]:
     out = []
     if not spec.name.strip():
         out.append("Give the launcher a name.")
-    if not spec.program.strip():
-        out.append("Choose the script or program it runs.")
-    try:
-        shlex.split(spec.args)
-    except ValueError:
-        out.append("The arguments have an unclosed quote.")
+    if spec.kind == "commands":
+        if not any(c.strip() for c in spec.commands):
+            out.append("Write the commands it runs.")
+        if spec.shell not in dict(SHELLS) or (spec.shell != "sh" and not shutil.which(spec.shell)):
+            out.append("%s isn't installed." % spec.shell)
+    else:
+        if not spec.program.strip():
+            out.append("Choose the script or program it runs.")
+        elif not os.path.exists(os.path.expanduser(spec.program.strip())) and uses_shell_syntax(spec.program):
+            out.append("This is more than one command, or uses shell syntax like && or |. Choose Commands "
+                       "to run it through a shell.")
+        try:
+            shlex.split(spec.args)
+            if not os.path.exists(os.path.expanduser(spec.program.strip())):
+                shlex.split(spec.program)   # a file that exists is taken as it is
+        except ValueError:
+            out.append("There's a quote without its closing quote.")
     if spec.workdir.strip() and not os.path.isdir(os.path.expanduser(spec.workdir.strip())):
         out.append("The working folder doesn't exist.")
     if spec.icon_kind == "symbol":
@@ -220,6 +347,9 @@ def program_status(program: str, env=None) -> str:
 
 def build_entry(spec: Spec, did: str, env=None) -> str:
     """The .desktop text for a spec."""
+    if spec.kind == "commands":
+        spec.commands = [c for c in spec.commands if c.strip()] or [""]
+        spec.scripts = script_paths(did, spec.shell, len(spec.commands), env)
     lines = [
         "[Desktop Entry]",
         "# Launcher made with App Entries. Open it there to change it.",
@@ -229,14 +359,15 @@ def build_entry(spec: Spec, did: str, env=None) -> str:
     ]
     if spec.comment.strip():
         lines.append("Comment=" + escape(spec.comment.strip()))
-    lines.append("Exec=" + escape(build_exec(spec)))
+    lines.append("Exec=" + escape(build_exec(spec, did)))
     if spec.workdir.strip():
         lines.append("Path=" + escape(os.path.expanduser(spec.workdir.strip())))
     if spec.icon_kind == "symbol":
         lines.append("Icon=" + escape(icon_path(did, env)))
     elif spec.icon_value.strip():
         lines.append("Icon=" + escape(spec.icon_value.strip()))
-    lines.append("Terminal=" + ("true" if spec.terminal else "false"))
+    # With several terminals, the starter script opens them itself.
+    lines.append("Terminal=" + ("true" if spec.terminal and not several(spec) else "false"))
     if spec.wm_class.strip():
         lines.append("StartupWMClass=" + escape(spec.wm_class.strip()))
     if spec.hidden:
@@ -247,8 +378,12 @@ def build_entry(spec: Spec, did: str, env=None) -> str:
     kw = join_list(spec.keywords)
     if kw:
         lines.append("Keywords=" + kw)
+    lines += [CREATED_KEY + "=true"]
+    if spec.kind == "commands":
+        lines += ["X-AppEntries-Kind=commands", "X-AppEntries-Shell=" + spec.shell,
+                  "X-AppEntries-Scripts=" + join_list(spec.scripts),
+                  "X-AppEntries-Terminal=" + ("true" if spec.terminal else "false")]
     lines += [
-        CREATED_KEY + "=true",
         "X-AppEntries-Program=" + escape(spec.program.strip()),
         "X-AppEntries-Args=" + escape(spec.args),
         "X-AppEntries-KeepOpen=" + ("true" if spec.keep_open else "false"),
@@ -274,21 +409,27 @@ def read_spec(text: str) -> Optional[Spec]:
     if not de.is_true(d.get(CREATED_KEY)) or "X-AppEntries-Program" not in d:
         return None
     icon = icon_from(d)
-    kind = d.get("X-AppEntries-Icon-Kind", "symbol")
+    icon_kind = d.get("X-AppEntries-Icon-Kind", "symbol")
+    kind = "commands" if d.get("X-AppEntries-Kind") == "commands" else "program"
+    scripts = split_list(d.get("X-AppEntries-Scripts", "")) if kind == "commands" else []
     spec = Spec(
         name=de.unescape(d.get("Name", "")),
         comment=de.unescape(d.get("Comment", "")),
+        kind=kind,
+        shell=d.get("X-AppEntries-Shell", "sh").strip() or "sh",
+        scripts=scripts,
+        commands=[commands_of(read_text(p) or "") for p in scripts],
         program=de.unescape(d.get("X-AppEntries-Program", "")),
         args=de.unescape(d.get("X-AppEntries-Args", "")),
         workdir=de.unescape(d.get("Path", "")),
-        terminal=de.is_true(d.get("Terminal")),
+        terminal=de.is_true(d.get("X-AppEntries-Terminal" if kind == "commands" else "Terminal")),
         keep_open=de.is_true(d.get("X-AppEntries-KeepOpen")),
         accepts_files=de.is_true(d.get("X-AppEntries-AcceptsFiles")),
         categories=split_list(d.get("Categories", "")),
         keywords=split_list(d.get("Keywords", "")),
-        icon_kind=kind,
+        icon_kind=icon_kind,
         icon=icon,
-        icon_value="" if kind == "symbol" else de.unescape(d.get("Icon", "")),
+        icon_value="" if icon_kind == "symbol" else de.unescape(d.get("Icon", "")),
         hidden=de.is_true(d.get("NoDisplay")) or de.is_true(d.get("Hidden")),
         web_url=de.unescape(d.get("X-AppEntries-WebApp", "")),
         web_browser=de.unescape(d.get("X-AppEntries-WebApp-Browser", "")),
@@ -296,7 +437,8 @@ def read_spec(text: str) -> Optional[Spec]:
         wm_class=de.unescape(d.get("StartupWMClass", "")),
     )
     try:
-        if build_exec(spec) != de.unescape(d.get("Exec", "")):
+        did = (os.path.splitext(os.path.basename(scripts[0]))[0] + ".desktop") if scripts else ""
+        if build_exec(spec, did) != de.unescape(d.get("Exec", "")):
             return None
     except ValueError:
         return None
@@ -323,6 +465,24 @@ def plan_save(spec: Spec, did: Optional[str] = None, env=None) -> Tuple[str, Lis
         changes.append(Change(did, spec.name, ipath, old_icon, None, False))
     before = read_text(path)
     after = build_entry(spec, did, env)
+    # The commands' files (and the starter for several terminals): written as
+    # they now are, and ones no longer used removed.
+    wanted = {}
+    if spec.kind == "commands":
+        for n, file in enumerate(spec.scripts):
+            wanted[file] = script_text(spec, n)
+        if several(spec):
+            wanted[starter_path(did, env)] = starter_text(spec)
+    old = read_spec(before) if before else None
+    old_files = (old.scripts + [starter_path(did, env)]) if old is not None and old.kind == "commands" else []
+    for file, text in wanted.items():
+        current = read_text(file)
+        if text != current:
+            changes.append(Change(did, spec.name, file, current, text, False))
+    for file in old_files:
+        current = read_text(file)
+        if file not in wanted and current is not None:
+            changes.append(Change(did, spec.name, file, current, None, False))
     if after != before:
         changes.append(Change(did, spec.name, path, before, after, False))
     return did, changes
@@ -349,6 +509,12 @@ def plan_delete(app: de.App, env=None) -> List[Change]:
         changes.append(Change(app.id, app.name, ipath, icon, None, False))
     before = read_text(app.override_path)
     if before is not None:
+        spec = read_spec(before)
+        if spec is not None and spec.kind == "commands":
+            for path in spec.scripts + [starter_path(app.id, env)]:
+                text = read_text(path)
+                if text is not None:
+                    changes.append(Change(app.id, app.name, path, text, None, False))
         changes.append(Change(app.id, app.name, app.override_path, before, None, False))
     return changes
 
