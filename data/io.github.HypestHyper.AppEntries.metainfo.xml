@@ -12,17 +12,19 @@
     <p>
       A GTK 4 app with a Material 3 Expressive style for choosing which installed
       applications appear in your app launcher. It uses standard freedesktop.org
-      desktop-entry overrides in your own folder, so system files are never changed.
+      desktop-entry overrides in your own folder, so it never changes system files
+      itself; uninstalling a package runs your package manager in your own terminal.
     </p>
     <ul>
       <li>Every installed app in one searchable grid, including Flatpak, Snap and AppImage apps</li>
       <li>Hide or show apps with one switch, or several at once, with Undo</li>
       <li>Edit any app's entry, and find leftover files, missing programs and duplicates</li>
-      <li>Make launchers for scripts and commands, and web apps that open a site in its own window</li>
+      <li>Make launchers for programs, scripts and commands (in one terminal or several), and web apps that open a site in its own window</li>
       <li>Styled icons from thousands of symbols or your own SVGs</li>
       <li>Turn login programs on and off</li>
       <li>Choose which app opens links, folders and each kind of file</li>
       <li>Uninstall Flatpak, Snap, AppImage, Steam and package-manager apps, showing what else uses them first</li>
+      <li>Shortcuts to helper apps like Flatseal, Gear Lever and ProtonUp-Qt</li>
       <li>A history of every change, each with Undo</li>
       <li>Export your changes to another computer, and update from GitHub with one button</li>
     </ul>
@@ -38,6 +40,16 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.0.4" date="2026-10-26">
+      <description>
+        <ul>
+          <li>Uninstall apps, whatever installed them, after seeing what else needs them</li>
+          <li>Shortcuts to helper apps like Flatseal, Gear Lever and ProtonUp-Qt</li>
+          <li>Launchers can run commands, in one terminal or several</li>
+          <li>Starts about twice as fast, most of all with large icon themes</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.0.3" date="2026-10-21">
       <description>
         <ul>

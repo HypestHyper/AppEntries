@@ -2,4 +2,4 @@
 
 APP_ID = "io.github.HypestHyper.AppEntries"
 APP_NAME = "App Entries"
-VERSION = "1.0.3"
+VERSION = "1.0.4"

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version 1.0.3" src="https://img.shields.io/badge/version-1.0.3-1f9e80">
+  <img alt="Version 1.0.4" src="https://img.shields.io/badge/version-1.0.4-1f9e80">
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Linux" src="https://img.shields.io/badge/platform-Linux-informational">
   <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-3776AB">
@@ -37,11 +37,12 @@
 - **Select several** to hide, show, restore, restyle or uninstall many apps at once.
 - **Edit** any entry (name, icon, command, environment, folders, desktops, quick actions) with a live view of the file. Editing a system app saves your own copy; *Restore original* puts it back.
 - **Issues** finds leftover files, missing programs and duplicates, and explains each with a button to fix it.
+- When a tab is empty because of the search, the source or the Hidden and Not in menus switches, it says how many apps they leave out, with a button to lift each.
 - **Uninstall…** for Flatpak, Snap, AppImage, Steam, Distrobox and system packages (pacman, apt, dnf, zypper, rpm-ostree, xbps, apk, eopkg, Portage and Nix). Before anything runs it shows what goes, which other apps and packages need it or go with it, whether it's a default app or starts at login, and the exact command. Data folders and advanced options (like removing what depends on it) are off unless you turn them on, with warnings. Commands that need a password run in your terminal; packages the system or your desktop needs are never offered. History keeps a Reinstall button.
 - **Helper apps…** shortcuts to the apps that set up what App Entries doesn't, opened on that app where they allow it: Flatseal, Warehouse, Gear Lever, ProtonUp-Qt, Protontricks, BoxBuddy, DistroShelf, GNOME Settings' and KDE's app permissions, your software centre and Steam. Missing ones show what they do and the Flathub command, run in your terminal only if you ask.
 
 **Launchers**
-- **New launcher** for any script or command, with terminal options and a live preview.
+- **New launcher** for a program or script, or for commands written as in a terminal (`paru -Syu && flatpak update`, pipes, loops, whole scripts) run by the shell you choose. Add more sets of commands to open each in its own terminal. Terminal options and a live preview of the entry.
 - **New web app**: a site in its own window with no address bar or tabs, using a Chromium-based browser. It shares your browser's sign-ins, or keeps its own, with an optional dark mode and a window name for docks and window rules.
 - **Styled icons** from 4,000 Material Symbols or your own SVGs: tile shape, colour, shading, size and border, with a built-in colour picker. Paste SVG code, download from a link, or use a site's icon.
 
@@ -70,7 +71,7 @@ Updates come from the **Updates** tab. To remove it, run `./uninstall.sh` (same 
 
 ## How it works
 
-Launchers read `.desktop` files from `~/.local/share/applications` before the system folders, so a file there with the same name wins. Hiding an app writes a copy of its entry there with `NoDisplay=true`, marked with a checksum so App Entries can tell if you edit it. Showing it again deletes the copy, or removes just that line from a file of your own. Autostart works the same way in `~/.config/autostart`. Default apps are written to `~/.config/mimeapps.list`, the standard file desktops and apps read to decide what opens links and files.
+Launchers read `.desktop` files from `~/.local/share/applications` before the system folders, so a file there with the same name wins. Hiding an app writes a copy of its entry there with `NoDisplay=true`, marked with a checksum so App Entries can tell if you edit it. Showing it again deletes the copy, or removes just that line from a file of your own. Launchers that run commands keep them in a small script in `~/.local/share/app-entries/scripts`, which the entry runs with your chosen shell, so every launcher can start them. Autostart works the same way in `~/.config/autostart`. Default apps are written to `~/.config/mimeapps.list`, the standard file desktops and apps read to decide what opens links and files.
 
 This follows the [Desktop Entry Specification](https://specifications.freedesktop.org/desktop-entry-spec/latest/), so it works with GNOME, KDE Plasma, Xfce, Cinnamon, rofi, wofi, fuzzel and other launchers that read `.desktop` files.
 

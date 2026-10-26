@@ -1,7 +1,7 @@
 # Maintainer: HypestHyper
 pkgname=app-entries
 _appid=io.github.HypestHyper.AppEntries
-pkgver=1.0.3
+pkgver=1.0.4
 pkgrel=1
 pkgdesc="Hide, show and edit app launcher entries, autostart and AppImages (GTK 4)"
 arch=('any')
