@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased
+## 1.0.5 — 2026-11-02
 
-- Ready for what's coming: Uninstall reads dnf5's and apk-tools 3's output, file dialogs switch to GTK's newer FileDialog by themselves once a GTK version drops the old one, and the desktop accent is tested against what Noctalia 5 writes.
+- Uninstall reads apk-tools 3's output (Alpine, postmarketOS) correctly, and is tested against dnf5's (Fedora).
+- File dialogs switch to GTK's newer FileDialog by themselves once a GTK version drops the old one. Until then the old one stays, as it works on every desktop, including ones without a file-chooser portal like Hyprland.
+- The desktop accent is tested against what Noctalia 5 writes for GTK.
 
 ## 1.0.4 — 2026-10-26
 

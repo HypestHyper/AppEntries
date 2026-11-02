@@ -40,6 +40,14 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.0.5" date="2026-11-02">
+      <description>
+        <ul>
+          <li>Uninstall works with apk-tools 3 and dnf5</li>
+          <li>File dialogs keep working on future GTK versions</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.0.4" date="2026-10-26">
       <description>
         <ul>
