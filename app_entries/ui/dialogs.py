@@ -129,29 +129,39 @@ def choose_icon_file(parent, on_chosen, start=None):
 
 
 def choose_file(parent, title, on_chosen, folder=False, patterns=None, start=None, save_as=None,
-                filter_name=None):
-    """Pick a file or folder with GTK's own dialog.
+                filter_name=None, new_dialog=None):
+    """Pick a file or folder. With `save_as` (a file name) it asks where to save.
 
-    It doesn't need xdg-desktop-portal, whose file chooser is missing on some
-    desktops (xdg-desktop-portal-hyprland has none), where the portal dialog
-    silently never opens. With `save_as` (a file name) it asks where to save."""
+    GTK's own FileChooserDialog is used while GTK has it (all of GTK 4): it
+    doesn't depend on xdg-desktop-portal. Gtk.FileDialog, its replacement,
+    uses the portal whenever the portal says it has a file chooser, and then
+    never falls back, so on desktops whose portal backend has none or fails
+    (xdg-desktop-portal-hyprland has no file chooser) it silently never opens.
+    Once a GTK version drops FileChooserDialog, FileDialog is used instead.
+    `new_dialog` forces one or the other (for tests)."""
+    use_new = new_dialog if new_dialog is not None else not hasattr(Gtk, "FileChooserDialog")
+    begin = start if start and os.path.isdir(start) else os.path.expanduser("~")
+    filters = []
+    if patterns:
+        filt = Gtk.FileFilter()
+        filt.set_name(filter_name or _("Images"))
+        for p in patterns:
+            filt.add_pattern(p)
+        everything = Gtk.FileFilter()
+        everything.set_name(_("All files"))
+        everything.add_pattern("*")
+        filters = [filt, everything]
+    if use_new:
+        return _choose_with_file_dialog(parent, title, on_chosen, folder, filters, begin, save_as)
+
     action = (Gtk.FileChooserAction.SAVE if save_as else
               Gtk.FileChooserAction.SELECT_FOLDER if folder else Gtk.FileChooserAction.OPEN)
     dialog = Gtk.FileChooserDialog(title=title, transient_for=parent, modal=True, action=action)
     dialog.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
     dialog.add_button(_("Save") if save_as else _("Choose") if folder else _("Open"), Gtk.ResponseType.ACCEPT)
     dialog.set_default_response(Gtk.ResponseType.ACCEPT)
-    if patterns:
-        filt = Gtk.FileFilter()
-        filt.set_name(filter_name or _("Images"))
-        for p in patterns:
-            filt.add_pattern(p)
-        dialog.add_filter(filt)
-        everything = Gtk.FileFilter()
-        everything.set_name(_("All files"))
-        everything.add_pattern("*")
-        dialog.add_filter(everything)
-    begin = start if start and os.path.isdir(start) else os.path.expanduser("~")
+    for f in filters:
+        dialog.add_filter(f)
     try:
         dialog.set_current_folder(Gio.File.new_for_path(begin))
     except GLib.Error:
@@ -167,4 +177,38 @@ def choose_file(parent, title, on_chosen, folder=False, patterns=None, start=Non
 
     dialog.connect("response", response)
     dialog.present()
+    return dialog
+
+
+def _choose_with_file_dialog(parent, title, on_chosen, folder, filters, begin, save_as):
+    """The same with Gtk.FileDialog (GTK 4.10 and later)."""
+    dialog = Gtk.FileDialog(title=title, modal=True)
+    if save_as:
+        dialog.set_accept_label(_("Save"))
+    elif folder:
+        dialog.set_accept_label(_("Choose"))
+    if filters:
+        store = Gio.ListStore.new(Gtk.FileFilter)
+        for f in filters:
+            store.append(f)
+        dialog.set_filters(store)
+        dialog.set_default_filter(filters[0])
+    dialog.set_initial_folder(Gio.File.new_for_path(begin))
+    if save_as:
+        dialog.set_initial_name(save_as)
+
+    def finished(d, result, finish):
+        try:
+            f = finish(result)
+        except GLib.Error:
+            return  # cancelled, or the dialog couldn't be shown
+        if f is not None and f.get_path():
+            on_chosen(f.get_path())
+
+    if save_as:
+        dialog.save(parent, None, finished, dialog.save_finish)
+    elif folder:
+        dialog.select_folder(parent, None, finished, dialog.select_folder_finish)
+    else:
+        dialog.open(parent, None, finished, dialog.open_finish)
     return dialog

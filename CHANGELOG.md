@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Ready for what's coming: Uninstall reads dnf5's and apk-tools 3's output, file dialogs switch to GTK's newer FileDialog by themselves once a GTK version drops the old one, and the desktop accent is tested against what Noctalia 5 writes.
+
 ## 1.0.4 — 2026-10-26
 
 - Uninstall apps, whatever installed them: Flatpak, Snap, AppImage, Steam, Distrobox, or the system's package manager (pacman, apt, dnf, zypper, rpm-ostree, xbps, apk, eopkg, Portage, Nix). It replaces Remove AppImage.

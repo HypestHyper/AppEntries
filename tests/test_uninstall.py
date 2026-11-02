@@ -396,3 +396,52 @@ def test_helper_shortcuts_fit_the_app_and_offer_missing_ones(xdg):
     steam = helpers.for_app(de.App(id="g.desktop", name="G"), "steam", set(), {}, which_only(), steam_id="620")
     assert ("uri", "steam://nav/games/details/620") in [s.action for s in steam]
     assert not [s for s in steam if not s.installed]   # no flatpak, so nothing to offer installing
+
+
+# What dnf5 prints (libdnf5-cli/output/transaction_table.cpp): epochs always
+# shown, and a "Transaction Summary:" heading with indented lines of its own.
+DNF5_TABLE = """Updating and loading repositories:
+Repositories loaded.
+Package                      Arch   Version                  Repository      Size
+Removing:
+ gimp                        x86_64 2:2.10.38-1.fc41         fedora     100.0 MiB
+Removing dependent packages:
+ gimp-resynthesizer          x86_64 0:2.0-1.fc41             fedora       1.0 MiB
+Removing unused dependencies:
+ babl                        x86_64 0:0.1.108-1.fc41         fedora       5.0 MiB
+
+
+Transaction Summary:
+ Removing:           3 packages
+
+After this operation, 106 MiB will be freed (install 0 B, remove 106 MiB).
+Operation aborted by the user.
+"""
+
+
+def test_dnf5_transaction_table():
+    run = fake({"rpm -e --test gimp": (1, ""), "dnf5 remove --assumeno": (1, DNF5_TABLE)})
+    m = pm.Dnf(run, which_only("dnf5", "rpm", "sudo"))
+    p = m.preview(["gimp"], ["deps"])
+    assert p.exact and p.dependents == ["gimp-resynthesizer"] and p.unneeded == ["babl"]
+    assert p.removed == ["gimp", "gimp-resynthesizer", "babl"]
+    assert m.commands(["gimp"], ["deps"]) == [["sudo", "dnf5", "remove", "gimp"]]
+
+
+# What apk-tools 3 prints (src/commit.c, src/app_info.c, src/app_del.c): the
+# counter is padded once there are ten or more changes, and packages from a
+# tagged repository carry the tag.
+APK3_DEL = """( 1/11) Purging gimp (2.10.38-r2)
+( 2/11) Purging gimp-lang@testing (2.10.38-r2)
+(10/11) Purging babl (0.1.108-r0)
+"""
+
+
+def test_apk_tools_3_output():
+    run = fake({"apk info --who-owns": (0, "/usr/share/applications/gimp.desktop is owned by gimp-2.10.38-r2\n"),
+                "apk info -r gimp": (0, "gimp-2.10.38-r2 is required by:\n\n"),
+                "apk del -s": (0, APK3_DEL + "OK: 512 MiB in 300 packages\n")})
+    a = pm.Apk(run, which_only("apk", "doas"))
+    assert a.owner("/usr/share/applications/gimp.desktop") == "gimp"
+    p = a.preview(["gimp"], [])
+    assert p.exact and p.removed == ["gimp", "gimp-lang", "babl"] and p.dependents == [] and not p.stops

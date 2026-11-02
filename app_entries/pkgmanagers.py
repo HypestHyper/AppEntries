@@ -703,7 +703,9 @@ class Apk(Manager):
         r = self.run(["apk", "del", "-s"] + (["-r"] if "rdepends" in opts else []) + list(pkgs))
         if r is not None:
             p.output = r[1]
-            names = [_apk_name(n) for n in re.findall(r"\(\d+/\d+\) (?:Purging|Deleting) (\S+)", r[1])]
+            # "(1/3) Purging gimp (2.10-r0)"; apk-tools 3 pads the counter, "( 1/12)",
+            # and adds a repository tag to the name, "gimp@testing".
+            names = [n.split("@")[0] for n in re.findall(r"\(\s*\d+/\d+\)\s+(?:Purging|Deleting)\s+(\S+)", r[1])]
             if names:
                 p.removed = list(pkgs) + [n for n in names if n not in pkgs]
                 p.exact = True
