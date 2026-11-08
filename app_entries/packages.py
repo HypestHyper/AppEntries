@@ -44,7 +44,8 @@ REMOVE = {
 }
 
 
-def owner_of(path: str, source: str = "system", run: Callable = _run, which: Callable = shutil.which) -> Optional[Owner]:
+def owner_of(path: str, source: str = "system", run: Callable = _run,
+             which: Callable = shutil.which) -> Optional[Owner]:
     """The package that owns `path`, or None if it can't be told."""
     name = os.path.basename(path)
     if source == "flatpak":

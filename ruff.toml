@@ -1,0 +1,26 @@
+# Ruff (https://github.com/astral-sh/ruff): checks aimed at bugs, run in CI.
+# Style-only rules (import order, newer type-hint syntax, f-strings) are left
+# out: App Entries supports Python 3.9.
+target-version = "py39"
+line-length = 120
+
+[lint]
+select = [
+    "F",       # pyflakes: undefined and unused names
+    "E", "W",  # pycodestyle errors and warnings
+    "B",       # bugbear: likely bugs
+    "BLE",     # catch-all except, which must be marked as meant
+    "PLE",     # pylint errors
+    "PLW",     # pylint warnings
+    "RUF021",  # brackets where and/or mix
+]
+ignore = [
+    "E741",     # names like l: fine here
+    "B904",     # raise ... from inside except: the messages say what happened
+    "PLW1510",  # subprocess.run without check: return codes are read
+    "PLW0603",  # module-level caches
+    "PLW2901",  # cleaning up a loop value in place
+]
+
+[lint.per-file-ignores]
+"app_entries/ui/style.py" = ["E501"]   # CSS rules, one per line

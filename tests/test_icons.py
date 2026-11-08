@@ -187,7 +187,8 @@ def test_discord_border_keeps_the_logo(tmp_path):
            '<path d="%s"/></svg>' % DISCORD_D)
     path = write(tmp_path, "d.svg", svg)
     out = symbols.render(symbols.IconChoice(source="file", path=path, shape="none", border=True))
-    border_paths = [p for p in ET.fromstring(out).iter("{http://www.w3.org/2000/svg}path") if p.get("stroke") not in (None, "none")]
+    border_paths = [p for p in ET.fromstring(out).iter("{http://www.w3.org/2000/svg}path")
+                    if p.get("stroke") not in (None, "none")]
     assert border_paths and len(border_paths[0].get("d")) > 100
 
 

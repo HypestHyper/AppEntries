@@ -13,7 +13,9 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q desktop-file-utils appstream libglib2.0-bin
-          python3 -m pip install --quiet pytest
+          python3 -m pip install --quiet pytest ruff==0.16.8
+      - name: Ruff
+        run: python3 -m ruff check app_entries tests tools
       - name: Unit tests
         run: python3 -m pytest -q tests
       - name: Validate data files

@@ -7,7 +7,8 @@ from gettext import ngettext
 from gi.repository import Gdk, Gio, GLib, Gtk
 
 from .. import (APP_ID, APP_NAME, appimages, autostart, desktop_entries, editing, health, history, icon_lookup,
-               launcher_refresh, launchers, overrides, packages, profile, symbols, terminal, timing, trash, uninstall, webapps)
+               launcher_refresh, launchers, overrides, packages, profile, symbols, terminal, timing, trash, uninstall,
+               webapps)
 from ..model import AppItem, AppStore
 from .app_card import AppCard, forget_icons
 from .dialogs import Dialog, choose_file, error_dialog, run_bg
@@ -235,7 +236,8 @@ class MainWindow(Gtk.ApplicationWindow):
         overlay.set_child(self.stack)
         overlay.add_overlay(self.snackbar)
         # Floating action button, bottom right, over the app grid.
-        self.fab = button(_("New launcher"), "add", "fab", tooltip=_("Make a launcher for a script or program (Ctrl+N)"),
+        self.fab = button(_("New launcher"), "add", "fab",
+                          tooltip=_("Make a launcher for a script or program (Ctrl+N)"),
                           cb=lambda *_: self.new_launcher())
         web = button(_("New web app"), "language", "fab tonal",
                      tooltip=_("Open a site in its own window, without the address bar (Ctrl+Shift+N)"),
@@ -618,7 +620,8 @@ class MainWindow(Gtk.ApplicationWindow):
                                             "to open a site in its own window. What you make is listed here."))
             elif f == "hidden":
                 set_text(self.empty_title, _("Nothing is hidden"))
-                set_text(self.empty_body, _("Turn on “Hidden from launcher” on any app to hide it from your app menus."))
+                set_text(self.empty_body,
+                         _("Turn on “Hidden from launcher” on any app to hide it from your app menus."))
             else:
                 set_text(self.empty_title, _("No apps found"))
                 set_text(self.empty_body, _("No application entries were found in your XDG data folders."))

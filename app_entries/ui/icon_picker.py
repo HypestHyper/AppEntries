@@ -236,8 +236,8 @@ class IconPicker(Gtk.Window):
         right.set_size_request(300, -1)
         right.set_margin_bottom(12)
         right.set_margin_end(14)  # room for the scrollbar
-        self._options_scroll = rs = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, propagate_natural_width=True,
-                                vexpand=True)
+        self._options_scroll = rs = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER,
+                                                       propagate_natural_width=True, vexpand=True)
         rs.set_child(right)
         # The preview stays in view while the options scroll under it.
         column = vbox(14, prev, rs)
@@ -474,7 +474,7 @@ class IconPicker(Gtk.Window):
 
     def _paste(self, *_a):
         from .paste_svg import PasteSvgWindow
-        PasteSvgWindow(self, lambda path: self._added(path)).present()
+        PasteSvgWindow(self, self._added).present()
 
     def _add_link(self, *_a):
         entry = Gtk.Entry(placeholder_text="https://…/icon.svg", hexpand=True, activates_default=True)

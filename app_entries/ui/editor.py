@@ -143,8 +143,9 @@ class EditWindow(Gtk.Window):
                                       "programs."), f.terminal, lambda _v: self._changed())
         c.append(box)
         box, self.gpu = _switch_field(
-            _("Use the dedicated graphics card"), _("On computers with two graphics cards, asks to start the app "
-                                                    "on the more powerful one."), f.prefers_gpu, lambda _v: self._changed())
+            _("Use the dedicated graphics card"),
+            _("On computers with two graphics cards, asks to start the app on the more powerful one."),
+            f.prefers_gpu, lambda _v: self._changed())
         c.append(box)
         self.wm_class = _entry(f.wm_class, mono=True)
         c.append(_field(_("Window class"), _("Lets docks and taskbars match the app's windows to this entry. "

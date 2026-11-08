@@ -14,7 +14,7 @@ def fake(answers):
     def run(argv):
         line = " ".join(argv)
         best = None
-        for start, answer in answers.items():
+        for start in answers:
             if line.startswith(start) and (best is None or len(start) > len(best)):
                 best = start
         return answers[best] if best is not None else (1, "")
@@ -236,7 +236,8 @@ def scan(env):
 def flatpak_setup(xdg, running=False, other_uses_runtime=False):
     exports = xdg.tmp / "home" / ".local" / "share" / "flatpak" / "exports" / "share" / "applications"
     xdg.write(exports, "com.example.Chat.desktop",
-              entry("Chat", "/usr/bin/flatpak run --branch=stable com.example.Chat", **{"X-Flatpak": "com.example.Chat"}))
+              entry("Chat", "/usr/bin/flatpak run --branch=stable com.example.Chat",
+                    **{"X-Flatpak": "com.example.Chat"}))
     env = dict(xdg.env, XDG_DATA_DIRS=str(exports.parent) + ":" + xdg.env["XDG_DATA_DIRS"])
     data = xdg.tmp / "home" / ".var" / "app" / "com.example.Chat"
     data.mkdir(parents=True)

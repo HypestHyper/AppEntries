@@ -115,7 +115,8 @@ def test_web_app_dark_mode_and_window_name(xdg):
     assert webapps.dark_of(webapps.args_for("https://m.x", "", "dark")) == "dark"
     assert webapps.dark_of(webapps.args_for("https://m.x")) == "system"
     assert webapps.window_class("web.whatsapp.com", "chrome") == "chrome-web.whatsapp.com__-Default"
-    assert webapps.window_class("https://mail.google.com/mail/u/0", "edge") == "msedge-mail.google.com__mail_u_0-Default"
+    assert webapps.window_class("https://mail.google.com/mail/u/0", "edge") == \
+        "msedge-mail.google.com__mail_u_0-Default"
     spec = launchers.Spec(name="Chat", program="/usr/bin/brave", args=args, web_url="https://m.x/inbox",
                           web_browser="brave", wm_class=webapps.window_class("https://m.x/inbox", "brave"))
     did, changes = launchers.plan_save(spec, env=xdg.env)

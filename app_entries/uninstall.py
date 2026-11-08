@@ -425,8 +425,13 @@ def _plan_snap(app: de.App, apps, env, run: Run, which) -> Plan:
         return r is not None and r[0] != 0
 
     p._commands, p._reinstall, p._gone = commands, reinstall, gone
-    _users(p, apps, lambda prog, a: prog.startswith("/snap/bin/" + name) or prog == name and
-           os.path.realpath(shutil.which(prog, path=":".join(search_dirs(env))) or "").startswith("/snap/"))
+    def from_snap(prog, _app):
+        if prog.startswith("/snap/bin/" + name):
+            return True
+        found = shutil.which(prog, path=":".join(search_dirs(env))) or ""
+        return prog == name and os.path.realpath(found).startswith("/snap/")
+
+    _users(p, apps, from_snap)
     return p
 
 

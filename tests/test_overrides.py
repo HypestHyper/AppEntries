@@ -47,7 +47,8 @@ def test_hidden_apps_are_listed_without_the_no_display_option(xdg):
 
 def test_hide_updates_existing_user_override_in_place(xdg):
     xdg.write(xdg.sys_b, "app.desktop", entry("Thing"))
-    text = "[Desktop Entry]\n# my tweak\nType=Application\nName=Thing\nExec=thing --fast\n\n[Desktop Action a]\nName=A\nExec=a\n"
+    text = ("[Desktop Entry]\n# my tweak\nType=Application\nName=Thing\nExec=thing --fast\n\n"
+            "[Desktop Action a]\nName=A\nExec=a\n")
     user = xdg.write(xdg.user, "app.desktop", text)
     ov.set_hidden(only(xdg), True, xdg.env)
     d = group(user)
