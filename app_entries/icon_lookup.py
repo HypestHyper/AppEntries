@@ -7,7 +7,7 @@ find, look through the icon folders directly: hicolor, then every other
 installed theme, then pixmaps. Pure Python, no GTK.
 """
 import os
-from typing import Dict, List, Optional
+from typing import Optional
 
 from .desktop_entries import user_data_dir
 
@@ -20,16 +20,16 @@ SIZE_DIRS = (
     "256x256@2/apps", "128x128@2/apps", "64x64@2/apps", "48x48@2/apps",
 )
 
-_cache: Dict[str, Optional[str]] = {}
+_cache: dict[str, Optional[str]] = {}
 
 
-def data_dirs(env=None) -> List[str]:
+def data_dirs(env=None) -> list[str]:
     env = os.environ if env is None else env
     dirs = [d for d in (env.get("XDG_DATA_DIRS") or "").split(":") if os.path.isabs(d)]
     return [user_data_dir(env)] + (dirs or ["/usr/local/share", "/usr/share"])
 
 
-def icon_bases(env=None) -> List[str]:
+def icon_bases(env=None) -> list[str]:
     env = os.environ if env is None else env
     home = env.get("HOME") or os.path.expanduser("~")
     dirs = data_dirs(env)
@@ -37,7 +37,7 @@ def icon_bases(env=None) -> List[str]:
         [os.path.join(d, "icons") for d in dirs[1:]]
 
 
-def _themes(bases: List[str], preferred) -> List[str]:
+def _themes(bases: list[str], preferred) -> list[str]:
     found = []
     for base in bases:
         try:
@@ -54,7 +54,7 @@ def find(name: str, preferred=(), env=None) -> Optional[str]:
         return None
     if os.path.isabs(name):
         return name if os.path.isfile(name) else None
-    key = "%s\0%s" % (name, ",".join(t for t in preferred if t))
+    key = "{}\0{}".format(name, ",".join(t for t in preferred if t))
     if key in _cache:
         return _cache[key]
 

@@ -47,8 +47,8 @@ def file_texture(path: str, size: int, ink: str = "") -> Gdk.Texture:
     if ink and icon_library.is_one_colour(path):
         try:
             svg = ('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
-                   'width="%d" height="%d" viewBox="0 0 960 960">%s</svg>'
-                   % (size, size, icon_library.symbol_svg(path, ink, 0, "")))
+                   f'width="{int(size)}" height="{int(size)}" viewBox="0 0 960 960">'
+                   f'{icon_library.symbol_svg(path, ink, 0, "")}</svg>')
             return texture(svg, size, key)
         except (OSError, ValueError, SyntaxError, GLib.Error, icon_library.IconError):
             pass  # draw the file as it is
@@ -153,7 +153,7 @@ class IconPicker(Gtk.Window):
         self.scale.set_digits(0)
         self.scale.set_hexpand(True)
         if hasattr(self.scale, "set_format_value_func"):  # GTK 4.10+
-            self.scale.set_format_value_func(lambda _s, v: "%d%%" % v)
+            self.scale.set_format_value_func(lambda _s, v: f"{int(v)}%")
         self.scale.update_property([Gtk.AccessibleProperty.LABEL], [_("Symbol size")])
         self.scale.connect("value-changed", lambda sc: self._set(scale=int(round(sc.get_value() / 5) * 5)))
         scroll_passes_through(self.scale)
@@ -200,7 +200,7 @@ class IconPicker(Gtk.Window):
         self.border_width.set_digits(0)
         self.border_width.set_hexpand(True)
         self.border_width.update_property([Gtk.AccessibleProperty.LABEL], [_("Border width")])
-        self.border_width.connect("value-changed", lambda s: self._set(border_width=int(round(s.get_value()))))
+        self.border_width.connect("value-changed", lambda s: self._set(border_width=round(s.get_value())))
         scroll_passes_through(self.border_width)
         self.border_inner = Toggle(self.choice.border_inner, lambda v: self._set(border_inner=v))
         bc = self.choice.border_color

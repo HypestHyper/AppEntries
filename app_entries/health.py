@@ -6,7 +6,6 @@ import os
 import shlex
 import shutil
 from dataclasses import dataclass, field
-from typing import Dict, List
 
 from . import APP_ID, packages
 from . import desktop_entries as de
@@ -25,11 +24,11 @@ class Leftover:
 
 @dataclass
 class Report:
-    legacy: List[de.App] = field(default_factory=list)       # hidden the old way
-    leftovers: List[Leftover] = field(default_factory=list)
-    missing: List[de.App] = field(default_factory=list)      # shown, but the program is gone
-    duplicates: List[List[de.App]] = field(default_factory=list)
-    owners: Dict[str, "packages.Owner"] = field(default_factory=dict)  # for `missing`, by app ID
+    legacy: list[de.App] = field(default_factory=list)       # hidden the old way
+    leftovers: list[Leftover] = field(default_factory=list)
+    missing: list[de.App] = field(default_factory=list)      # shown, but the program is gone
+    duplicates: list[list[de.App]] = field(default_factory=list)
+    owners: dict[str, "packages.Owner"] = field(default_factory=dict)  # for `missing`, by app ID
 
     @property
     def count(self) -> int:
@@ -41,7 +40,7 @@ def source_of(app: de.App) -> str:
     exec_line = app.exec.lower()
     if "/flatpak/exports/" in path or exec_line.split()[:2] in (["flatpak", "run"], ["/usr/bin/flatpak", "run"]):
         return "flatpak"
-    if "/snapd/desktop/" in path or exec_line.startswith("/snap/bin/") or exec_line.startswith("snap run"):
+    if "/snapd/desktop/" in path or exec_line.startswith(("/snap/bin/", "snap run")):
         return "snap"
     if ".appimage" in exec_line:
         return "appimage"
@@ -54,7 +53,7 @@ def source_of(app: de.App) -> str:
     return "system" if app.system else "user"
 
 
-def search_dirs(env) -> List[str]:
+def search_dirs(env) -> list[str]:
     """Where programs are looked for: PATH, plus the usual places a launcher's
     PATH may have and this process's may not."""
     home = env.get("HOME") or os.path.expanduser("~")
@@ -129,7 +128,7 @@ def is_customised(app: de.App) -> bool:
     return not is_pristine(df)
 
 
-def find_leftovers(env=None) -> List[Leftover]:
+def find_leftovers(env=None) -> list[Leftover]:
     """Files in the user's folder that only change an app (hide it, or were
     made by App Entries) for an app that's no longer installed anywhere."""
     dirs = de.application_dirs(env)
@@ -150,9 +149,9 @@ def find_leftovers(env=None) -> List[Leftover]:
     return out
 
 
-def find_duplicates(apps: List[de.App]) -> List[List[de.App]]:
+def find_duplicates(apps: list[de.App]) -> list[list[de.App]]:
     """Apps that share a name, at least two of them shown in launchers."""
-    groups: Dict[str, List[de.App]] = {}
+    groups: dict[str, list[de.App]] = {}
     for a in apps:
         if a.no_display and not a.has_override:
             continue
@@ -166,10 +165,10 @@ def _first_word(name: str) -> str:
     return words[0] if words else ""
 
 
-def find_related(apps: List[de.App]) -> None:
+def find_related(apps: list[de.App]) -> None:
     """Set `related` on entries that belong to the same app but are in the
     opposite state, like a hidden service entry next to a shown indicator."""
-    groups: Dict[tuple, List[de.App]] = {}
+    groups: dict[tuple, list[de.App]] = {}
     for a in apps:
         key = (a.icon, _first_word(a.name))
         if a.icon and key[1]:
@@ -181,7 +180,7 @@ def find_related(apps: List[de.App]) -> None:
             a.related = tuple(o.name for o in group if o is not a and o.hidden != a.hidden)
 
 
-def legacy_hidden(apps: List[de.App]) -> List[de.App]:
+def legacy_hidden(apps: list[de.App]) -> list[de.App]:
     out = []
     for a in apps:
         if not (a.override_path and a.base_path and a.hidden):
@@ -194,7 +193,7 @@ def legacy_hidden(apps: List[de.App]) -> List[de.App]:
     return out
 
 
-def check(apps: List[de.App], env=None) -> Report:
+def check(apps: list[de.App], env=None) -> Report:
     """Fill in each app's `source` and `missing`, and build the report."""
     for a in apps:
         a.source = source_of(a)
@@ -215,7 +214,7 @@ def scan_and_check(env=None, owners=True):
     each app with a missing program came from (slow: one query each)."""
     from . import timing
     apps = de.scan(env)
-    timing.mark("  apps scanned (%d)" % len(apps))
+    timing.mark(f"  apps scanned ({len(apps)})")
     report = check(apps, env)
     timing.mark("  apps checked")
     if owners:

@@ -1,4 +1,5 @@
 from conftest import entry
+
 from app_entries import desktop_entries as de
 from app_entries import launchers as ln
 from app_entries import overrides as ov
@@ -49,7 +50,7 @@ def test_plan_restyle_updates_launchers_and_edited_icons_and_skips_others(xdg):
     assert [a.id for a in skipped] == ["plain.desktop"]
     ov.apply_all(changes)
 
-    tool = symbols.choice_from_svg(open(ln.icon_path(did, xdg.env)).read())
+    tool = symbols.choice_from_svg(ln.read_text(ln.icon_path(did, xdg.env)))
     assert tool.name == "build" and tool.color == "#aa0000" and tool.shape == "circle"
     spec = ln.read_spec((xdg.user / did).read_text())
     assert spec.icon.color == "#aa0000" and spec.icon.gradient == "strong"  # the form shows the new look

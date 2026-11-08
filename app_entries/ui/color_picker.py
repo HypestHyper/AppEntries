@@ -3,6 +3,7 @@ hex field. It lives inside the window, so the preview updates as you drag."""
 import colorsys
 import re
 from gettext import gettext as _
+from typing import ClassVar
 
 from gi.repository import Gdk, GObject, Graphene, Gsk, Gtk
 
@@ -158,7 +159,7 @@ class _HueBar(Gtk.Widget):
 class ColorPicker(Gtk.Box):
     """Emits `changed(hex)` while you pick."""
 
-    __gsignals__ = {"changed": (GObject.SignalFlags.RUN_FIRST, None, (str,))}
+    __gsignals__: ClassVar[dict] = {"changed": (GObject.SignalFlags.RUN_FIRST, None, (str,))}
 
     def __init__(self, hex_color="#6aa6ff", title=""):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -182,7 +183,7 @@ class ColorPicker(Gtk.Box):
 
     def hex(self):
         r, g, b = colorsys.hsv_to_rgb(self.h, self.s, self.v)
-        return "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
+        return f"#{round(r * 255):02x}{round(g * 255):02x}{round(b * 255):02x}"
 
     def set_hex(self, value, emit=True):
         m = re.fullmatch(r"#?([0-9a-fA-F]{6})", (value or "").strip())

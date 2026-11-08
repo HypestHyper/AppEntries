@@ -148,7 +148,7 @@ class IssuesPage(Gtk.ScrolledWindow):
                                        [_("Hide {name} ({id})").format(name=a.name, id=a.id)])
                     sw.set_tooltip_text(_("Hidden from launcher"))
                     src = _(SOURCES.get(a.source, SOURCES["system"])[1])
-                    rows.append(_row(_app_icon(a.icon), "%s · %s" % (a.id, src), a.exec,
+                    rows.append(_row(_app_icon(a.icon), f"{a.id} · {src}", a.exec,
                                      label(_("Hidden"), ("small", "dim")), sw))
             self._section(
                 _("Duplicates"),

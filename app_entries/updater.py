@@ -15,13 +15,13 @@ import subprocess
 import tarfile
 import tempfile
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from . import APP_ID, VERSION
 
 REPO = "HypestHyper/AppEntries"
 API = "https://api.github.com/repos/" + REPO
-PAGE = "https://github.com/%s/releases" % REPO
+PAGE = f"https://github.com/{REPO}/releases"
 MAX_DOWNLOAD = 50 * 1024 * 1024
 CHECK_EVERY = 6 * 3600  # seconds between automatic checks
 
@@ -42,7 +42,7 @@ class Release:
     prerelease: bool
 
 
-def parse_version(text: str) -> Tuple[int, ...]:
+def parse_version(text: str) -> tuple[int, ...]:
     """(major, minor, patch, final): 1.2.3-beta sorts before 1.2.3."""
     m = re.match(r"v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(.*)$", (text or "").strip())
     if not m:
@@ -55,11 +55,11 @@ def is_newer(candidate: str, current: str = VERSION) -> bool:
 
 
 def _get(url: str, timeout: float = 15):
-    import urllib.error   # here, as they take a while to load
+    import urllib.error  # here, as they take a while to load
     import urllib.request
     req = urllib.request.Request(url, headers={
         "Accept": "application/vnd.github+json",
-        "User-Agent": "%s/%s" % (APP_ID, VERSION),
+        "User-Agent": f"{APP_ID}/{VERSION}",
     })
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -67,15 +67,15 @@ def _get(url: str, timeout: float = 15):
     except urllib.error.HTTPError as e:
         if e.code == 403:
             raise UpdateError("GitHub is limiting requests right now. Try again in an hour.") from e
-        raise UpdateError("GitHub answered %d %s." % (e.code, e.reason)) from e
+        raise UpdateError(f"GitHub answered {e.code} {e.reason}.") from e
     except (urllib.error.URLError, OSError) as e:
         reason = getattr(e, "reason", e)
-        raise UpdateError("Couldn't reach GitHub: %s" % reason) from e
+        raise UpdateError(f"Couldn't reach GitHub: {reason}") from e
     except ValueError as e:
         raise UpdateError("GitHub sent something unexpected.") from e
 
 
-def releases_from(data) -> List[Release]:
+def releases_from(data) -> list[Release]:
     out = []
     for r in data if isinstance(data, list) else []:
         if not isinstance(r, dict) or r.get("draft") or not r.get("tag_name"):
@@ -87,17 +87,17 @@ def releases_from(data) -> List[Release]:
     return out
 
 
-def tags_from(data) -> List[Release]:
+def tags_from(data) -> list[Release]:
     out = []
     for t in data if isinstance(data, list) else []:
         name = str(t.get("name") or "") if isinstance(t, dict) else ""
         if re.match(r"v?\d+\.\d+", name):
             out.append(Release(name.lstrip("vV"), name, "", str(t.get("tarball_url") or ""),
-                               "https://github.com/%s/tree/%s" % (REPO, name), parse_version(name)[3] == 0))
+                               f"https://github.com/{REPO}/tree/{name}", parse_version(name)[3] == 0))
     return out
 
 
-def pick(found: List[Release], include_test: bool) -> Optional[Release]:
+def pick(found: list[Release], include_test: bool) -> Optional[Release]:
     usable = [r for r in found if r.tarball and (include_test or not r.prerelease)]
     return max(usable, key=lambda r: parse_version(r.version), default=None)
 
@@ -147,7 +147,7 @@ def location(here: str = HERE) -> Install:
 def _download(url: str, dest: str) -> None:
     import urllib.error
     import urllib.request
-    req = urllib.request.Request(url, headers={"User-Agent": "%s/%s" % (APP_ID, VERSION)})
+    req = urllib.request.Request(url, headers={"User-Agent": f"{APP_ID}/{VERSION}"})
     try:
         with urllib.request.urlopen(req, timeout=60) as r, open(dest, "wb") as f:
             total = 0
@@ -160,7 +160,7 @@ def _download(url: str, dest: str) -> None:
                     raise UpdateError("The download is larger than expected, so it was stopped.")
                 f.write(chunk)
     except (urllib.error.URLError, OSError) as e:
-        raise UpdateError("The download failed: %s" % getattr(e, "reason", e)) from e
+        raise UpdateError("The download failed: {}".format(getattr(e, "reason", e))) from e
 
 
 def _extract(archive: str, dest: str) -> str:
@@ -171,14 +171,14 @@ def _extract(archive: str, dest: str) -> str:
             members = tar.getmembers()
             for m in members:
                 name = os.path.normpath(m.name)
-                if name.startswith(("/", "..")) or "/../" in "/%s/" % name or not (m.isfile() or m.isdir()):
-                    raise UpdateError("The download contains an unsafe path (%s), so it wasn't used." % m.name)
+                if name.startswith(("/", "..")) or "/../" in f"/{name}/" or not (m.isfile() or m.isdir()):
+                    raise UpdateError(f"The download contains an unsafe path ({m.name}), so it wasn't used.")
             if hasattr(tarfile, "data_filter"):  # Python 3.12+, and security updates of older ones
                 tar.extractall(dest, members=members, filter="data")
             else:
                 tar.extractall(dest, members=members)
     except (tarfile.TarError, OSError) as e:
-        raise UpdateError("The download couldn't be unpacked: %s" % e) from e
+        raise UpdateError(f"The download couldn't be unpacked: {e}") from e
     tops = os.listdir(dest)
     if len(tops) != 1:
         raise UpdateError("The download doesn't look like an App Entries release.")

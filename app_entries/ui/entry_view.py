@@ -33,7 +33,7 @@ class EntryView(Gtk.Box):
         self.append(self.view)
         lines = vbox(2)
         for key, text in KEY_HELP:
-            lines.append(label("%s — %s" % (key, text), ("small", "faint"), wrap=True, chars=60))
+            lines.append(label(f"{key} — {text}", ("small", "faint"), wrap=True, chars=60))
         self.append(lines)
         self._last = None
 

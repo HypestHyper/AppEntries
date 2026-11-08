@@ -10,12 +10,12 @@ import os
 import shlex
 import shutil
 import subprocess
-from typing import Callable, Dict, List
+from typing import Callable
 
 from . import desktop_entries as de
 
 # How each terminal is told to run a command: the words that go before it.
-TERMINALS: Dict[str, List[str]] = {
+TERMINALS: dict[str, list[str]] = {
     "xdg-terminal-exec": [],
     "kgx": ["--"], "ptyxis": ["--"], "gnome-terminal": ["--"], "konsole": ["-e"],
     "xfce4-terminal": ["-x"], "mate-terminal": ["-x"], "tilix": ["-e"], "terminator": ["-x"],
@@ -34,7 +34,7 @@ class NoTerminal(Exception):
     pass
 
 
-def find(env=None, which: Callable = shutil.which) -> List[str]:
+def find(env=None, which: Callable = shutil.which) -> list[str]:
     """The words that start a command in a terminal, like ["konsole", "-e"].
     $TERMINAL wins, then xdg-terminal-exec (the desktop's chosen one), then
     the desktop's own, then any known one."""
@@ -59,13 +59,13 @@ def find(env=None, which: Callable = shutil.which) -> List[str]:
     raise NoTerminal("No terminal app was found.")
 
 
-def line(commands: List[List[str]]) -> str:
+def line(commands: list[list[str]]) -> str:
     """The commands as one shell line, each running only if the one before
     worked. Notes (lines starting with #) aren't run."""
     return " && ".join(shlex.join(c) for c in commands if c and not c[0].startswith("#"))
 
 
-def start(commands: List[List[str]], env=None, which: Callable = shutil.which,
+def start(commands: list[list[str]], env=None, which: Callable = shutil.which,
           popen: Callable = subprocess.Popen) -> subprocess.Popen:
     """Open the terminal running the commands, then a shell. Raises
     NoTerminal when there's no terminal app, and OSError when it couldn't be
@@ -76,6 +76,6 @@ def start(commands: List[List[str]], env=None, which: Callable = shutil.which,
                  stderr=subprocess.DEVNULL, start_new_session=True)
 
 
-def shown(commands: List[List[str]]) -> str:
+def shown(commands: list[list[str]]) -> str:
     """The commands as they'd be typed, one per line."""
     return "\n".join(" ".join(c) if c and c[0].startswith("#") else shlex.join(c) for c in commands)

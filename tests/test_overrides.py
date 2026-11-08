@@ -2,8 +2,8 @@ import os
 import stat
 
 import pytest
-
 from conftest import entry
+
 from app_entries import desktop_entries as de
 from app_entries import overrides as ov
 
@@ -140,7 +140,7 @@ def test_show_app_hidden_by_its_package(xdg, key):
     app = only(xdg)
     assert app.hidden and app.base_hidden
     ov.set_hidden(app, False, xdg.env)
-    assert sys_file.read_text().count("%s=true" % key) == 1
+    assert sys_file.read_text().count(f"{key}=true") == 1
     app = only(xdg)
     assert not app.hidden and app.override_managed
     assert group(xdg.user / "app.desktop")["NoDisplay"] == "false"
@@ -151,7 +151,7 @@ def test_show_app_hidden_by_its_package(xdg, key):
 
 def test_update_legacy_turns_old_hidden_file_into_copy(xdg):
     xdg.write(xdg.sys_b, "app.desktop", entry("Thing", MimeType="text/plain;"))
-    old = "[Desktop Entry]\nType=Application\nName=Thing\nHidden=true\n%s=true\n" % de.MANAGED_KEY
+    old = f"[Desktop Entry]\nType=Application\nName=Thing\nHidden=true\n{de.MANAGED_KEY}=true\n"
     xdg.write(xdg.user, "app.desktop", old)
     ov.apply(ov.plan_update_legacy(only(xdg)))
     d = group(xdg.user / "app.desktop")

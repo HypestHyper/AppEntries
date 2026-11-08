@@ -28,7 +28,7 @@ def folder(env=None) -> str:
 def move(path: str, env=None) -> Trashed:
     path = os.path.abspath(path)
     if not os.path.lexists(path):
-        raise TrashError("%s is already gone" % path)
+        raise TrashError(f"{path} is already gone")
     files, info = os.path.join(folder(env), "files"), os.path.join(folder(env), "info")
     try:
         os.makedirs(files, exist_ok=True)
@@ -44,27 +44,27 @@ def move(path: str, env=None) -> Trashed:
             break
         except FileExistsError:
             stem, ext = os.path.splitext(base)
-            name, n = "%s.%d%s" % (stem, n, ext), n + 1
+            name, n = f"{stem}.{n}{ext}", n + 1
     with os.fdopen(fd, "w", encoding="utf-8") as f:
-        f.write("[Trash Info]\nPath=%s\nDeletionDate=%s\n"
-                % (urllib.parse.quote(path), time.strftime("%Y-%m-%dT%H:%M:%S")))
+        when = time.strftime("%Y-%m-%dT%H:%M:%S")
+        f.write(f"[Trash Info]\nPath={urllib.parse.quote(path)}\nDeletionDate={when}\n")
     target = os.path.join(files, name)
     try:
         shutil.move(path, target)
     except OSError as e:
         os.unlink(info_path)
-        raise TrashError("Couldn't move %s to the Trash: %s" % (path, e.strerror or e)) from e
+        raise TrashError(f"Couldn't move {path} to the Trash: {e.strerror or e}") from e
     return Trashed(path, target, info_path)
 
 
 def restore(t: Trashed) -> None:
     if os.path.lexists(t.original):
-        raise TrashError("Something is already at %s, so it was left in the Trash" % t.original)
+        raise TrashError(f"Something is already at {t.original}, so it was left in the Trash")
     try:
         os.makedirs(os.path.dirname(t.original), exist_ok=True)
         shutil.move(t.file, t.original)
     except OSError as e:
-        raise TrashError("Couldn't restore %s: %s" % (t.original, e.strerror or e)) from e
+        raise TrashError(f"Couldn't restore {t.original}: {e.strerror or e}") from e
     try:
         os.unlink(t.info)
     except OSError:

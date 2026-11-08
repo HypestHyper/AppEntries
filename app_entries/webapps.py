@@ -9,7 +9,7 @@ import os
 import shlex
 import shutil
 import urllib.parse
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from . import APP_ID, VERSION
 from . import desktop_entries as de
@@ -28,12 +28,12 @@ BROWSERS = [
 MAX_ICON = 2 * 1024 * 1024
 
 
-def _flatpak_bins(env) -> List[str]:
+def _flatpak_bins(env) -> list[str]:
     home = env.get("HOME") or os.path.expanduser("~")
     return [os.path.join(home, ".local", "share", "flatpak", "exports", "bin"), "/var/lib/flatpak/exports/bin"]
 
 
-def installed(env=None) -> List[Tuple[str, str, str]]:
+def installed(env=None) -> list[tuple[str, str, str]]:
     """(id, name, program) for each Chromium-based browser found."""
     env = os.environ if env is None else env
     from .health import search_dirs
@@ -122,7 +122,7 @@ def window_class(url: str, browser: str) -> str:
     path = (p.path or "/").replace("/", "_")
     if p.query:
         path += "_" + p.query.replace("/", "_")
-    return "%s-%s_%s-Default" % (CLASS_PREFIX.get(browser, "chrome"), p.hostname or "", path)
+    return "{}-{}_{}-Default".format(CLASS_PREFIX.get(browser, "chrome"), p.hostname or "", path)
 
 
 def profile_of(args: str) -> str:
@@ -175,12 +175,12 @@ class _Links(html.parser.HTMLParser):
         self.icons.append((size, href))
 
 
-def icon_candidates(page_url: str, html_text: str) -> List[str]:
+def icon_candidates(page_url: str, html_text: str) -> list[str]:
     """Icon addresses from a page, best first, then the usual fallbacks."""
     parser = _Links()
     try:
         parser.feed(html_text)
-    except Exception:  # noqa: BLE001 - a broken page just has no links
+    except Exception:  # noqa: BLE001, S110 - a broken page just has no links
         pass
     found = [urllib.parse.urljoin(page_url, h) for _s, h in sorted(parser.icons, key=lambda x: -x[0])]
     root = "{0.scheme}://{0.netloc}".format(urllib.parse.urlsplit(page_url))
@@ -190,9 +190,9 @@ def icon_candidates(page_url: str, html_text: str) -> List[str]:
     return [u for u in found if urllib.parse.urlsplit(u).scheme in ("http", "https")]
 
 
-def _get(url: str, limit: int) -> Tuple[bytes, str]:
-    import urllib.request   # here, as it takes a while to load
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (%s %s)" % (APP_ID, VERSION)})
+def _get(url: str, limit: int) -> tuple[bytes, str]:
+    import urllib.request  # here, as it takes a while to load
+    req = urllib.request.Request(url, headers={"User-Agent": f"Mozilla/5.0 ({APP_ID} {VERSION})"})
     with urllib.request.urlopen(req, timeout=15) as r:
         data = r.read(limit + 1)
         if len(data) > limit:
@@ -200,7 +200,7 @@ def _get(url: str, limit: int) -> Tuple[bytes, str]:
         return data, r.headers.get("Content-Type", "")
 
 
-def fetch_icon(url: str) -> Tuple[bytes, str]:
+def fetch_icon(url: str) -> tuple[bytes, str]:
     """The site's best icon: (data, kind), kind being svg, png or other
     (ico, jpeg, webp: for the caller to convert). Raises ValueError."""
     import urllib.error

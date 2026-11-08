@@ -6,7 +6,7 @@ there isn't one yet), touching only the keys that changed. Pure Python, no GTK.
 import os
 import re
 from dataclasses import dataclass, field, replace
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from . import desktop_entries as de
 from .desktop_entries import CHECKSUM_KEY, HIDDEN_KEY, MANAGED_KEY, DesktopFile, is_true
@@ -37,7 +37,7 @@ DESKTOPS = [
 
 _ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _ENV_PREFIX = re.compile(r'^env\s+((?:(?:[A-Za-z_][A-Za-z0-9_]*=[^\s"]*|"[A-Za-z_][A-Za-z0-9_]*=[^"]*")\s+)+)(.*)$',
-                         re.S)
+                         re.DOTALL)
 
 
 @dataclass
@@ -52,21 +52,21 @@ class Fields:
     name: str = ""
     generic_name: str = ""
     comment: str = ""
-    keywords: List[str] = field(default_factory=list)
+    keywords: list[str] = field(default_factory=list)
     icon: str = ""
     command: str = ""
-    env: List[str] = field(default_factory=list)   # NAME=value
+    env: list[str] = field(default_factory=list)   # NAME=value
     terminal: bool = False
     prefers_gpu: bool = False
     wm_class: str = ""
-    categories: List[str] = field(default_factory=list)  # main categories only
+    categories: list[str] = field(default_factory=list)  # main categories only
     show_in: str = "all"                                 # all, only or except
-    desktops: List[str] = field(default_factory=list)
-    actions: List[Action] = field(default_factory=list)
+    desktops: list[str] = field(default_factory=list)
+    actions: list[Action] = field(default_factory=list)
     hidden: bool = False                                 # kept out of launcher menus
 
 
-def current_desktops(env=None) -> List[str]:
+def current_desktops(env=None) -> list[str]:
     env = os.environ if env is None else env
     return [d for d in (env.get("XDG_CURRENT_DESKTOP") or "").split(":") if d]
 
@@ -81,18 +81,18 @@ def escape(value: str) -> str:
             .replace("\r", "\\r"))
 
 
-def split_list(value: str) -> List[str]:
+def split_list(value: str) -> list[str]:
     """Split a ;-list, keeping escaped semicolons (\\;) inside items."""
     items = re.split(r"(?<!\\);", value)
     return [de.unescape(v.replace("\\;", ";")) for v in items if v.strip()]
 
 
-def join_list(items: List[str]) -> str:
+def join_list(items: list[str]) -> str:
     items = [i.strip() for i in items if i.strip()]
     return ";".join(escape(i).replace(";", "\\;") for i in items) + ";" if items else ""
 
 
-def split_env(exec_line: str) -> Tuple[List[str], str]:
+def split_env(exec_line: str) -> tuple[list[str], str]:
     """`env A=1 B=2 prog` -> (["A=1", "B=2"], "prog"). Anything fancier is
     left in the command as it is."""
     m = _ENV_PREFIX.match(exec_line.strip())
@@ -102,11 +102,11 @@ def split_env(exec_line: str) -> Tuple[List[str], str]:
     return env, m.group(2).strip()
 
 
-def join_env(env: List[str], command: str) -> str:
+def join_env(env: list[str], command: str) -> str:
     env = [e.strip() for e in env if e.strip()]
     if not env:
         return command.strip()
-    args = ['"%s"' % e if (" " in e or "\t" in e) else e for e in env]
+    args = [f'"{e}"' if (" " in e or "\t" in e) else e for e in env]
     return "env " + " ".join(args) + " " + command.strip()
 
 
@@ -164,7 +164,7 @@ def read_fields(app: de.App, env=None) -> Fields:
 # Checking and writing
 
 
-def validate(fields: Fields) -> List[str]:
+def validate(fields: Fields) -> list[str]:
     """Problems that stop saving, in plain words."""
     problems = []
     if not fields.name.strip():
@@ -173,7 +173,7 @@ def validate(fields: Fields) -> List[str]:
         problems.append("The command can't be empty.")
     bad = [e for e in fields.env if e.strip() and not _ENV_NAME.match(e.strip())]
     if bad:
-        problems.append("Environment variables need the form NAME=value: %s" % ", ".join(bad))
+        problems.append("Environment variables need the form NAME=value: {}".format(", ".join(bad)))
     if fields.show_in != "all" and not fields.desktops:
         problems.append("Pick at least one desktop, or choose “Every desktop”.")
     return problems
@@ -201,7 +201,7 @@ def _set_bool(df: DesktopFile, key: str, on: bool) -> None:
         df.remove(key)
 
 
-def _set_list(df: DesktopFile, key: str, items: List[str]) -> None:
+def _set_list(df: DesktopFile, key: str, items: list[str]) -> None:
     value = join_list(items)
     if value:
         df.set(key, value)
@@ -221,7 +221,7 @@ def plan_edit(app: de.App, new: Fields, env=None) -> Optional[Change]:
     df = DesktopFile(before if before is not None and not bare else _source_text(app))
     if before is None or bare:
         df.lines[:0] = [
-            "# Copy made by App Entries with your changes to %s." % app.id,
+            f"# Copy made by App Entries with your changes to {app.id}.",
             "# Use Restore original in App Entries, or delete this file, to undo.",
         ]
         df.set(MANAGED_KEY, "true")

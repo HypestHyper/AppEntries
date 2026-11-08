@@ -17,7 +17,7 @@ def xdg(tmp_path):
         d.mkdir(parents=True)
     env = {
         "HOME": str(home),
-        "XDG_DATA_DIRS": "%s:%s" % (sys_a.parent, sys_b.parent),
+        "XDG_DATA_DIRS": f"{sys_a.parent}:{sys_b.parent}",
         "LANG": "C",
     }
 
@@ -38,6 +38,6 @@ def xdg(tmp_path):
 
 
 def entry(name="Thing", exec_="thing %U", **extra):
-    lines = ["[Desktop Entry]", "Type=Application", "Name=%s" % name, "Exec=%s" % exec_]
-    lines += ["%s=%s" % kv for kv in extra.items()]
+    lines = ["[Desktop Entry]", "Type=Application", f"Name={name}", f"Exec={exec_}"]
+    lines += ["{}={}".format(*kv) for kv in extra.items()]
     return "\n".join(lines) + "\n"

@@ -10,8 +10,9 @@ command that installs it from Flathub, which runs only if the user asks.
 import glob
 import os
 import shutil
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Sequence, Set, Tuple
+from typing import Callable, Optional
 
 from . import desktop_entries as de
 
@@ -25,8 +26,8 @@ class Shortcut:
     installed: bool
     # How to open it: ("desktop", desktop ID, [files]), ("argv", [words]),
     # ("uri", uri), ("flatseal", desktop ID, app ID) or ("kde-permissions", app ID).
-    action: Tuple = ()
-    install: List[str] = field(default_factory=list)   # the command that installs it, if it's missing
+    action: tuple = ()
+    install: list[str] = field(default_factory=list)   # the command that installs it, if it's missing
     flathub: str = ""            # its Flathub ID
 
 
@@ -35,9 +36,9 @@ class Helper:
     key: str
     name: str
     flathub: str                 # Flathub ID; its desktop ID is this + ".desktop"
-    kinds: Tuple[str, ...]       # the uninstall kinds it's for (see uninstall.kind_of)
+    kinds: tuple[str, ...]       # the uninstall kinds it's for (see uninstall.kind_of)
     what: str
-    other_ids: Tuple[str, ...] = ()   # desktop IDs of other packagings
+    other_ids: tuple[str, ...] = ()   # desktop IDs of other packagings
 
 
 HELPERS = [
@@ -70,13 +71,13 @@ def _kde_module(env) -> str:
     return ""
 
 
-def for_app(app: de.App, kind: str, installed_ids: Set[str], env=None, which: Callable = shutil.which,
+def for_app(app: de.App, kind: str, installed_ids: set[str], env=None, which: Callable = shutil.which,
             uri_handler: Callable[[str], str] = lambda scheme: "", appimage: str = "", steam_id: str = "",
-            flatpak_id: str = "", snap_name: str = "", kde_module: Optional[str] = None) -> List[Shortcut]:
+            flatpak_id: str = "", snap_name: str = "", kde_module: Optional[str] = None) -> list[Shortcut]:
     """The shortcuts that fit this app. `uri_handler(scheme)` names the app
     that opens that kind of link ("" if none)."""
     env = os.environ if env is None else env
-    out: List[Shortcut] = []
+    out: list[Shortcut] = []
     stem = app.id[:-len(".desktop")]
     have_flatpak = bool(which("flatpak"))
 
@@ -100,24 +101,24 @@ def for_app(app: de.App, kind: str, installed_ids: Set[str], env=None, which: Ca
 
     desktops = [d.upper() for d in de.current_desktops(env)]
     if which("gnome-control-center") and any(d in ("GNOME", "UNITY", "UBUNTU") for d in desktops):
-        out.append(Shortcut("gnome-settings", "Settings", "{name}'s permissions, notifications, storage and the "
-                            "files it opens, in GNOME Settings.".format(name=app.name), "org.gnome.Settings", True,
+        out.append(Shortcut("gnome-settings", "Settings", f"{app.name}'s permissions, notifications, storage and the "
+                            "files it opens, in GNOME Settings.", "org.gnome.Settings", True,
                             ("argv", ["gnome-control-center", "applications", stem])))
     module = _kde_module(env) if kde_module is None else kde_module
     if kind == "flatpak" and module and (which("kcmshell6") or which("systemsettings")) and "KDE" in desktops:
-        out.append(Shortcut("kde-permissions", "System Settings", "{name}'s Flatpak permissions, in KDE's "
-                            "System Settings.".format(name=app.name), "preferences-system", True,
+        out.append(Shortcut("kde-permissions", "System Settings", f"{app.name}'s Flatpak permissions, in KDE's "
+                            "System Settings.", "preferences-system", True,
                             ("kde-permissions", flatpak_id or stem, module)))
 
     store = uri_handler("appstream")
     if store and kind in ("flatpak", "package"):
-        out.append(Shortcut("software", store, "{name}'s page in {store}: details, updates and, for Flatpaks, "
-                            "permissions.".format(name=app.name, store=store), "system-software-install", True,
+        out.append(Shortcut("software", store, f"{app.name}'s page in {store}: details, updates and, for Flatpaks, "
+                            "permissions.", "system-software-install", True,
                             ("uri", "appstream://" + (flatpak_id or stem))))
     snap_store = uri_handler("snap")
     if kind == "snap" and snap_store and snap_name:
-        out.append(Shortcut("snap-store", snap_store, "{name}'s page in {store}, with its permissions."
-                            .format(name=app.name, store=snap_store), "snap-store", True,
+        out.append(Shortcut("snap-store", snap_store, f"{app.name}'s page in {snap_store}, with its permissions."
+                            , "snap-store", True,
                             ("uri", "snap://" + snap_name)))
     if kind == "steam" and steam_id:
         out.append(Shortcut("steam", "Steam", "The game's page in your Steam library: properties, Proton version "
@@ -128,7 +129,7 @@ def for_app(app: de.App, kind: str, installed_ids: Set[str], env=None, which: Ca
     return out
 
 
-def kde_argv(app_id: str, ref: str, module: str, which: Callable = shutil.which) -> List[str]:
+def kde_argv(app_id: str, ref: str, module: str, which: Callable = shutil.which) -> list[str]:
     """Opens KDE's Flatpak permissions on one app (by its ref, like
     app/org.x.App/x86_64/stable)."""
     if which("kcmshell6"):
@@ -136,5 +137,5 @@ def kde_argv(app_id: str, ref: str, module: str, which: Callable = shutil.which)
     return ["systemsettings", module, "--args", ref or app_id]
 
 
-def installed_ids(apps: Sequence[de.App]) -> Set[str]:
+def installed_ids(apps: Sequence[de.App]) -> set[str]:
     return {a.id for a in apps}

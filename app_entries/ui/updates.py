@@ -152,7 +152,7 @@ class UpdatesPage(Gtk.Box):
     def refresh(self):
         m = self.m
         r = m.release
-        set_text(self.title, "%s %s" % (APP_NAME, VERSION))
+        set_text(self.title, f"{APP_NAME} {VERSION}")
         self.spinner.set_visible(m.checking or m.installing)
         self.spinner.set_spinning(m.checking or m.installing)
         self.notes_box.set_visible(bool(r and r.notes.strip()))

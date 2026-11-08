@@ -58,13 +58,13 @@ def _prefix(tmp_path):
     return prefix, pkg
 
 
-INSTALL = """#!/bin/sh
+INSTALL = f"""#!/bin/sh
 set -eu
 PREFIX="$2"
-rm -rf "$PREFIX/share/%s/app_entries"
-mkdir -p "$PREFIX/share/%s"
-cp -r app_entries "$PREFIX/share/%s/app_entries"
-""" % (APP_ID, APP_ID, APP_ID)
+rm -rf "$PREFIX/share/{APP_ID}/app_entries"
+mkdir -p "$PREFIX/share/{APP_ID}"
+cp -r app_entries "$PREFIX/share/{APP_ID}/app_entries"
+"""
 
 
 def test_install_replaces_the_package(tmp_path):
@@ -80,7 +80,7 @@ def test_install_replaces_the_package(tmp_path):
 def test_failed_install_puts_the_old_version_back(tmp_path):
     prefix, pkg = _prefix(tmp_path)
     archive = tmp_path / "r.tar.gz"
-    broken = "#!/bin/sh\nrm -rf \"$2/share/%s/app_entries\"\nexit 3\n" % APP_ID
+    broken = f"#!/bin/sh\nrm -rf \"$2/share/{APP_ID}/app_entries\"\nexit 3\n"
     _tarball(archive, {"AppEntries-abc/install.sh": broken,
                        "AppEntries-abc/app_entries/__init__.py": "VERSION = 'new'\n"})
     rel = updater.Release("9.0.0", "9.0.0", "", archive.as_uri(), "", False)

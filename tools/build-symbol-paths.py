@@ -30,7 +30,7 @@ def paths(font, names):
     gs = font.getGlyphSet()
     out = {}
     for name in names:
-        pen = SVGPathPen(gs, ntos=lambda v: ("%.1f" % v).rstrip("0").rstrip("."))
+        pen = SVGPathPen(gs, ntos=lambda v: (f"{v:.1f}").rstrip("0").rstrip("."))
         # Font units are y-up; SVG is y-down.
         gs[name].draw(TransformPen(pen, (1, 0, 0, -1, 0, GRID)))
         out[name] = pen.getCommands()
@@ -82,7 +82,7 @@ def main():
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with gzip.open(OUT, "wt", encoding="utf-8", compresslevel=9) as f:
         json.dump(data, f, separators=(",", ":"))
-    print("%d icons, %d KB" % (len(names), os.path.getsize(OUT) // 1024))
+    print(f"{len(names)} icons, {os.path.getsize(OUT) // 1024} KB")
 
 
 if __name__ == "__main__":

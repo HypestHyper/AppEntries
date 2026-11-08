@@ -12,7 +12,7 @@ import shlex
 import shutil
 import subprocess
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from typing import Optional
 
 from . import desktop_entries as de
 from .overrides import Change, read_bytes, read_text
@@ -37,15 +37,15 @@ def appimage_of(exec_line: str) -> str:
 @dataclass
 class Removal:
     appimage: str                                         # the file (to the Trash)
-    entries: List[str] = field(default_factory=list)      # .desktop files in your folder
-    icons: List[str] = field(default_factory=list)
-    others: List[str] = field(default_factory=list)       # file type definitions and the like
-    blocked: List[str] = field(default_factory=list)      # entries outside your folder that start it
-    settings: List[str] = field(default_factory=list)     # folders that look like its settings (opt-in)
+    entries: list[str] = field(default_factory=list)      # .desktop files in your folder
+    icons: list[str] = field(default_factory=list)
+    others: list[str] = field(default_factory=list)       # file type definitions and the like
+    blocked: list[str] = field(default_factory=list)      # entries outside your folder that start it
+    settings: list[str] = field(default_factory=list)     # folders that look like its settings (opt-in)
     size: int = 0
 
     @property
-    def files(self) -> List[str]:
+    def files(self) -> list[str]:
         return self.entries + self.icons + self.others
 
 
@@ -56,7 +56,7 @@ def _same(a: str, b: str) -> bool:
         return a == b
 
 
-def _entries(env) -> Dict[str, Dict[str, str]]:
+def _entries(env) -> dict[str, dict[str, str]]:
     """Every .desktop file (path -> its main group), user folder first."""
     out = {}
     for folder in de.application_dirs(env):
@@ -71,7 +71,7 @@ def _entries(env) -> Dict[str, Dict[str, str]]:
     return out
 
 
-def _icon_files(name: str, data_dir: str) -> List[str]:
+def _icon_files(name: str, data_dir: str) -> list[str]:
     """Files for an icon name in your own icon folders."""
     found = []
     for base in (os.path.join(data_dir, "icons"), os.path.join(data_dir, "pixmaps")):
@@ -87,7 +87,7 @@ def plan(app: de.App, env=None) -> Removal:
     env = os.environ if env is None else env
     path = appimage_of(app.exec)
     if not path:
-        raise ValueError("%s doesn't start an AppImage." % app.name)
+        raise ValueError(f"{app.name} doesn't start an AppImage.")
     data_dir = de.user_data_dir(env)
     user_apps = os.path.normpath(de.user_apps_dir(env))
     r = Removal(path)
@@ -97,7 +97,7 @@ def plan(app: de.App, env=None) -> Removal:
         pass
 
     all_entries = _entries(env)
-    mine: Dict[str, Dict[str, str]] = {}
+    mine: dict[str, dict[str, str]] = {}
     for p, d in all_entries.items():
         target = appimage_of(de.unescape(d.get("Exec", "")))
         if target and _same(target, path):
@@ -108,8 +108,8 @@ def plan(app: de.App, env=None) -> Removal:
     r.entries = sorted(mine)
 
     # Icons those entries use, unless another entry uses them too.
-    others_use: Set[str] = {de.unescape(d.get("Icon", "")) for p, d in all_entries.items() if p not in mine}
-    icons: List[str] = []
+    others_use: set[str] = {de.unescape(d.get("Icon", "")) for p, d in all_entries.items() if p not in mine}
+    icons: list[str] = []
     for d in mine.values():
         icon = de.unescape(d.get("Icon", "")).strip()
         if not icon or icon in others_use:
@@ -134,10 +134,10 @@ def plan(app: de.App, env=None) -> Removal:
     return r
 
 
-def _names(app_name: str, path: str) -> Set[str]:
+def _names(app_name: str, path: str) -> set[str]:
     """Names its settings folders are likely to have: Obsidian-1.6.2-x86_64.AppImage -> obsidian."""
     base = os.path.basename(path)[:-len(".appimage")]
-    stem = re.split(r"[-_. ](?:v?\d|x86|amd64|aarch64|arm|linux)", base, maxsplit=1, flags=re.I)[0]
+    stem = re.split(r"[-_. ](?:v?\d|x86|amd64|aarch64|arm|linux)", base, maxsplit=1, flags=re.IGNORECASE)[0]
     names = {stem, app_name, app_name.replace(" ", ""), app_name.replace(" ", "-")}
     return {n.casefold() for n in names if len(n) >= 3}
 
@@ -147,13 +147,13 @@ _KEEP = {"app-entries", "applications", "icons", "mime", "trash", "fonts", "them
          "flatpak", "gtk-3.0", "gtk-4.0", "dconf", "pulse", "fontconfig"}
 
 
-def settings_folders(app_name: str, path: str, env=None) -> List[str]:
+def settings_folders(app_name: str, path: str, env=None) -> list[str]:
     """Folders in ~/.config, ~/.local/share and ~/.cache named like the app.
     Only a guess, so they're shown and removed only when asked."""
     return folders_named(_names(app_name, path), env)
 
 
-def folders_named(wanted, env=None) -> List[str]:
+def folders_named(wanted, env=None) -> list[str]:
     """Folders in ~/.config, ~/.local/share and ~/.cache with one of these
     names (any case)."""
     env = os.environ if env is None else env
@@ -187,7 +187,7 @@ def refresh_mime(env=None) -> None:
             pass
 
 
-def changes(r: Removal, app_id: str, name: str) -> List[Change]:
+def changes(r: Removal, app_id: str, name: str) -> list[Change]:
     out = []
     for p in r.entries:
         out.append(Change(app_id, name, p, read_text(p), None, False))
@@ -201,5 +201,5 @@ def problem(r: Removal) -> Optional[str]:
     """Why the AppImage can't be removed, or None. (When the file is already
     gone, what was set up for it can still be removed.)"""
     if os.path.isfile(r.appimage) and not os.access(os.path.dirname(r.appimage), os.W_OK):
-        return "The AppImage is in a folder you can't change (%s)." % os.path.dirname(r.appimage)
+        return f"The AppImage is in a folder you can't change ({os.path.dirname(r.appimage)})."
     return None

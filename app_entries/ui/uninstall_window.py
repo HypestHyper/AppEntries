@@ -691,7 +691,7 @@ class BatchUninstallWindow(_Base):
             body.append(section(_("Not included")))
             c = card()
             for name, why in result.skipped:
-                c.append(_file_row("error", "%s: %s" % (name, why)))
+                c.append(_file_row("error", f"{name}: {why}"))
             body.append(c)
         body.append(self._command_card(_("Commands that will run"), "", ""))
         self._page(body, top=8)

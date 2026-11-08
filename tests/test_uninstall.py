@@ -2,10 +2,11 @@ import os
 import subprocess
 
 import pytest
-
 from conftest import entry
+
 from app_entries import desktop_entries as de
-from app_entries import health, history, overrides, pkgmanagers as pm, terminal, uninstall
+from app_entries import health, history, overrides, terminal, uninstall
+from app_entries import pkgmanagers as pm
 
 
 def fake(answers):
@@ -37,8 +38,8 @@ def test_pacman_says_what_needs_it_and_stops_until_told():
     run = fake({
         "pacman -Qi gimp": (0, PACMAN_QI),
         "pacman -Qqm gimp": (1, ""),
-        "pacman -Rsp": (1, "error: failed to prepare transaction (could not satisfy dependencies)\n"
-                           ":: removing gimp breaks dependency 'gimp' required by gimp-plugin-resynthesizer\n"),
+        "pacman -Rsp": (1, ("error: failed to prepare transaction (could not satisfy dependencies)\n"
+                           ":: removing gimp breaks dependency 'gimp' required by gimp-plugin-resynthesizer\n")),
         "pacman -Rscp": (0, "gimp\ngimp-plugin-resynthesizer\ngimp-help-en\n"),
     })
     m = pm.Pacman(run, which_only("pacman", "sudo"))
@@ -96,9 +97,9 @@ def test_apt_lists_what_goes_with_it_and_group_packages():
 def test_apt_refuses_essential_packages():
     run = fake({
         "dpkg-query -W": (0, "5.2\t1900\tyes\trequired\tshells\n"),
-        "apt-get -s remove": (0, "WARNING: The following essential packages will be removed.\n"
+        "apt-get -s remove": (0, ("WARNING: The following essential packages will be removed.\n"
                                  "This should NOT be done unless you know exactly what you are doing!\n"
-                                 "  bash\n"),
+                                 "  bash\n")),
     })
     m = pm.Apt(run, which_only("dpkg-query"))
     assert "essential" in pm.blocked(m, ["bash"])
@@ -126,8 +127,8 @@ Operation aborted.
 
 def test_dnf_reads_its_transaction_table_and_rpm_dependents():
     run = fake({
-        "rpm -e --test gimp": (1, "error: Failed dependencies:\n\tgimp = 2:2.10.38 is needed by (installed) "
-                                  "gimp-resynthesizer-2.0-1.fc40.x86_64\n"),
+        "rpm -e --test gimp": (1, ("error: Failed dependencies:\n\tgimp = 2:2.10.38 is needed by (installed) "
+                                  "gimp-resynthesizer-2.0-1.fc40.x86_64\n")),
         "dnf remove --assumeno": (1, DNF_TABLE),
     })
     m = pm.Dnf(run, which_only("dnf", "rpm", "sudo"))
@@ -156,8 +157,8 @@ def test_zypper_xbps_apk_eopkg_and_portage_answers_are_read():
 
     a = pm.Apk(fake({"apk info --who-owns": (0, "/usr/share/applications/gimp.desktop is owned by gimp-2.10.38-r2\n"),
                      "apk info -r gimp": (0, "gimp-2.10.38-r2 is required by:\ngimp-plugin-x-1.0-r0\n"),
-                     "apk del -s": (0, "World updated, but the following packages are not removed due to:\n"
-                                       "  gimp: gimp-plugin-x\n")}), which_only("apk", "doas"))
+                     "apk del -s": (0, ("World updated, but the following packages are not removed due to:\n"
+                                       "  gimp: gimp-plugin-x\n"))}), which_only("apk", "doas"))
     assert a.owner("/usr/share/applications/gimp.desktop") == "gimp"
     p = a.preview(["gimp"], [])
     assert p.dependents == ["gimp-plugin-x"] and "apk would keep it" in p.stops
@@ -168,8 +169,9 @@ def test_zypper_xbps_apk_eopkg_and_portage_answers_are_read():
     assert e.owner("/usr/share/applications/gimp.desktop") == "gimp"
 
     g = pm.Portage(fake({"qfile -qC": (0, "media-gfx/gimp\n"),
-                         "emerge --pretend --depclean": (0, "media-gfx/gimp-2.10 pulled in by:\n"
-                                                            "    media-plugins/gimp-x-1.0 requires media-gfx/gimp\n")}),
+                         "emerge --pretend --depclean": (0, (
+                             "media-gfx/gimp-2.10 pulled in by:\n"
+                             "    media-plugins/gimp-x-1.0 requires media-gfx/gimp\n"))}),
                    which_only("emerge", "qfile", "sudo"))
     assert g.owner("/usr/share/applications/gimp.desktop") == "media-gfx/gimp"
     p = g.preview(["media-gfx/gimp"], [])
@@ -247,10 +249,10 @@ def flatpak_setup(xdg, running=False, other_uses_runtime=False):
     if other_uses_runtime:
         rows += "org.other.App\torg.other.App/x86_64/stable\torg.example.Platform/x86_64/24\n"
     run = fake({
-        "flatpak info --user com.example.Chat": (0, "Chat - talk\n\n          ID: com.example.Chat\n"
+        "flatpak info --user com.example.Chat": (0, ("Chat - talk\n\n          ID: com.example.Chat\n"
                                                     "     Version: 1.2\n      Origin: flathub\n"
                                                     "     Runtime: org.example.Platform/x86_64/24\n"
-                                                    "   Installed: 1.2 GB\n"),
+                                                    "   Installed: 1.2 GB\n")),
         "flatpak list --user": (0, rows),
         "flatpak ps": (0, "com.example.Chat\n" if running else ""),
     })

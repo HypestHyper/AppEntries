@@ -18,14 +18,15 @@ import re
 import shlex
 import shutil
 import subprocess
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Optional
 
 # run(argv) -> (exit code, stdout and stderr together), or None if it couldn't run.
-Run = Callable[[List[str]], Optional[Tuple[int, str]]]
+Run = Callable[[list[str]], Optional[tuple[int, str]]]
 
 
-def run(argv: List[str], timeout: int = 60) -> Optional[Tuple[int, str]]:
+def run(argv: list[str], timeout: int = 60) -> Optional[tuple[int, str]]:
     try:
         out = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                              text=True, timeout=timeout, env=dict(os.environ, LC_ALL="C", LANG="C"))
@@ -34,7 +35,7 @@ def run(argv: List[str], timeout: int = 60) -> Optional[Tuple[int, str]]:
     return out.returncode, out.stdout
 
 
-def _ok(r: Optional[Tuple[int, str]]) -> str:
+def _ok(r: Optional[tuple[int, str]]) -> str:
     """The output when the command worked, "" otherwise."""
     return r[1] if r is not None and r[0] == 0 else ""
 
@@ -47,19 +48,19 @@ class Option:
     explanation: str
     warning: str = ""              # shown in red while it's on
     default: bool = False
-    excludes: Tuple[str, ...] = ()  # options turned off when this one is turned on
+    excludes: tuple[str, ...] = ()  # options turned off when this one is turned on
 
 
 @dataclass
 class Preview:
     """What the manager would do, asked before anything changes."""
-    removed: List[str] = field(default_factory=list)      # every package that would go, the targets first
-    dependents: List[str] = field(default_factory=list)   # installed packages that need the targets
+    removed: list[str] = field(default_factory=list)      # every package that would go, the targets first
+    dependents: list[str] = field(default_factory=list)   # installed packages that need the targets
     dependents_go: bool = False    # they're removed too (otherwise the manager stops, or they break)
-    optional_for: List[str] = field(default_factory=list)  # packages that work without it, with less
-    unneeded: List[str] = field(default_factory=list)     # packages removed because nothing needs them any more
+    optional_for: list[str] = field(default_factory=list)  # packages that work without it, with less
+    unneeded: list[str] = field(default_factory=list)     # packages removed because nothing needs them any more
     stops: str = ""                # why the manager would refuse, in plain words, or ""
-    group_packages: List[str] = field(default_factory=list)  # metapackages that go too (apt)
+    group_packages: list[str] = field(default_factory=list)  # metapackages that go too (apt)
     exact: bool = False            # from the manager's own dry run
     output: str = ""               # what it printed
 
@@ -118,7 +119,7 @@ def needed_by_system(pkg: str) -> str:
     return ""
 
 
-def privilege(which: Callable = shutil.which) -> List[str]:
+def privilege(which: Callable = shutil.which) -> list[str]:
     """How to run a command as root in a terminal: sudo, doas or run0."""
     for tool in ("sudo", "doas", "run0"):
         if which(tool):
@@ -126,20 +127,20 @@ def privilege(which: Callable = shutil.which) -> List[str]:
     return []
 
 
-def as_root(argv: List[str], which: Callable = shutil.which) -> List[str]:
+def as_root(argv: list[str], which: Callable = shutil.which) -> list[str]:
     p = privilege(which)
     if p:
         return p + argv
     return ["su", "-c", shlex.join(argv)]
 
 
-def _names_after(text: str, pattern: str) -> List[str]:
-    return list(dict.fromkeys(re.findall(pattern, text, flags=re.M)))
+def _names_after(text: str, pattern: str) -> list[str]:
+    return list(dict.fromkeys(re.findall(pattern, text, flags=re.MULTILINE)))
 
 
 def _human_size(text: str) -> int:
     """'112.34 MiB', '1.2 GB', '340 KiB' or '23MB' as bytes, 0 if unreadable."""
-    m = re.search(r"([\d.,]+)\s*([KMGT]?)(i?)B", text or "", flags=re.I)
+    m = re.search(r"([\d.,]+)\s*([KMGT]?)(i?)B", text or "", flags=re.IGNORECASE)
     if not m:
         return 0
     try:
@@ -154,9 +155,9 @@ class Manager:
     """One package manager. Subclasses fill in the queries they can answer."""
     name = ""          # pacman, apt, …
     label = ""         # shown to the user
-    tools: Tuple[str, ...] = ()   # one of these must be installed
+    tools: tuple[str, ...] = ()   # one of these must be installed
     needs_root = True
-    options: List[Option] = []
+    options: tuple[Option, ...] = ()
     asks_first = True  # the remove command shows what it does and asks before going ahead
 
     def __init__(self, run: Run = run, which: Callable = shutil.which):
@@ -169,28 +170,28 @@ class Manager:
     def info(self, pkg: str) -> Info:
         return Info(pkg)
 
-    def files(self, pkg: str) -> List[str]:
+    def files(self, pkg: str) -> list[str]:
         return []
 
     def preview(self, pkgs: Sequence[str], opts: Sequence[str]) -> Preview:
         return Preview(removed=list(pkgs))
 
-    def commands(self, pkgs: Sequence[str], opts: Sequence[str]) -> List[List[str]]:
+    def commands(self, pkgs: Sequence[str], opts: Sequence[str]) -> list[list[str]]:
         """The commands that remove them, as run in the terminal (with sudo)."""
         return []
 
-    def reinstall(self, pkgs: Sequence[str], info: Optional[Dict[str, Info]] = None) -> List[List[str]]:
+    def reinstall(self, pkgs: Sequence[str], info: Optional[dict[str, Info]] = None) -> list[list[str]]:
         return []
 
     def blocked(self, pkg: str) -> str:
         """Why this package can't be uninstalled here at all, or ""."""
         return ""
 
-    def protected(self) -> List[str]:
+    def protected(self) -> list[str]:
         """Packages this manager itself refuses to remove."""
         return []
 
-    def _root(self, argv: List[str]) -> List[str]:
+    def _root(self, argv: list[str]) -> list[str]:
         return as_root(argv, self.which) if self.needs_root else argv
 
 
@@ -200,7 +201,7 @@ class Manager:
 
 class Pacman(Manager):
     name, label, tools = "pacman", "pacman", ("pacman",)
-    options = [
+    options = (
         Option("deps", "Remove packages only it needed",
                "Packages that were installed for it and that nothing else uses go too.", default=True),
         Option("nosave", "Also remove its config backups",
@@ -212,13 +213,13 @@ class Pacman(Manager):
         Option("nodeps", "Skip dependency checks",
                "Removes it even though other packages need it.",
                warning="The packages that need it can stop working: {dependents}.", excludes=("cascade",)),
-    ]
+    )
 
     def owner(self, path):
         out = _ok(self.run(["pacman", "-Qoq", path]))
         return out.split()[0] if out.strip() else ""
 
-    def _qi(self, pkg) -> Dict[str, str]:
+    def _qi(self, pkg) -> dict[str, str]:
         out = _ok(self.run(["pacman", "-Qi", pkg]))
         fields, key = {}, None
         for line in out.splitlines():
@@ -301,7 +302,7 @@ class Pacman(Manager):
         except OSError:
             return []
         out = []
-        for m in re.finditer(r"^\s*HoldPkg\s*=\s*(.+)$", text, flags=re.M):
+        for m in re.finditer(r"^\s*HoldPkg\s*=\s*(.+)$", text, flags=re.MULTILINE):
             out += m.group(1).split()
         return out
 
@@ -312,7 +313,7 @@ class Pacman(Manager):
 
 class Apt(Manager):
     name, label, tools = "apt", "apt", ("dpkg-query",)
-    options = [
+    options = (
         Option("autoremove", "Also remove packages nothing needs any more",
                "Packages installed only for it go too. apt also removes any that were left over from earlier "
                "removals; the list above shows them all while this is on."),
@@ -323,7 +324,7 @@ class Apt(Manager):
                "Removes only this package with dpkg, leaving the packages that need it installed.",
                warning="The packages that need it can stop working, and apt will want to fix or remove them "
                        "next time: {dependents}."),
-    ]
+    )
 
     def owner(self, path):
         out = _ok(self.run(["dpkg-query", "-S", path]))
@@ -332,7 +333,7 @@ class Apt(Manager):
                 return line.split(": ", 1)[0].split(",")[0].strip().split(":")[0]
         return ""
 
-    def _fields(self, pkg) -> List[str]:
+    def _fields(self, pkg) -> list[str]:
         out = _ok(self.run(["dpkg-query", "-W", "-f",
                             "${Version}\t${Installed-Size}\t${Essential}\t${Priority}\t${Section}\n", pkg]))
         parts = out.splitlines()[0].split("\t") if out else []
@@ -369,12 +370,11 @@ class Apt(Manager):
                 p.unneeded = [n for n in every if n not in p.removed]
                 p.removed += p.unneeded
         p.exact = r[0] == 0
-        m = re.search(r"essential packages will be removed\.?\s*\n.*?\n((?:\s+\S.*\n)+)", r[1], flags=re.I)
+        m = re.search(r"essential packages will be removed\.?\s*\n.*?\n((?:\s+\S.*\n)+)", r[1], flags=re.IGNORECASE)
         if m:
-            p.stops = "apt would remove packages the system can't run without: %s." % \
-                ", ".join(m.group(1).split())
+            p.stops = f"apt would remove packages the system can't run without: {', '.join(m.group(1).split())}."
         elif r[0] != 0:
-            err = [l[3:] if l.startswith("E: ") else l for l in r[1].splitlines() if l.startswith("E: ")]
+            err = [l.removeprefix("E: ") for l in r[1].splitlines() if l.startswith("E: ")]
             p.stops = "apt says: " + (" ".join(err) or "it can't remove this")
         for d in p.dependents:
             section = self._fields(d)[4]
@@ -428,7 +428,7 @@ class _Rpm(Manager):
     def files(self, pkg):
         return [l for l in _ok(self.run(["rpm", "-ql", pkg])).splitlines() if l.startswith("/")]
 
-    def _needed_by(self, pkgs) -> List[str]:
+    def _needed_by(self, pkgs) -> list[str]:
         r = self.run(["rpm", "-e", "--test"] + list(pkgs))
         if r is None:
             return []
@@ -436,10 +436,10 @@ class _Rpm(Manager):
         return [n for n in dict.fromkeys(names) if n not in pkgs]
 
     @staticmethod
-    def _table(text: str) -> Dict[str, List[str]]:
+    def _table(text: str) -> dict[str, list[str]]:
         """Package names under each heading of dnf's transaction table,
         by heading: {"removing dependent packages": [...], ...}."""
-        sections: Dict[str, List[str]] = {}
+        sections: dict[str, list[str]] = {}
         current = None
         for line in text.splitlines():
             if not line.strip():
@@ -461,13 +461,13 @@ class _Rpm(Manager):
 
 class Dnf(_Rpm):
     name, label, tools = "dnf", "dnf", ("dnf", "dnf5")
-    options = [
+    options = (
         Option("deps", "Remove packages only it needed",
                "Packages that were installed for it and that nothing else uses go too.", default=True),
         Option("nodeps", "Skip dependency checks",
                "Removes only this package with rpm, leaving the packages that need it installed.",
                warning="The packages that need it can stop working: {dependents}."),
-    ]
+    )
 
     def _dnf(self):
         return "dnf" if self.which("dnf") else "dnf5"
@@ -523,13 +523,13 @@ class Dnf(_Rpm):
 
 class Zypper(_Rpm):
     name, label, tools = "zypper", "zypper", ("zypper",)
-    options = [
+    options = (
         Option("deps", "Remove packages only it needed",
                "Packages that were installed for it and that nothing else uses go too.", default=True),
         Option("nodeps", "Skip dependency checks",
                "Removes only this package with rpm, leaving the packages that need it installed.",
                warning="The packages that need it can stop working: {dependents}."),
-    ]
+    )
 
     def preview(self, pkgs, opts):
         p = Preview()
@@ -565,9 +565,9 @@ class RpmOstree(_Rpm):
     layered on top can be removed, and that takes effect after a restart."""
     name, label, tools = "rpm-ostree", "rpm-ostree", ("rpm-ostree",)
     needs_root = False   # it asks for the password itself
-    options = []
+    options = ()
 
-    def _layered(self) -> List[str]:
+    def _layered(self) -> list[str]:
         out = _ok(self.run(["rpm-ostree", "status", "--json"]))
         try:
             data = json.loads(out)
@@ -607,13 +607,13 @@ def _xbps_name(pkgver: str) -> str:
 
 class Xbps(Manager):
     name, label, tools = "xbps", "xbps", ("xbps-query",)
-    options = [
+    options = (
         Option("deps", "Remove packages only it needed",
                "Packages that were installed for it and that nothing else uses go too.", default=True),
         Option("force", "Remove even if other packages need it",
                "xbps normally stops when something depends on it.",
                warning="The packages that need it can stop working: {dependents}."),
-    ]
+    )
 
     def owner(self, path):
         out = _ok(self.run(["xbps-query", "-o", path]))
@@ -640,7 +640,7 @@ class Xbps(Manager):
         r = self.run(argv + list(pkgs))
         if r is not None:
             p.output = r[1]
-            names = [_xbps_name(n) for n in re.findall(r"^(\S+) remove\b", r[1], flags=re.M)]
+            names = [_xbps_name(n) for n in re.findall(r"^(\S+) remove\b", r[1], flags=re.MULTILINE)]
             if r[0] == 0 and names:
                 p.removed = list(pkgs) + [n for n in names if n not in pkgs]
                 p.exact = True
@@ -648,7 +648,7 @@ class Xbps(Manager):
             p.removed = list(pkgs)
         p.unneeded = [n for n in p.removed if n not in pkgs]
         if p.dependents and "force" not in opts:
-            p.stops = "xbps would stop, because %s need%s it." % (", ".join(p.dependents),
+            p.stops = "xbps would stop, because {} need{} it.".format(", ".join(p.dependents),
                                                                   "s" if len(p.dependents) == 1 else "")
         return p
 
@@ -672,11 +672,11 @@ def _apk_name(pkgver: str) -> str:
 
 class Apk(Manager):
     name, label, tools = "apk", "apk", ("apk",)
-    options = [
+    options = (
         Option("rdepends", "Also remove packages that need it",
                "apk normally keeps it while something you installed needs it.",
                warning="Also removes: {dependents}."),
-    ]
+    )
 
     def owner(self, path):
         out = _ok(self.run(["apk", "info", "--who-owns", path]))
@@ -711,9 +711,9 @@ class Apk(Manager):
                 p.exact = True
             m = re.search(r"not removed due to:\s*\n((?:\s+.*\n?)+)", r[1])
             if m:
-                p.stops = ("apk would keep it, because something you installed needs it: %s. Turn on "
-                           "“Also remove packages that need it” to remove those too."
-                           % " ".join(m.group(1).split()))
+                needs = " ".join(m.group(1).split())
+                p.stops = (f"apk would keep it, because something you installed needs it: {needs}. Turn on "
+                           "“Also remove packages that need it” to remove those too.")
         if not p.removed:
             p.removed = list(pkgs) + (p.dependents if p.dependents_go else [])
         p.unneeded = [n for n in p.removed if n not in pkgs and n not in p.dependents]
@@ -739,10 +739,10 @@ class Apk(Manager):
 
 class Eopkg(Manager):
     name, label, tools = "eopkg", "eopkg", ("eopkg",)
-    options = [
+    options = (
         Option("purge", "Also remove its system-wide settings",
                "Deletes its configuration files in /etc too. Your own settings aren't affected."),
-    ]
+    )
 
     def owner(self, path):
         out = _ok(self.run(["eopkg", "search-file", path]))
@@ -771,12 +771,12 @@ class Eopkg(Manager):
 
 class Portage(Manager):
     name, label, tools = "portage", "Portage", ("emerge",)
-    options = [
+    options = (
         Option("unmerge", "Remove even if other packages need it",
                "Portage normally keeps it while something needs it.",
                warning="The packages that need it can stop working, and the next update may install it "
                        "again: {dependents}."),
-    ]
+    )
 
     def owner(self, path):
         if self.which("qfile"):
@@ -811,7 +811,7 @@ class Portage(Manager):
             deps = [l.split()[0] for l in m.group(1).splitlines() if l.strip()]
             p.dependents = [re.sub(r"-\d.*$", "", d) for d in deps if not d.startswith("@")]
             if p.dependents:
-                p.stops = "Portage would keep it, because %s need%s it." % (
+                p.stops = "Portage would keep it, because {} need{} it.".format(
                     ", ".join(p.dependents), "s" if len(p.dependents) == 1 else "")
         p.exact = r[0] == 0
         return p
@@ -841,13 +841,13 @@ class Nix(Manager):
     home-manager configuration come from there and go when you take them out."""
     name, label, tools = "nix", "Nix", ("nix-env", "nix")
     needs_root = False
-    options = []
+    options = ()
     asks_first = False
 
     def __init__(self, run: Run = run, which: Callable = shutil.which, home: str = ""):
         super().__init__(run, which)
         self.home = home or os.path.expanduser("~")
-        self._where: Dict[str, str] = {}
+        self._where: dict[str, str] = {}
 
     def owner(self, path):
         real = os.path.realpath(path)
@@ -888,7 +888,7 @@ class Nix(Manager):
 MANAGERS = [RpmOstree, Nix, Pacman, Apt, Dnf, Zypper, Xbps, Apk, Eopkg, Portage]
 
 
-def detect(run: Run = run, which: Callable = shutil.which, booted_ostree: Optional[bool] = None) -> List[Manager]:
+def detect(run: Run = run, which: Callable = shutil.which, booted_ostree: Optional[bool] = None) -> list[Manager]:
     """The package managers on this system, most specific first."""
     ostree = os.path.exists("/run/ostree-booted") if booted_ostree is None else booted_ostree
     found = []
@@ -900,7 +900,7 @@ def detect(run: Run = run, which: Callable = shutil.which, booted_ostree: Option
     return found
 
 
-def owner_of(path: str, managers: Sequence[Manager]) -> Tuple[Optional[Manager], str]:
+def owner_of(path: str, managers: Sequence[Manager]) -> tuple[Optional[Manager], str]:
     """(the manager, the package) that installed `path`, or (None, "")."""
     for m in managers:
         if isinstance(m, Nix) and "/nix/" not in os.path.realpath(path):
@@ -917,7 +917,7 @@ def blocked(manager: Manager, pkgs: Sequence[str]) -> str:
     for pkg in pkgs:
         why = manager.blocked(pkg) or needed_by_system(pkg)
         if not why and pkg in held:
-            why = "%s keeps it protected" % manager.label
+            why = f"{manager.label} keeps it protected"
         if why:
-            return "%s can't be uninstalled here, because %s." % (pkg, why)
+            return f"{pkg} can't be uninstalled here, because {why}."
     return ""

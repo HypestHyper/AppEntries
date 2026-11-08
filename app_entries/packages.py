@@ -6,7 +6,7 @@ import os
 import shutil
 import subprocess
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Optional
 
 
 @dataclass
@@ -16,7 +16,7 @@ class Owner:
     command: str   # the command that removes it
 
 
-def _run(argv: List[str]) -> Optional[str]:
+def _run(argv: list[str]) -> Optional[str]:
     try:
         out = subprocess.run(argv, capture_output=True, text=True, timeout=10,
                              env=dict(os.environ, LC_ALL="C"))
@@ -49,7 +49,7 @@ def owner_of(path: str, source: str = "system", run: Callable = _run,
     """The package that owns `path`, or None if it can't be told."""
     name = os.path.basename(path)
     if source == "flatpak":
-        app_id = name[:-len(".desktop")] if name.endswith(".desktop") else name
+        app_id = name.removesuffix(".desktop")
         return Owner(app_id, "flatpak", REMOVE["flatpak"].format(pkg=app_id))
     if source == "snap":
         snap = name.split("_", 1)[0]
@@ -74,10 +74,10 @@ def owner_of(path: str, source: str = "system", run: Callable = _run,
     return None
 
 
-def owners(apps, run: Callable = _run, which: Callable = shutil.which) -> Dict[str, Owner]:
+def owners(apps, run: Callable = _run, which: Callable = shutil.which) -> dict[str, Owner]:
     """Owners of the system entries of these apps, by app ID."""
     out = {}
-    cache: Dict[str, Optional[Owner]] = {}
+    cache: dict[str, Optional[Owner]] = {}
     for a in apps:
         path = a.base_path
         if not path or a.source not in ("system", "flatpak", "snap"):

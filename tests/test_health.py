@@ -1,6 +1,7 @@
 import os
 
 from conftest import entry
+
 from app_entries import desktop_entries as de
 from app_entries import health
 from app_entries import overrides as ov
@@ -91,7 +92,7 @@ def test_legacy_hidden(xdg):
     xdg.write(xdg.sys_b, "app.desktop", entry("Thing"))
     xdg.write(xdg.sys_b, "new.desktop", entry("New"))
     xdg.write(xdg.user, "app.desktop",
-              "[Desktop Entry]\nType=Application\nName=Thing\nHidden=true\n%s=true\n" % de.MANAGED_KEY)
+              f"[Desktop Entry]\nType=Application\nName=Thing\nHidden=true\n{de.MANAGED_KEY}=true\n")
     ov.set_hidden(by_id(de.scan(xdg.env))["new.desktop"], True, xdg.env)
     assert [a.id for a in health.legacy_hidden(de.scan(xdg.env))] == ["app.desktop"]
 

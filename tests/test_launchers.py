@@ -86,7 +86,7 @@ def test_plan_save_writes_icon_and_entry_and_ids_dont_clash(xdg):
     ov.apply_all(changes)
     assert did == "app-entries-my-tool.desktop"
     icon = ln.icon_path(did, xdg.env)
-    assert os.path.isfile(icon) and "<svg" in open(icon).read()
+    assert os.path.isfile(icon) and "<svg" in ln.read_text(icon)
     assert group_icon(xdg.user / did) == icon
     did2, _ = ln.plan_save(spec, env=xdg.env)
     assert did2 == "app-entries-my-tool-2.desktop"
@@ -196,7 +196,7 @@ def apply(changes):
 def test_commands_run_through_their_shell(xdg, tmp_path):
     out = tmp_path / "out"
     spec = ln.Spec(name="Update all", kind="commands", shell="sh",
-                   commands=["echo one > %s && echo two >> %s\nfor x in a b; do echo $x >> %s; done" % (out, out, out)])
+                   commands=[f"echo one > {out} && echo two >> {out}\nfor x in a b; do echo $x >> {out}; done"])
     assert ln.problems(spec) == []
     did, changes = ln.plan_save(spec, env=xdg.env)
     apply(changes)
@@ -213,7 +213,7 @@ def test_commands_run_through_their_shell(xdg, tmp_path):
 def test_several_commands_each_open_in_a_terminal(xdg, tmp_path):
     out = tmp_path / "out"
     spec = ln.Spec(name="Two", kind="commands", shell="sh", terminal=True,
-                   commands=["echo first >> %s" % out, "echo second >> %s" % out])
+                   commands=[f"echo first >> {out}", f"echo second >> {out}"])
     did, changes = ln.plan_save(spec, env=xdg.env)
     apply(changes)
     d = de.DesktopFile((xdg.user / did).read_text()).group_dict()

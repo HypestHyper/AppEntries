@@ -1,6 +1,7 @@
 import os
 
 from conftest import entry
+
 from app_entries import appimages, launchers, trash, webapps
 from app_entries import desktop_entries as de
 from app_entries import overrides as ov
@@ -11,8 +12,9 @@ def test_trash_move_and_restore(xdg):
     f.write_bytes(b"ELF...")
     t = trash.move(str(f), xdg.env)
     assert not f.exists() and os.path.exists(t.file)
-    info = open(t.info).read()
-    assert "Path=%s" % f in info and "DeletionDate=" in info
+    with open(t.info) as fh:
+        info = fh.read()
+    assert f"Path={f}" in info and "DeletionDate=" in info
     f2 = xdg.tmp / "big.AppImage"
     f2.write_bytes(b"other")
     t2 = trash.move(str(f2), xdg.env)
@@ -28,8 +30,8 @@ def test_appimage_removal_finds_every_entry_icon_and_file_type(xdg):
     image.write_bytes(b"\x7fELF" + b"0" * 100)
     kit = "appimagekit_" + "a" * 32
     # What AppImageLauncher / appimaged set up, plus a second launcher someone made.
-    xdg.write(xdg.user, kit + "-Tool.desktop", entry("Tool", '"%s" %%U' % image, Icon=kit + "_tool"))
-    xdg.write(xdg.user, "tool-mine.desktop", entry("Tool (mine)", "env FOO=1 %s" % image, Icon="shared-icon"))
+    xdg.write(xdg.user, kit + "-Tool.desktop", entry("Tool", f'"{image}" %U', Icon=kit + "_tool"))
+    xdg.write(xdg.user, "tool-mine.desktop", entry("Tool (mine)", f"env FOO=1 {image}", Icon="shared-icon"))
     xdg.write(xdg.user, "other.desktop", entry("Other", "other", Icon="shared-icon"))
     icon = home_data / "icons" / "hicolor" / "256x256" / "apps" / (kit + "_tool.png")
     icon.parent.mkdir(parents=True)

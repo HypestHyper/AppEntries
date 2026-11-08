@@ -1,5 +1,6 @@
 """The app's single stylesheet, generated from the palette."""
 import re
+from typing import Optional
 
 from gi.repository import Gdk, GLib, Gtk
 
@@ -376,7 +377,7 @@ def scale_px(css: str, f: float) -> str:
             nv = v * (1 - (1 - f) * 0.6) if font else v * f
             if font:
                 nv = max(10, nv)
-            return "%dpx" % round(nv)
+            return f"{round(nv)}px"
         return inner
 
     out = []
@@ -421,7 +422,7 @@ class Style:
 
     def _reload(self, pal=None):
         css = CSS.format(FONT=FONT, ICON=ICON, EASE=EASE, SPRING=SPRING, **(pal or self.palette))
-        css += "".join(".swatch-%s { background-color: #%s; }\n" % (s, s)
+        css += "".join(f".swatch-{s} {{ background-color: #{s}; }}\n"
                        for s, _n in theme.SEEDS + theme.EXTRA_COLORS)
         load_css(self.main, scale_px(css, self.factor))
 
@@ -446,7 +447,8 @@ class Style:
         from .appearance import set_gtk_dark
         set_gtk_dark(Gtk.Settings.get_default(), dark)
 
-    def recolor(self, seed: str = None, dark: bool = None, animate: bool = True, preset: str = None):
+    def recolor(self, seed: Optional[str] = None, dark: Optional[bool] = None, animate: bool = True,
+                preset: Optional[str] = None):
         """Switch accent, palette and/or light/dark, blending over ~300 ms."""
         self.seed = self.seed if seed is None else seed
         self.preset = self.preset if preset is None else preset

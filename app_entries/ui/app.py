@@ -6,16 +6,48 @@ from gettext import ngettext
 
 from gi.repository import Gdk, Gio, GLib, Gtk
 
-from .. import (APP_ID, APP_NAME, appimages, autostart, desktop_entries, editing, health, history, icon_lookup,
-               launcher_refresh, launchers, overrides, packages, profile, symbols, terminal, timing, trash, uninstall,
-               webapps)
+from .. import (
+    APP_ID,
+    APP_NAME,
+    appimages,
+    autostart,
+    desktop_entries,
+    editing,
+    health,
+    history,
+    icon_lookup,
+    launcher_refresh,
+    launchers,
+    overrides,
+    packages,
+    profile,
+    symbols,
+    terminal,
+    timing,
+    trash,
+    uninstall,
+    webapps,
+)
 from ..model import AppItem, AppStore
-from .app_card import AppCard, forget_icons
+from .app_card import AppCard, forget_icons, label_for_source
 from .dialogs import Dialog, choose_file, error_dialog, run_bg
 from .style import SIZES
-from .app_card import label_for_source
-from .widgets import (Chip, Clamp, SearchField, Snackbar, TabBar, Toggle, WrapBox, button, hbox, icon,
-                      label, set_text, spinner, vbox)
+from .widgets import (
+    Chip,
+    Clamp,
+    SearchField,
+    Snackbar,
+    TabBar,
+    Toggle,
+    WrapBox,
+    button,
+    hbox,
+    icon,
+    label,
+    set_text,
+    spinner,
+    vbox,
+)
 
 
 def _lazy(module, name):
@@ -657,7 +689,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
         if query and not count(tuple(k for k, _t, _d in others)) and count(("query",)):
             # Nothing matches the search, whatever the other filters: just that.
-            return count(("query",)), [(query[0][1] + " (%d)" % count(("query",)), clear_query)], False
+            return count(("query",)), [(query[0][1] + f" ({count(('query',))})", clear_query)], False
         for active, kept in ((others, bool(query)), (query + others, False)):
             keys = tuple(k for k, _t, _d in active)
             n = count(keys) if keys else 0
@@ -667,7 +699,7 @@ class MainWindow(Gtk.ApplicationWindow):
             for key, text, do in active:
                 if count(tuple(k for k in keys if k != key)) < n:
                     alone = count((key,))
-                    out.append((text + (" (%d)" % alone if alone else ""), do))
+                    out.append((text + (f" ({alone})" if alone else ""), do))
             return n, out, kept
         return 0, [], False
 
@@ -703,7 +735,7 @@ class MainWindow(Gtk.ApplicationWindow):
         app = self.get_application()
         seed = app.effective_seed() if app is not None else theme.DEFAULT_SEED
         folder = os.path.join(GLib.get_user_runtime_dir() or GLib.get_user_cache_dir(), "app-entries")
-        path = os.path.join(folder, "logo-%s.svg" % seed.lstrip("#"))
+        path = os.path.join(folder, "logo-{}.svg".format(seed.lstrip("#")))
         try:
             if not os.path.isfile(path):
                 os.makedirs(folder, exist_ok=True)
@@ -711,11 +743,11 @@ class MainWindow(Gtk.ApplicationWindow):
                     f.write(app_icon.render(seed, marker=False))
                 os.replace(path + ".tmp", path)
             self.logo.set_from_paintable(Gtk.IconPaintable.new_for_file(Gio.File.new_for_path(path), 40, 2))
-            timing.mark("  logo drawn from %s" % path)
+            timing.mark(f"  logo drawn from {path}")
         except Exception as e:  # noqa: BLE001 - only the logo
             # Not from the icon theme even then: that would hold up the window.
             self.logo.clear()
-            timing.mark("  logo couldn't be drawn: %r" % e)
+            timing.mark(f"  logo couldn't be drawn: {e!r}")
 
     def after_first_frame(self):
         """Called once the window has drawn for the first time."""
@@ -1127,7 +1159,7 @@ class MainWindow(Gtk.ApplicationWindow):
         def finished(result):
             self.queue_rescan(0)
             if isinstance(result, Exception):
-                why = ("%s (%s)" % (result.reason, result.path) if isinstance(result, overrides.OverrideError)
+                why = (f"{result.reason} ({result.path})" if isinstance(result, overrides.OverrideError)
                        else str(result))
                 self._record(message, [], [], reinstall, steam)
                 done(why)
@@ -1440,7 +1472,7 @@ class MainWindow(Gtk.ApplicationWindow):
             run_bg(lambda: profile.export(path, apps, include_others), done)
 
         choose_file(parent, _("Export your changes"), chosen, patterns=("*.json",), filter_name=_("Exports"),
-                    save_as="app-entries-%s.json" % GLib.DateTime.new_now_local().format("%Y-%m-%d"))
+                    save_as="app-entries-{}.json".format(GLib.DateTime.new_now_local().format("%Y-%m-%d")))
 
     def _import(self, parent=None):
         parent = parent or self

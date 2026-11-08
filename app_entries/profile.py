@@ -15,12 +15,20 @@ import json
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 from . import APP_NAME, VERSION
 from . import desktop_entries as de
-from .overrides import (Change, NeedsConfirmation, OverrideError, is_pristine, override_path, plan_set_hidden,
-                        read_bytes, read_text)
+from .overrides import (
+    Change,
+    NeedsConfirmation,
+    OverrideError,
+    is_pristine,
+    override_path,
+    plan_set_hidden,
+    read_bytes,
+    read_text,
+)
 
 FORMAT = 1
 DATA = "@DATA@"  # stands for ~/.local/share (XDG_DATA_HOME) in the file
@@ -45,9 +53,9 @@ class Item:
 
 @dataclass
 class Plan:
-    changes: List[Change] = field(default_factory=list)
-    adds: List[str] = field(default_factory=list)       # one line per change, for showing before importing
-    skipped: List[Tuple[str, str]] = field(default_factory=list)   # (name, why)
+    changes: list[Change] = field(default_factory=list)
+    adds: list[str] = field(default_factory=list)       # one line per change, for showing before importing
+    skipped: list[tuple[str, str]] = field(default_factory=list)   # (name, why)
     unchanged: int = 0
 
 
@@ -70,7 +78,7 @@ def _local(text: str, data_dir: str) -> str:
     return text.replace(DATA, data_dir)
 
 
-def _icon_files(text: str, data_dir: str) -> List[str]:
+def _icon_files(text: str, data_dir: str) -> list[str]:
     """Absolute icon files in the data folder that the entry uses."""
     found = []
     for k, v in de.DesktopFile(text).items():
@@ -81,7 +89,7 @@ def _icon_files(text: str, data_dir: str) -> List[str]:
     return found
 
 
-def collect(apps: List[de.App], include_others: bool = False, env=None) -> Tuple[List[Item], int]:
+def collect(apps: list[de.App], include_others: bool = False, env=None) -> tuple[list[Item], int]:
     """What to export, and how many files in your folder were left out
     because App Entries didn't make them (see include_others)."""
     items, others = [], 0
@@ -114,11 +122,11 @@ def collect(apps: List[de.App], include_others: bool = False, env=None) -> Tuple
     return items, others
 
 
-def export_text(apps: List[de.App], include_others: bool = False, env=None) -> Tuple[str, List[Item], int]:
+def export_text(apps: list[de.App], include_others: bool = False, env=None) -> tuple[str, list[Item], int]:
     """The export file's text, the items in it, and how many files were left out."""
     data_dir = de.user_data_dir(env)
     items, others = collect(apps, include_others, env)
-    files: Dict[str, str] = {}
+    files: dict[str, str] = {}
     out = []
     for it in items:
         entry = {"id": it.id, "name": it.name, "kind": it.kind}
@@ -134,7 +142,7 @@ def export_text(apps: List[de.App], include_others: bool = False, env=None) -> T
     return json.dumps(doc, indent=1, ensure_ascii=False) + "\n", items, others
 
 
-def export(path: str, apps: List[de.App], include_others: bool = False, env=None) -> Tuple[List[Item], int]:
+def export(path: str, apps: list[de.App], include_others: bool = False, env=None) -> tuple[list[Item], int]:
     text, items, others = export_text(apps, include_others, env)
     tmp = path + ".tmp"
     try:
@@ -142,7 +150,7 @@ def export(path: str, apps: List[de.App], include_others: bool = False, env=None
             f.write(text)
         os.replace(tmp, path)
     except OSError as e:
-        raise ProfileError("%s: %s" % (path, e.strerror or e)) from e
+        raise ProfileError(f"{path}: {e.strerror or e}") from e
     return items, others
 
 
@@ -155,9 +163,9 @@ def read(path: str) -> dict:
         with open(path, encoding="utf-8") as f:
             doc = json.load(f)
     except OSError as e:
-        raise ProfileError("%s: %s" % (path, e.strerror or e)) from e
+        raise ProfileError(f"{path}: {e.strerror or e}") from e
     except ValueError as e:
-        raise ProfileError("This isn't an App Entries export: %s" % e) from e
+        raise ProfileError(f"This isn't an App Entries export: {e}") from e
     return parse(doc)
 
 
@@ -171,7 +179,7 @@ def parse(doc) -> dict:
                 "hidden", "shown", "entry", "launcher"):
             raise ProfileError("The file is damaged: an item can't be read.")
         if not it["id"].endswith(".desktop") or "/" in it["id"] or it["id"].startswith("."):
-            raise ProfileError("The file is damaged: %r isn't an app ID." % it["id"])
+            raise ProfileError("The file is damaged: {!r} isn't an app ID.".format(it["id"]))
     return doc
 
 
@@ -185,7 +193,7 @@ def _safe_file(rel: str, data_dir: str) -> Optional[str]:
     return path if path.startswith(allowed) else None
 
 
-def plan_import(doc: dict, apps: List[de.App], env=None) -> Plan:
+def plan_import(doc: dict, apps: list[de.App], env=None) -> Plan:
     """The changes that bring this machine in line with the file. Nothing is
     written here."""
     plan = Plan()
@@ -212,7 +220,7 @@ def plan_import(doc: dict, apps: List[de.App], env=None) -> Plan:
                 plan.unchanged += 1
             else:
                 plan.changes.append(change)
-                plan.adds.append("%s %s" % ("Hide" if it.kind == "hidden" else "Show", it.name))
+                plan.adds.append("{} {}".format("Hide" if it.kind == "hidden" else "Show", it.name))
             continue
 
         text = _local(it.text, data_dir)
@@ -230,7 +238,7 @@ def plan_import(doc: dict, apps: List[de.App], env=None) -> Plan:
             plan.changes.append(Change(it.id, it.name, path, before, text, _hides(text)))
             verb = ("Replace your launcher" if it.kind == "launcher" else "Replace your edit of") if before \
                 else ("Add launcher" if it.kind == "launcher" else "Edit")
-            plan.adds.append("%s %s" % (verb, it.name))
+            plan.adds.append(f"{verb} {it.name}")
         for k, v in de.DesktopFile(it.text).items():
             if (k in _ICON_KEYS or k.startswith("Icon[")) and de.unescape(v).startswith(DATA + "/"):
                 wanted_files.add(de.unescape(v))

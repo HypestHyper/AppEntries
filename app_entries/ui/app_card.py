@@ -269,7 +269,7 @@ class AppCard(Gtk.Box):
         if not second and a.source == "webapp":
             second = next((w[len("--app="):] for w in a.exec.split() if w.startswith("--app=")), "")
         if a.comment and second != a.comment and len(second) < 30:
-            second = "%s · %s" % (second, a.comment)
+            second = f"{second} · {a.comment}"
         set_text(self.secondary, second or _("No description"))
         set_text(self.tertiary, a.id)
         if a.icon != self._icon_name:

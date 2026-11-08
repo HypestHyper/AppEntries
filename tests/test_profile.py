@@ -2,8 +2,8 @@ import json
 import os
 
 import pytest
-
 from conftest import entry
+
 from app_entries import cli, profile
 from app_entries import desktop_entries as de
 from app_entries import overrides as ov

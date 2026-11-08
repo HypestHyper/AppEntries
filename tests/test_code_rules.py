@@ -19,6 +19,6 @@ def test_no_function_shadows_the_translation_function():
                 continue
             for node in ast.walk(fn):
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "_":
-                    bad.append("%s:%d" % (path.relative_to(PKG.parent), fn.lineno))
+                    bad.append(f"{path.relative_to(PKG.parent)}:{fn.lineno}")
                     break
     assert bad == []

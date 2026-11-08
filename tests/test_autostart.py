@@ -1,6 +1,6 @@
 import pytest
-
 from conftest import entry
+
 from app_entries import autostart as au
 from app_entries import desktop_entries as de
 from app_entries import overrides as ov

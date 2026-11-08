@@ -12,7 +12,7 @@ import os
 import tempfile
 import time
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Optional
 
 from . import trash
 from .overrides import Change, ConflictError, OverrideError, undo_all
@@ -26,13 +26,13 @@ class Entry:
     id: int
     when: float
     message: str
-    changes: List[Change] = field(default_factory=list)
-    trashed: List[trash.Trashed] = field(default_factory=list)
+    changes: list[Change] = field(default_factory=list)
+    trashed: list[trash.Trashed] = field(default_factory=list)
     undone: float = 0.0          # when it was undone, 0 if it wasn't
     too_big: bool = False        # its files weren't kept, so it can't be undone
     # Commands that install again what was uninstalled (run in a terminal),
     # and whether they open Steam instead.
-    reinstall: List[List[str]] = field(default_factory=list)
+    reinstall: list[list[str]] = field(default_factory=list)
     reinstall_steam: bool = False
 
     @property
@@ -40,7 +40,7 @@ class Entry:
         return not self.undone and not self.too_big and bool(self.changes or self.trashed)
 
     @property
-    def paths(self) -> List[str]:
+    def paths(self) -> list[str]:
         return [c.path for c in self.changes] + [t.original for t in self.trashed]
 
 
@@ -88,7 +88,7 @@ def _from_json(d: dict) -> Entry:
     )
 
 
-def load(env=None) -> List[Entry]:
+def load(env=None) -> list[Entry]:
     """Newest first."""
     try:
         with open(path(env), encoding="utf-8") as f:
@@ -99,7 +99,7 @@ def load(env=None) -> List[Entry]:
     return sorted(entries, key=lambda e: e.id, reverse=True)
 
 
-def _save(entries: List[Entry], env=None) -> None:
+def _save(entries: list[Entry], env=None) -> None:
     p = path(env)
     os.makedirs(os.path.dirname(p), exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(p), prefix=".history-", suffix=".tmp")
@@ -116,8 +116,8 @@ def _save(entries: List[Entry], env=None) -> None:
         raise
 
 
-def record(message: str, changes: List[Change], trashed: Optional[List[trash.Trashed]] = None,
-           env=None, reinstall: Optional[List[List[str]]] = None, reinstall_steam: bool = False) -> Optional[Entry]:
+def record(message: str, changes: list[Change], trashed: Optional[list[trash.Trashed]] = None,
+           env=None, reinstall: Optional[list[list[str]]] = None, reinstall_steam: bool = False) -> Optional[Entry]:
     """Add an entry. Returns it, or None if there was nothing to record or
     the log couldn't be written (the change itself is already made)."""
     trashed = list(trashed or [])
@@ -138,7 +138,7 @@ def record(message: str, changes: List[Change], trashed: Optional[List[trash.Tra
     return e
 
 
-def add_trashed(entry_id: int, trashed: List[trash.Trashed], env=None) -> None:
+def add_trashed(entry_id: int, trashed: list[trash.Trashed], env=None) -> None:
     """Things moved to the Trash after the files were changed."""
     if not trashed:
         return
@@ -175,16 +175,16 @@ def undo(entry_id: int, env=None) -> Entry:
                         "Reinstall to get the app back.")
     for t in e.trashed:
         if not os.path.lexists(t.file):
-            raise UndoError("%s isn't in the Trash any more, so this can't be undone." % t.original, t.original)
+            raise UndoError(f"{t.original} isn't in the Trash any more, so this can't be undone.", t.original)
         if os.path.lexists(t.original):
-            raise UndoError("Something is already at %s, so this can't be undone." % t.original, t.original)
+            raise UndoError(f"Something is already at {t.original}, so this can't be undone.", t.original)
     try:
         undo_all(e.changes)
     except ConflictError as err:
         raise UndoError("A file was changed after this, by a later change or by hand. Undo the later "
                         "changes first.", err.path) from err
     except OverrideError as err:
-        raise UndoError("The file couldn't be changed: %s." % err.reason, err.path) from err
+        raise UndoError(f"The file couldn't be changed: {err.reason}.", err.path) from err
     for t in e.trashed:
         trash.restore(t)
     e.undone = time.time()

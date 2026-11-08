@@ -12,7 +12,7 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field, fields
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from . import desktop_entries as de
 from . import symbols
@@ -31,11 +31,12 @@ def _icon_key(field_name: str) -> str:
     return _ICON_PREFIX + "".join(p.capitalize() for p in field_name.split("_"))
 
 
-def icon_lines(ic: symbols.IconChoice) -> List[str]:
+def icon_lines(ic: symbols.IconChoice) -> list[str]:
     out = []
     for f in fields(ic):
         v = getattr(ic, f.name)
-        out.append("%s=%s" % (_icon_key(f.name), ("true" if v else "false") if isinstance(v, bool) else escape(str(v))))
+        value = ("true" if v else "false") if isinstance(v, bool) else escape(str(v))
+        out.append(f"{_icon_key(f.name)}={value}")
     return out
 
 
@@ -72,15 +73,15 @@ class Spec:
     args: str = ""               # more arguments, written as in a shell (web apps; older launchers)
     # With kind commands: what to run, as typed in a terminal. Each item opens
     # in its own terminal when there's more than one.
-    commands: List[str] = field(default_factory=list)
+    commands: list[str] = field(default_factory=list)
     shell: str = "sh"            # with kind commands: the shell that runs them
-    scripts: List[str] = field(default_factory=list)   # the files they're kept in (set when saving)
+    scripts: list[str] = field(default_factory=list)   # the files they're kept in (set when saving)
     workdir: str = ""            # working folder, empty for the user's home
     terminal: bool = False
     keep_open: bool = False      # with terminal: wait for Enter when it finishes
     accepts_files: bool = False  # pass files opened with it as arguments (%F)
-    categories: List[str] = field(default_factory=lambda: ["Utility"])
-    keywords: List[str] = field(default_factory=list)
+    categories: list[str] = field(default_factory=lambda: ["Utility"])
+    keywords: list[str] = field(default_factory=list)
     icon_kind: str = "symbol"    # symbol, theme or file
     icon: symbols.IconChoice = field(default_factory=symbols.IconChoice)
     icon_value: str = ""         # theme icon name or image path
@@ -91,7 +92,7 @@ class Spec:
     wm_class: str = ""           # StartupWMClass: lets docks match the window to the launcher
 
 
-def split_program(program: str, args: str = "") -> Tuple[str, str]:
+def split_program(program: str, args: str = "") -> tuple[str, str]:
     """The program field may hold a whole command (`htop --help`). An existing
     file path is taken as it is, even with spaces; otherwise the first word is
     the program and the rest go in front of the arguments."""
@@ -118,18 +119,18 @@ def quote_arg(arg: str) -> str:
     if arg and not (set(arg) & _RESERVED):
         return arg
     inner = re.sub(r'(["`$\\])', r"\\\1", arg)
-    return '"%s"' % inner
+    return f'"{inner}"'
 
 
 def scripts_dir(env=None) -> str:
     return os.path.join(de.user_data_dir(env), "app-entries", "scripts")
 
 
-def script_paths(did: str, shell: str = "sh", count: int = 1, env=None) -> List[str]:
+def script_paths(did: str, shell: str = "sh", count: int = 1, env=None) -> list[str]:
     """Where a commands launcher keeps its commands, one file for each."""
     stem = os.path.join(scripts_dir(env), did[:-len(".desktop")])
     ext = ".fish" if shell == "fish" else ".sh"
-    return [stem + ext] + ["%s-%d%s" % (stem, n, ext) for n in range(2, count + 1)]
+    return [stem + ext] + [f"{stem}-{n}{ext}" for n in range(2, count + 1)]
 
 
 def starter_path(did: str, env=None) -> str:
@@ -141,7 +142,7 @@ SCRIPT_NOTE = "# Commands for the %s launcher, made with App Entries. Change the
 
 
 def script_text(spec: Spec, n: int = 0) -> str:
-    return "#!/usr/bin/env %s\n%s\n%s\n" % (spec.shell, SCRIPT_NOTE % spec.name.strip(),
+    return "#!/usr/bin/env {}\n{}\n{}\n".format(spec.shell, SCRIPT_NOTE % spec.name.strip(),
                                               spec.commands[n].rstrip("\n"))
 
 
@@ -158,7 +159,7 @@ def commands_of(text: str) -> str:
 _KEEP_OPEN = '; status=$?; printf "\\n[Finished with exit code %s. Press Enter to close.]" "$status"; read _'
 
 
-def _run_argv(spec: Spec, script: str) -> List[str]:
+def _run_argv(spec: Spec, script: str) -> list[str]:
     """How one set of commands is run: by its shell, waiting for Enter at the
     end when the terminal is kept open."""
     argv = [spec.shell, script]
@@ -174,25 +175,26 @@ def starter_text(spec: Spec) -> str:
     xdg-terminal-exec, then known ones), so changing terminals doesn't break it."""
     from .terminal import TERMINALS
     lines = ["#!/bin/sh",
-             "# Opens each set of commands of the %s launcher in its own terminal. Made with App Entries; "
-             "change it there." % spec.name.strip(),
+             (f"# Opens each set of commands of the {spec.name.strip()} launcher in its own terminal. "
+              "Made with App Entries; change it there."),
              "open_terminal() {",
              '  if [ -n "$TERMINAL" ] && command -v "${TERMINAL%% *}" >/dev/null 2>&1; then',
              '    case "$(basename "${TERMINAL%% *}")" in']
     for name, prefix in TERMINALS.items():
-        lines.append('      %s) $TERMINAL %s"$@" & return ;;' % (name, "".join(shlex.quote(p) + " " for p in prefix)))
+        words = "".join(shlex.quote(p) + " " for p in prefix)
+        lines.append(f'      {name}) $TERMINAL {words}"$@" & return ;;')
     lines += ['      *) $TERMINAL -e "$@" & return ;;', "    esac", "  fi"]
     for name, prefix in TERMINALS.items():
-        lines.append('  if command -v %s >/dev/null 2>&1; then %s %s"$@" & return; fi'
-                     % (name, name, "".join(shlex.quote(p) + " " for p in prefix)))
+        words = "".join(shlex.quote(p) + " " for p in prefix)
+        lines.append(f'  if command -v {name} >/dev/null 2>&1; then {name} {words}"$@" & return; fi')
     lines += ['  echo "No terminal app was found." >&2', "  return 1", "}"]
     for script in spec.scripts:
-        lines.append("open_terminal %s \"$@\"" % shlex.join(_run_argv(spec, script)))
+        lines.append(f"open_terminal {shlex.join(_run_argv(spec, script))} \"$@\"")
     lines += ["wait", ""]
     return "\n".join(lines)
 
 
-def available_shells(which=shutil.which) -> List[str]:
+def available_shells(which=shutil.which) -> list[str]:
     """The shells installed here; sh is always there."""
     return [name for name, _f in SHELLS if name == "sh" or which(name)]
 
@@ -232,7 +234,7 @@ def build_exec(spec: Spec, did: str = "") -> str:
     try:
         extra = shlex.split(args)
     except ValueError as e:
-        raise ValueError("The arguments have an unclosed quote: %s" % e)
+        raise ValueError(f"The arguments have an unclosed quote: {e}")
     argv = [os.path.expanduser(program)] + extra
     if spec.terminal and spec.keep_open:
         script = (shlex.join(argv) + (' "$@"' if spec.accepts_files else "") +
@@ -244,7 +246,7 @@ def build_exec(spec: Spec, did: str = "") -> str:
     return line
 
 
-def parse_exec(line: str) -> List[str]:
+def parse_exec(line: str) -> list[str]:
     """Split an Exec value into arguments, undoing quote_arg (field codes are
     kept as they are). For tests and the raw-entry check."""
     out, cur, i, quoted, started = [], [], 0, False, False
@@ -289,7 +291,7 @@ def new_id(name: str, env=None, taken=()) -> str:
     base = PREFIX + slug(name)
     did, n = base + ".desktop", 2
     while did in taken or os.path.exists(os.path.join(folder, did)):
-        did, n = "%s-%d.desktop" % (base, n), n + 1
+        did, n = f"{base}-{n}.desktop", n + 1
     return did
 
 
@@ -298,7 +300,7 @@ def icon_path(did: str, env=None) -> str:
                         did[:-len(".desktop")] + ".svg")
 
 
-def problems(spec: Spec) -> List[str]:
+def problems(spec: Spec) -> list[str]:
     out = []
     if not spec.name.strip():
         out.append("Give the launcher a name.")
@@ -306,7 +308,7 @@ def problems(spec: Spec) -> List[str]:
         if not any(c.strip() for c in spec.commands):
             out.append("Write the commands it runs.")
         if spec.shell not in dict(SHELLS) or (spec.shell != "sh" and not shutil.which(spec.shell)):
-            out.append("%s isn't installed." % spec.shell)
+            out.append(f"{spec.shell} isn't installed.")
     else:
         if not spec.program.strip():
             out.append("Choose the script or program it runs.")
@@ -445,7 +447,7 @@ def read_spec(text: str) -> Optional[Spec]:
     return spec
 
 
-def plan_save(spec: Spec, did: Optional[str] = None, env=None) -> Tuple[str, List[Change]]:
+def plan_save(spec: Spec, did: Optional[str] = None, env=None) -> tuple[str, list[Change]]:
     """Changes that write the launcher (and its icon). `did` is the existing
     ID when editing, None for a new launcher. Returns (id, changes)."""
     errs = problems(spec)
@@ -500,7 +502,7 @@ def symbols_icon(svg_text: str) -> bool:
     return "made with App Entries" in svg_text
 
 
-def plan_delete(app: de.App, env=None) -> List[Change]:
+def plan_delete(app: de.App, env=None) -> list[Change]:
     """Delete a launcher made with App Entries, and its icon."""
     changes = []
     ipath = icon_path(app.id, env)
@@ -519,7 +521,7 @@ def plan_delete(app: de.App, env=None) -> List[Change]:
     return changes
 
 
-def styled_icon(app: de.App) -> Optional[Tuple[str, str, symbols.IconChoice]]:
+def styled_icon(app: de.App) -> Optional[tuple[str, str, symbols.IconChoice]]:
     """(icon file, its text, the choice it was drawn from) when the app's
     icon was made with App Entries, else None."""
     path = app.icon
@@ -540,7 +542,7 @@ def styled_icon(app: de.App) -> Optional[Tuple[str, str, symbols.IconChoice]]:
     return (path, text, choice) if choice is not None else None
 
 
-def plan_restyle(apps: List[de.App], style: symbols.IconChoice) -> Tuple[List[Change], List[de.App]]:
+def plan_restyle(apps: list[de.App], style: symbols.IconChoice) -> tuple[list[Change], list[de.App]]:
     """Give every app's styled icon `style`'s look, keeping its symbol.
     Returns the changes and the apps skipped because their icon wasn't made
     with App Entries."""
@@ -572,7 +574,7 @@ def plan_restyle(apps: List[de.App], style: symbols.IconChoice) -> Tuple[List[Ch
 def duplicate(text: str) -> Optional[Spec]:
     spec = read_spec(text)
     if spec is not None:
-        spec.name = "%s (copy)" % spec.name
+        spec.name = f"{spec.name} (copy)"
     return spec
 
 
@@ -586,7 +588,7 @@ def make_executable(path: str) -> None:
 # Checking hand-written entries
 
 
-def check_raw(text: str) -> Tuple[List[str], List[str]]:
+def check_raw(text: str) -> tuple[list[str], list[str]]:
     """(errors, warnings) for hand-written entry text. Errors stop saving."""
     errors, warnings = [], []
     df = de.DesktopFile(text)

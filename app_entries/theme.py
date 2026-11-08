@@ -34,7 +34,7 @@ def valid_seed(seed: str) -> str:
 
 def _hex(h: float, s: float, l: float) -> str:
     r, g, b = colorsys.hls_to_rgb(h % 1.0, max(0.0, min(1.0, l)), max(0.0, min(1.0, s)))
-    return "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
+    return f"#{round(r * 255):02x}{round(g * 255):02x}{round(b * 255):02x}"
 
 
 def _hue_sat(seed: str):
@@ -135,7 +135,7 @@ def mix_palette(old: dict, new: dict, t: float) -> dict:
             out[k] = v
             continue
         a, b = _rgb(old.get(k, v)), _rgb(v)
-        out[k] = "#%02x%02x%02x" % tuple(round(x + (y - x) * t) for x, y in zip(a, b))
+        out[k] = "#{:02x}{:02x}{:02x}".format(*tuple(round(x + (y - x) * t) for x, y in zip(a, b)))
     return out
 
 
@@ -204,7 +204,7 @@ PRESETS = {
 
 def _mix(a: str, b: str, t: float) -> str:
     x, y = _rgb(a), _rgb(b)
-    return "#%02x%02x%02x" % tuple(round(i + (j - i) * t) for i, j in zip(x, y))
+    return "#{:02x}{:02x}{:02x}".format(*tuple(round(i + (j - i) * t) for i, j in zip(x, y)))
 
 
 def _lum(h: str) -> float:

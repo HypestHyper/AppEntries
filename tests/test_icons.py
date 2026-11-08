@@ -172,7 +172,7 @@ DISCORD_D = ("M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.
 def test_arc_flags_written_together():
     subs, ok = lib._parse(DISCORD_D)
     assert ok and len(subs) == 2
-    arc = [seg for seg in subs[0] if seg[0] == "A"][0]
+    arc = next(seg for seg in subs[0] if seg[0] == "A")
     assert arc[1][:5] == (19.7913, 19.7913, 0.0, 0.0, 0.0)
     assert abs(arc[1][5] - (20.317 - 4.8851)) < 1e-9          # end point read right after the flags
     assert len(lib.subpaths(lib.outer_only(DISCORD_D))) == 1   # the eye is a hole: dropped
@@ -184,7 +184,7 @@ def test_unreadable_path_is_outlined_whole():
 
 def test_discord_border_keeps_the_logo(tmp_path):
     svg = ('<svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><title>Discord</title>'
-           '<path d="%s"/></svg>' % DISCORD_D)
+           f'<path d="{DISCORD_D}"/></svg>')
     path = write(tmp_path, "d.svg", svg)
     out = symbols.render(symbols.IconChoice(source="file", path=path, shape="none", border=True))
     border_paths = [p for p in ET.fromstring(out).iter("{http://www.w3.org/2000/svg}path")

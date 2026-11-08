@@ -16,8 +16,9 @@ import re
 import shlex
 import shutil
 import subprocess
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Optional
 
 from . import appimages, autostart, defaults, launchers, pkgmanagers
 from . import desktop_entries as de
@@ -45,28 +46,28 @@ class Plan:
     target: str                     # the package, app ID or file
     version: str = ""
     size: int = 0
-    removes: List[Line] = field(default_factory=list)
-    also: List[Option] = field(default_factory=list)       # "Also remove": off unless turned on
-    advanced: List[Option] = field(default_factory=list)
-    folders: Dict[str, List[str]] = field(default_factory=dict)   # option key -> folders to the Trash
-    folder_sizes: Dict[str, int] = field(default_factory=dict)
+    removes: list[Line] = field(default_factory=list)
+    also: list[Option] = field(default_factory=list)       # "Also remove": off unless turned on
+    advanced: list[Option] = field(default_factory=list)
+    folders: dict[str, list[str]] = field(default_factory=dict)   # option key -> folders to the Trash
+    folder_sizes: dict[str, int] = field(default_factory=dict)
     blocked: str = ""               # why it can't be uninstalled here at all
-    notes: List[str] = field(default_factory=list)          # what else it affects, in plain words
-    goes_too: List[str] = field(default_factory=list)       # other apps in your menus removed with it
-    stop_working: List[str] = field(default_factory=list)   # apps in your menus that use it
+    notes: list[str] = field(default_factory=list)          # what else it affects, in plain words
+    goes_too: list[str] = field(default_factory=list)       # other apps in your menus removed with it
+    stop_working: list[str] = field(default_factory=list)   # apps in your menus that use it
     in_terminal: bool = False
     opens_steam: bool = False
     password: bool = False
     manager: Optional[pkgmanagers.Manager] = None
-    packages: List[str] = field(default_factory=list)
-    app_ids: List[str] = field(default_factory=list)        # menu entries that go with it
-    trash_paths: List[str] = field(default_factory=list)    # always moved to the Trash (the AppImage)
-    entry_files: List[str] = field(default_factory=list)    # your files deleted with Undo (entries, icons)
-    info: Dict[str, pkgmanagers.Info] = field(default_factory=dict)
+    packages: list[str] = field(default_factory=list)
+    app_ids: list[str] = field(default_factory=list)        # menu entries that go with it
+    trash_paths: list[str] = field(default_factory=list)    # always moved to the Trash (the AppImage)
+    entry_files: list[str] = field(default_factory=list)    # your files deleted with Undo (entries, icons)
+    info: dict[str, pkgmanagers.Info] = field(default_factory=dict)
     # Filled in by update():
     preview: Optional[pkgmanagers.Preview] = None
     stops: str = ""                 # why it would stop with these options
-    warnings: Dict[str, str] = field(default_factory=dict)  # option key -> its warning, filled in
+    warnings: dict[str, str] = field(default_factory=dict)  # option key -> its warning, filled in
     # Set by the kind:
     _commands: Callable = None
     _reinstall: Callable = None
@@ -74,10 +75,10 @@ class Plan:
     _update: Callable = None
 
     @property
-    def options(self) -> List[Option]:
+    def options(self) -> list[Option]:
         return self.also + self.advanced
 
-    def defaults(self) -> List[str]:
+    def defaults(self) -> list[str]:
         return [o.key for o in self.options if o.default]
 
     def update(self, opts: Sequence[str]) -> None:
@@ -89,10 +90,10 @@ class Plan:
         deps = ", ".join(self.preview.dependents) if self.preview and self.preview.dependents else "none"
         self.warnings = {o.key: o.warning.replace("{dependents}", deps) for o in self.options if o.warning}
 
-    def commands(self, opts: Sequence[str]) -> List[List[str]]:
+    def commands(self, opts: Sequence[str]) -> list[list[str]]:
         return self._commands(self, list(opts)) if self._commands else []
 
-    def reinstall(self, opts: Sequence[str]) -> List[List[str]]:
+    def reinstall(self, opts: Sequence[str]) -> list[list[str]]:
         return self._reinstall(self, list(opts)) if self._reinstall else []
 
     def gone(self) -> bool:
@@ -169,7 +170,7 @@ def _snap_name(app: de.App) -> str:
     return m.group(1) if m else app.id[:-len(".desktop")]
 
 
-def _distrobox(exec_line: str) -> Tuple[str, List[str]]:
+def _distrobox(exec_line: str) -> tuple[str, list[str]]:
     """(container, command inside) for an entry distrobox-export made."""
     try:
         words = shlex.split(exec_line)
@@ -210,7 +211,7 @@ def kind_of(app: de.App) -> str:
     return ""
 
 
-def _your_files(apps: Sequence[de.App], ids: Sequence[str], env) -> List[Change]:
+def _your_files(apps: Sequence[de.App], ids: Sequence[str], env) -> list[Change]:
     """Files App Entries keeps for these apps (hide settings, edits, icons it
     drew) and autostart copies it made: they'd be left over once the app is
     gone. Undo puts them back."""
@@ -251,8 +252,8 @@ def _notes(plan: Plan, apps: Sequence[de.App], env) -> None:
             continue
         if st.app_id in ids:
             what = cat.name if cat.name[1:2].isupper() else cat.name[:1].lower() + cat.name[1:]
-            plan.notes.append("It's your default for %s. Afterwards choose another in Default apps, or your "
-                              "desktop picks one." % what)
+            plan.notes.append(f"It's your default for {what}. Afterwards choose another in Default apps, or your "
+                              "desktop picks one.")
     for it in autostart.scan(env):
         stem = it.id[:-len(".desktop")]
         if it.enabled and re.sub(r"-\d+$", "", stem) in {i[:-len(".desktop")] for i in ids}:
@@ -277,7 +278,7 @@ def _users(plan: Plan, apps: Sequence[de.App], uses: Callable[[str, de.App], boo
     plan.stop_working = sorted(set(out), key=str.casefold)
 
 
-def _data_option(plan: Plan, key: str, title: str, explanation: str, paths: List[str], env) -> None:
+def _data_option(plan: Plan, key: str, title: str, explanation: str, paths: list[str], env) -> None:
     paths = [p for p in paths if os.path.isdir(p) and not os.path.islink(p)]
     if not paths:
         return
@@ -290,7 +291,7 @@ def _data_option(plan: Plan, key: str, title: str, explanation: str, paths: List
 # Flatpak
 
 
-def _flatpak_fields(text: str) -> Dict[str, str]:
+def _flatpak_fields(text: str) -> dict[str, str]:
     out = {}
     for line in text.splitlines():
         m = re.match(r"^\s*([\w ]+?):\s*(.*)$", line)
@@ -307,12 +308,12 @@ def _plan_flatpak(app: de.App, apps, env, run: Run) -> Plan:
     p = Plan(app, "flatpak", "Flatpak · " + ("installed for you" if user else "installed for all users"), fid)
     info = _flatpak_fields(pkgmanagers._ok(run(["flatpak", "info", inst, fid])))
     if not info:
-        p.blocked = "Flatpak doesn't list %s as installed (%s)." % (fid, inst.strip("-"))
+        p.blocked = "Flatpak doesn't list {} as installed ({}).".format(fid, inst.strip("-"))
     p.version = info.get("Version", "")
     p.size = pkgmanagers._human_size(info.get("Installed", ""))
     origin = info.get("Origin", "") or "flathub"
     runtime = info.get("Runtime", "")
-    p.removes.append(Line("package_2", "The %s Flatpak (%s)" % (app.name, fid), p.size))
+    p.removes.append(Line("package_2", f"The {app.name} Flatpak ({fid})", p.size))
     listing = pkgmanagers._ok(run(["flatpak", "list", inst, "--columns=application,ref,runtime"]))
     rows = [l.split("\t") for l in listing.splitlines() if l.strip()]
     rows = [r + [""] * (3 - len(r)) for r in rows]
@@ -327,14 +328,14 @@ def _plan_flatpak(app: de.App, apps, env, run: Run) -> Plan:
                                                 r[1].endswith(runtime.split("/")[-1]) for r in rows):
         runtime_refs = [runtime]
         p.also.append(Option("runtime", "The runtime nothing else uses",
-                             "%s is a shared part Flatpak apps need, and no other app installed this way uses "
-                             "it. Flatpak can download it again." % runtime.split("/")[0]))
+                             "{} is a shared part Flatpak apps need, and no other app installed this way uses "
+                             "it. Flatpak can download it again.".format(runtime.split("/")[0])))
     _data_option(p, "data", "Its data and sign-ins",
                  "Settings, caches and logins in your home folder. Moved to the Trash, so you can restore them.",
                  [os.path.join(home, ".var", "app", fid)], env)
     p.advanced.append(Option("force", "Remove even if it's running",
                              "Normally Flatpak won't remove an app that's open.",
-                             warning="%s is closed straight away, without saving anything it has open." % app.name))
+                             warning=f"{app.name} is closed straight away, without saving anything it has open."))
     running = pkgmanagers._ok(run(["flatpak", "ps", "--columns=application"]))
     is_running = fid in running.split()
     p.in_terminal = not user
@@ -342,8 +343,7 @@ def _plan_flatpak(app: de.App, apps, env, run: Run) -> Plan:
 
     def update(plan, opts):
         if is_running and "force" not in opts:
-            plan.stops = "%s is running. Close it first, or turn on “Remove even if it's running”." \
-                % app.name
+            plan.stops = f"{app.name} is running. Close it first, or turn on “Remove even if it's running”."
 
     def commands(plan, opts):
         refs = [fid] + addons + (runtime_refs if "runtime" in opts else [])
@@ -376,7 +376,7 @@ def _plan_snap(app: de.App, apps, env, run: Run, which) -> Plan:
     listing = pkgmanagers._ok(run(["snap", "list", name])).splitlines()
     row = listing[1].split() if len(listing) > 1 else []
     if not row:
-        p.blocked = "Snap doesn't list %s as installed." % name
+        p.blocked = f"Snap doesn't list {name} as installed."
     p.version = row[1] if len(row) > 1 else ""
     tracking = row[3] if len(row) > 3 else ""
     notes = row[5] if len(row) > 5 else ""
@@ -387,12 +387,12 @@ def _plan_snap(app: de.App, apps, env, run: Run, which) -> Plan:
     except OSError:
         pass
     p.app_ids = [a.id for a in apps if a.source == "snap" and _snap_name(a) == name]
-    p.removes.append(Line("package_2", "The %s snap, every version kept" % name, p.size))
+    p.removes.append(Line("package_2", f"The {name} snap, every version kept", p.size))
     p.removes.append(Line("description", "Its menu entr%s" % ("ies" if len(p.app_ids) > 1 else "y")))
     data = os.path.join(_home(env), "snap", name)
     if os.path.isdir(data):
-        p.removes.append(Line("folder", "Its data in %s. Snap keeps a copy (a snapshot) for 31 days, which "
-                                        "“snap restore” brings back." % _short(data, env),
+        p.removes.append(Line("folder", f"Its data in {_short(data, env)}. Snap keeps a copy (a snapshot) for 31 "
+                                        "days, which “snap restore” brings back.",
                               folder_size(data)))
     p.advanced.append(Option("purge", "Don't keep a snapshot of its data",
                              "Normally snap saves a copy of its data before removing it.",
@@ -405,7 +405,7 @@ def _plan_snap(app: de.App, apps, env, run: Run, which) -> Plan:
             users.append(cols[1].split(":")[0])
     users = sorted(set(users))
     if users:
-        p.notes.append("Other snaps use parts of it and lose them: %s." % ", ".join(users))
+        p.notes.append("Other snaps use parts of it and lose them: {}.".format(", ".join(users)))
     p.in_terminal = p.password = True
     classic = "classic" in notes.split(",")
 
@@ -445,7 +445,7 @@ def _plan_appimage(app: de.App, apps, env) -> Plan:
     p.blocked = appimages.problem(r) or ""
     exists = os.path.isfile(r.appimage)
     if exists:
-        p.removes.append(Line("deployed_code", "%s, to the Trash" % _short(r.appimage, env), r.size))
+        p.removes.append(Line("deployed_code", f"{_short(r.appimage, env)}, to the Trash", r.size))
         p.trash_paths = [r.appimage]
     else:
         p.notes.append("The AppImage file itself is already gone; what was set up for it is still removed.")
@@ -456,9 +456,10 @@ def _plan_appimage(app: de.App, apps, env) -> Plan:
     if app.id not in p.app_ids:
         p.app_ids.append(app.id)
     if r.blocked:
-        p.notes.append("%d more entr%s outside your folder start%s it and can't be removed here: %s." % (
-            len(r.blocked), "y" if len(r.blocked) == 1 else "ies", "s" if len(r.blocked) == 1 else "",
-            ", ".join(r.blocked)))
+        one = len(r.blocked) == 1
+        entries, starts = ("entry", "starts") if one else ("entries", "start")
+        p.notes.append(f"{len(r.blocked)} more {entries} outside your folder {starts} it and can't be removed here: "
+                       f"{', '.join(r.blocked)}.")
     _data_option(p, "data", "Folders that look like its settings",
                  "Found by name, so only a guess: check the list. Moved to the Trash, so you can restore them.",
                  r.settings, env)
@@ -470,7 +471,7 @@ def _plan_appimage(app: de.App, apps, env) -> Plan:
 # Steam
 
 
-def steam_libraries(env) -> List[str]:
+def steam_libraries(env) -> list[str]:
     """Every steamapps folder: the usual Steam folders (also for the Flatpak
     and Snap), and the libraries they list."""
     home = _home(env)
@@ -498,15 +499,15 @@ def steam_libraries(env) -> List[str]:
     return out
 
 
-def _manifest(appid: str, env) -> Tuple[str, Dict[str, str]]:
+def _manifest(appid: str, env) -> tuple[str, dict[str, str]]:
     for lib in steam_libraries(env):
-        path = os.path.join(lib, "appmanifest_%s.acf" % appid)
+        path = os.path.join(lib, f"appmanifest_{appid}.acf")
         try:
             with open(path, encoding="utf-8", errors="replace") as f:
                 text = f.read()
         except OSError:
             continue
-        return path, dict(re.findall(r'^\s*"(\w+)"\s+"([^"]*)"', text, flags=re.M))
+        return path, dict(re.findall(r'^\s*"(\w+)"\s+"([^"]*)"', text, flags=re.MULTILINE))
     return "", {}
 
 
@@ -519,14 +520,14 @@ def _plan_steam(app: de.App, apps, env, which) -> Plan:
         return p
     manifest, fields = _manifest(appid, env)
     p.size = int(fields.get("SizeOnDisk", "0") or 0) if fields.get("SizeOnDisk", "").isdigit() else 0
-    p.app_ids = [a.id for a in apps if "steam://rungameid/%s" % appid in a.exec]
+    p.app_ids = [a.id for a in apps if f"steam://rungameid/{appid}" in a.exec]
     icon = de.DesktopFile.load(app.source_path).group_dict().get("Icon", "") if app.source_path else ""
     icon_files = appimages._icon_files(icon, de.user_data_dir(env)) if icon and not os.path.isabs(icon) else []
     others_use = any(a.icon == icon for a in apps if a.id not in p.app_ids)
     p.entry_files = [a.source_path for a in apps if a.id in p.app_ids and a.source_path.startswith(
         de.user_apps_dir(env) + os.sep)] + ([] if others_use else icon_files)
     if manifest:
-        p.removes.append(Line("sports_esports", "The game, removed by Steam (%s)" % fields.get("name", app.name),
+        p.removes.append(Line("sports_esports", "The game, removed by Steam ({})".format(fields.get("name", app.name)),
                               p.size))
         p.opens_steam = True
     else:
@@ -562,7 +563,7 @@ def _in_box(box: str, run: Run) -> Run:
 
 def _plan_distrobox(app: de.App, apps, env, run: Run) -> Plan:
     box = _distrobox(app.exec)[0]
-    p = Plan(app, "distrobox", "Distrobox · from the %s container" % box, box)
+    p = Plan(app, "distrobox", f"Distrobox · from the {box} container", box)
     user_apps = de.user_apps_dir(env)
     if not app.source_path.startswith(user_apps + os.sep):
         p.blocked = "Its menu entry isn't in your folder, so it wasn't exported by distrobox-export."
@@ -580,14 +581,14 @@ def _plan_distrobox(app: de.App, apps, env, run: Run) -> Plan:
     p.entry_files = files
     for f in files:
         p.removes.append(Line("description", _short(f, env)))
-    p.notes.append("The program stays installed inside the %s container unless you choose to uninstall it "
-                   "there too (under Advanced)." % box)
+    p.notes.append(f"The program stays installed inside the {box} container unless you choose to uninstall it "
+                   "there too (under Advanced).")
     exported = os.path.basename(app.source_path)
     original = exported[len(box) + 1:] if exported.startswith(box + "-") else exported
-    p.advanced.append(Option("inside", "Also uninstall it inside %s" % box,
+    p.advanced.append(Option("inside", f"Also uninstall it inside {box}",
                              "Runs the container's own package manager in your terminal, after it shows what "
                              "it would remove."))
-    found: Dict[str, Tuple[Optional[pkgmanagers.Manager], str]] = {}
+    found: dict[str, tuple[Optional[pkgmanagers.Manager], str]] = {}
 
     def probe():
         if "m" in found:
@@ -607,7 +608,7 @@ def _plan_distrobox(app: de.App, apps, env, run: Run) -> Plan:
             return
         m, pkg = probe()
         if m is None:
-            plan.stops = "Couldn't tell which package installed it inside %s." % box
+            plan.stops = f"Couldn't tell which package installed it inside {box}."
             return
         plan.manager, plan.packages = m, [pkg]
         plan.preview = m.preview([pkg], [o.key for o in m.options if o.default])
@@ -645,10 +646,10 @@ def _plan_package(app: de.App, apps, env, run: Run, which, managers=None) -> Pla
     p = Plan(app, "package", "Package", pkg or os.path.basename(app.base_path))
     if m is None:
         names = ", ".join(x.label for x in managers) or "no package manager found"
-        p.blocked = "Couldn't tell which package installed it (%s). Its entry is %s." % (names, app.base_path)
+        p.blocked = f"Couldn't tell which package installed it ({names}). Its entry is {app.base_path}."
         return p
     p.manager, p.packages = m, [pkg]
-    p.kind_label = "%s · installed for all users" % m.label
+    p.kind_label = f"{m.label} · installed for all users"
     info = m.info(pkg)
     p.info[pkg] = info
     p.version, p.size = info.version, info.size
@@ -664,18 +665,18 @@ def _plan_package(app: de.App, apps, env, run: Run, which, managers=None) -> Pla
                  "Folders named like it in ~/.config, ~/.local/share and ~/.cache. Found by name, so only a "
                  "guess: check the list. Moved to the Trash, so you can restore them.",
                  appimages.folders_named(names, env), env)
-    file_cache: Dict[str, set] = {pkg: owned}
+    file_cache: dict[str, set] = {pkg: owned}
 
     def update(plan, opts):
         pv = m.preview([pkg], opts)
         plan.preview = pv
         plan.stops = pv.stops
-        plan.removes = [Line("package_2", "%s %s" % (pkg, plan.version), plan.size)]
+        plan.removes = [Line("package_2", f"{pkg} {plan.version}", plan.size)]
         for d in pv.removed:
             if d == pkg:
                 continue
-            why = ("needs %s" % pkg if d in pv.dependents else "only %s needed it" % pkg if d in pv.unneeded else "")
-            plan.removes.append(Line("package_2", "%s (%s)" % (d, why) if why else d))
+            why = (f"needs {pkg}" if d in pv.dependents else f"only {pkg} needed it" if d in pv.unneeded else "")
+            plan.removes.append(Line("package_2", f"{d} ({why})" if why else d))
         going = set(pv.removed) if pv.dependents_go or pv.exact else {pkg}
         why_not = pkgmanagers.blocked(m, sorted(going - {pkg}))
         if why_not and not plan.stops:
@@ -732,7 +733,7 @@ def plan(app: de.App, apps: Sequence[de.App], env=None, run: Run = pkgmanagers.r
     elif kind == "package":
         p = _plan_package(app, apps, env, run, which, managers)
     else:
-        raise ValueError("%s can't be uninstalled from here." % app.name)
+        raise ValueError(f"{app.name} can't be uninstalled from here.")
     if not p.app_ids:
         p.app_ids = [app.id]
     _notes(p, apps, env)
@@ -740,12 +741,12 @@ def plan(app: de.App, apps: Sequence[de.App], env=None, run: Run = pkgmanagers.r
     return p
 
 
-def file_changes(p: Plan, apps: Sequence[de.App], env=None) -> List[Change]:
+def file_changes(p: Plan, apps: Sequence[de.App], env=None) -> list[Change]:
     """The files App Entries removes once the app itself is gone: entries
     and icons it was given (AppImage, Steam, Distrobox), and App Entries' own
     files for it. Undo puts them back."""
     env = os.environ if env is None else env
-    out: List[Change] = []
+    out: list[Change] = []
     seen = set()
     for f in p.entry_files:
         if f in seen or not os.path.lexists(f):
@@ -767,7 +768,7 @@ def _read_bytes(path: str):
     return read_bytes(path)
 
 
-def to_trash(p: Plan, opts: Sequence[str]) -> List[str]:
+def to_trash(p: Plan, opts: Sequence[str]) -> list[str]:
     """What goes to the Trash afterwards: the AppImage, and data folders the
     user chose."""
     out = list(p.trash_paths)
@@ -776,14 +777,14 @@ def to_trash(p: Plan, opts: Sequence[str]) -> List[str]:
     return [x for x in out if os.path.lexists(x)]
 
 
-def stream(argv: List[str], on_line: Callable[[str], None]) -> int:
+def stream(argv: list[str], on_line: Callable[[str], None]) -> int:
     """Run a command that needs no password and pass on each line it prints.
     Returns its exit code."""
     try:
         proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                 text=True, bufsize=1, env=dict(os.environ, LC_ALL="C", LANG="C"))
     except OSError as e:
-        on_line("Couldn't start %s: %s" % (argv[0], e.strerror or e))
+        on_line(f"Couldn't start {argv[0]}: {e.strerror or e}")
         return 127
     assert proc.stdout is not None
     for line in proc.stdout:
@@ -797,18 +798,18 @@ def stream(argv: List[str], on_line: Callable[[str], None]) -> int:
 
 @dataclass
 class Batch:
-    plans: List[Plan]
-    skipped: List[Tuple[str, str]] = field(default_factory=list)   # (name, why)
+    plans: list[Plan]
+    skipped: list[tuple[str, str]] = field(default_factory=list)   # (name, why)
 
-    def groups(self) -> Dict[str, List[Plan]]:
+    def groups(self) -> dict[str, list[Plan]]:
         """By how they're removed, in the order they run."""
-        out: Dict[str, List[Plan]] = {}
+        out: dict[str, list[Plan]] = {}
         for p in self.plans:
             key = p.kind if p.kind != "package" else "package:" + (p.manager.name if p.manager else "")
             out.setdefault(key, []).append(p)
         return out
 
-    def commands(self, opts: Dict[str, Sequence[str]]) -> Tuple[List[List[str]], List[List[str]]]:
+    def commands(self, opts: dict[str, Sequence[str]]) -> tuple[list[list[str]], list[list[str]]]:
         """(run here, run in the terminal). Packages of one manager are
         removed with one command, so it shows them all and asks once."""
         here, term = [], []

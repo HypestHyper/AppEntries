@@ -23,13 +23,13 @@ def colors_for(seed):
 def render(seed=theme.DEFAULT_SEED, marker=True):
     """Two tiles, a dashed (hidden) tile and a plus, in outlines."""
     top, bottom = colors_for(seed)
-    note = "  <!-- %s -->\n" % MARKER if marker else ""
+    note = f"  <!-- {MARKER} -->\n" if marker else ""
     return (
         '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">\n'
         "  <title>App Entries</title>\n"
         + note +
         '  <defs><linearGradient id="g" x1="0" y1="14" x2="0" y2="114" gradientUnits="userSpaceOnUse">'
-        '<stop offset="0" stop-color="%s"/><stop offset="1" stop-color="%s"/>'
+        f'<stop offset="0" stop-color="{top}"/><stop offset="1" stop-color="{bottom}"/>'
         "</linearGradient></defs>\n"
         '  <g fill="none" stroke="url(#g)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">\n'
         '    <rect x="18" y="18" width="38" height="38" rx="12"/>\n'
@@ -37,7 +37,7 @@ def render(seed=theme.DEFAULT_SEED, marker=True):
         '    <rect x="18" y="72" width="38" height="38" rx="19" stroke-dasharray="9 9"/>\n'
         '    <path d="M91 76v30M76 91h30"/>\n'
         "  </g>\n"
-        "</svg>\n" % (top, bottom)
+        "</svg>\n"
     )
 
 
@@ -70,7 +70,7 @@ def update(seed, themed=True):
             f.write(svg)
         os.replace(tmp, target)
     except OSError as err:
-        print("app-entries: couldn't update the app icon: %s" % err)
+        print(f"app-entries: couldn't update the app icon: {err}")
         return
     _refresh_cache(_icons_dir())
 

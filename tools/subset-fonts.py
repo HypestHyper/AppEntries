@@ -56,7 +56,7 @@ def build_text(srcs):
     for i, src in enumerate(srcs):
         font = TTFont(src)
         font.flavor = None
-        font.save(os.path.join(FONTS, "GoogleSansFlex-%d.ttf" % i))
+        font.save(os.path.join(FONTS, f"GoogleSansFlex-{i}.ttf"))
 
 
 def main():

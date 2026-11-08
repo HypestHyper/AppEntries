@@ -1,4 +1,5 @@
 from conftest import entry
+
 from app_entries import desktop_entries as de
 
 
@@ -53,7 +54,7 @@ def test_user_full_override_wins(xdg):
 def test_bare_override_shows_system_details(xdg):
     xdg.write(xdg.sys_b, "app.desktop", entry("System", Icon="sys-icon", Comment="Hi"))
     xdg.write(xdg.user, "app.desktop",
-              "[Desktop Entry]\nType=Application\nName=System\nHidden=true\n%s=true\n" % de.MANAGED_KEY)
+              f"[Desktop Entry]\nType=Application\nName=System\nHidden=true\n{de.MANAGED_KEY}=true\n")
     (app,) = de.scan(xdg.env)
     assert app.hidden and app.override_managed
     assert app.icon == "sys-icon" and app.comment == "Hi"

@@ -8,7 +8,7 @@ it can be undone. Pure Python, no GTK.
 """
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 from . import desktop_entries as de
 from .editing import escape
@@ -29,7 +29,7 @@ def user_dir(env=None) -> str:
     return os.path.join(d if os.path.isabs(d) else os.path.join(home, ".config"), "autostart")
 
 
-def system_dirs(env=None) -> List[str]:
+def system_dirs(env=None) -> list[str]:
     env = os.environ if env is None else env
     dirs = [d for d in (env.get("XDG_CONFIG_DIRS") or "").split(":") if os.path.isabs(d)] or ["/etc/xdg"]
     return [os.path.join(d, "autostart") for d in dirs]
@@ -49,23 +49,23 @@ class Item:
     managed: bool = False   # your file was made by App Entries and not edited since
     created: bool = False   # added with App Entries
     excluded_here: bool = False   # OnlyShowIn/NotShowIn leave it out on this desktop
-    only_show_in: Tuple[str, ...] = ()
-    not_show_in: Tuple[str, ...] = ()
+    only_show_in: tuple[str, ...] = ()
+    not_show_in: tuple[str, ...] = ()
 
     @property
     def system(self) -> bool:
         return bool(self.system_path)
 
 
-def _off(d: Dict[str, str]) -> bool:
+def _off(d: dict[str, str]) -> bool:
     return de.is_true(d.get("Hidden")) or (d.get(GNOME_ENABLED, "").strip().lower() == "false")
 
 
-def scan(env=None) -> List[Item]:
+def scan(env=None) -> list[Item]:
     env = os.environ if env is None else env
     locales = de.locale_names(env)
     desktops = de.current_desktops(env)
-    files: Dict[str, Dict[str, str]] = {}   # id -> {"user": path, "system": path}
+    files: dict[str, dict[str, str]] = {}   # id -> {"user": path, "system": path}
     for folder, kind in [(user_dir(env), "user")] + [(d, "system") for d in system_dirs(env)]:
         try:
             names = sorted(os.listdir(folder))
@@ -146,13 +146,13 @@ def how_to_run(env=None, systemd: Optional[bool] = None, have_dex: Optional[bool
     systemd = has_systemd() if systemd is None else systemd
     have_dex = bool(shutil.which("dex")) if have_dex is None else have_dex
     line = next((_STARTUP_LINE[d.upper()] for d in desktops if d.upper() in _STARTUP_LINE), "dex -a")
-    dex = ("add this to your config: %s" % line) if have_dex else \
-        ("install dex (it's in most distributions' repositories) and add this to your config: %s" % line)
+    dex = (f"add this to your config: {line}") if have_dex else \
+        (f"install dex (it's in most distributions' repositories) and add this to your config: {line}")
     if systemd:
-        return ("%s doesn't start these by itself. They run if your session starts them: through uwsm, "
-                "systemd's xdg-autostart support, or dex. For dex, %s." % (name, dex))
-    return ("%s doesn't start these by itself, and this system doesn't use systemd, so dex is the way to run "
-            "them: %s." % (name, dex))
+        return (f"{name} doesn't start these by itself. They run if your session starts them: through uwsm, "
+                f"systemd's xdg-autostart support, or dex. For dex, {dex}.")
+    return (f"{name} doesn't start these by itself, and this system doesn't use systemd, so dex is the way to run "
+            f"them: {dex}.")
 
 
 # ---------------------------------------------------------------------------
@@ -218,10 +218,10 @@ def plan_delete(item: Item) -> Change:
 
 def _free_id(base: str, env=None) -> str:
     folder = user_dir(env)
-    stem = base[:-len(".desktop")] if base.endswith(".desktop") else base
+    stem = base.removesuffix(".desktop")
     did, n = stem + ".desktop", 2
     while os.path.exists(os.path.join(folder, did)):
-        did, n = "%s-%d.desktop" % (stem, n), n + 1
+        did, n = f"{stem}-{n}.desktop", n + 1
     return did
 
 
@@ -236,7 +236,7 @@ def plan_add_app(app: de.App, env=None) -> Change:
     # Field codes like %U would be passed as nothing at login.
     d = df.group_dict()
     df.set("Exec", " ".join(p for p in d.get("Exec", "").split() if not (len(p) == 2 and p.startswith("%"))))
-    df.lines[:0] = ["# Added by App Entries to start %s when you log in." % app.name]
+    df.lines[:0] = [f"# Added by App Entries to start {app.name} when you log in."]
     df.set(CREATED_KEY, "true")
     did = _free_id(app.id, env)
     return Change(did, app.name, os.path.join(user_dir(env), did), None, df.text(), False)

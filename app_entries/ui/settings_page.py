@@ -6,8 +6,21 @@ from gi.repository import Gio, GLib, Gtk
 
 from .. import APP_NAME, VERSION, desktop_entries, theme
 from .color_picker import ColorDot, ColorPicker
-from .widgets import (Clamp, Group, WrapBox, button, card, hbox, icon, label, section, set_text, switch_row,
-                      vbox, wrap_row)
+from .widgets import (
+    Clamp,
+    Group,
+    WrapBox,
+    button,
+    card,
+    hbox,
+    icon,
+    label,
+    section,
+    set_text,
+    switch_row,
+    vbox,
+    wrap_row,
+)
 
 REPO_URL = "https://github.com/HypestHyper/AppEntries"
 
@@ -174,7 +187,7 @@ class SettingsPage(Gtk.ScrolledWindow):
         # About
         page.append(section(_("About")))
         c = card()
-        c.append(label("%s %s" % (APP_NAME, VERSION), ("heading",)))
+        c.append(label(f"{APP_NAME} {VERSION}", ("heading",)))
         c.append(label(_("Hides, shows and edits app launcher entries. Also makes launchers and web apps, manages "
                          "autostart, chooses default apps and removes AppImages. Only changes files in your home "
                          "folder."),

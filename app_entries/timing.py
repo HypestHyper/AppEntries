@@ -27,4 +27,4 @@ _base = _process_age_ms() if ON else 0.0
 
 def mark(name: str) -> None:
     if ON:
-        print("%7.1f ms  %s" % (_base + (time.perf_counter() - _t0) * 1000, name), file=sys.stderr, flush=True)
+        print(f"{_base + (time.perf_counter() - _t0) * 1000:7.1f} ms  {name}", file=sys.stderr, flush=True)

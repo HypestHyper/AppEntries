@@ -4,7 +4,7 @@ that delete a file you didn't make ask first (or need --yes)."""
 import argparse
 import os
 import sys
-from typing import List, Optional
+from typing import Optional
 
 from . import APP_NAME, VERSION, history, launcher_refresh, profile
 from . import desktop_entries as de
@@ -14,15 +14,15 @@ COMMANDS = ("--list", "--hide", "--unhide", "--show", "--export", "--import", "-
             "-h", "--help")
 
 
-def wants_cli(argv: List[str]) -> bool:
+def wants_cli(argv: list[str]) -> bool:
     return any(a.split("=", 1)[0] in COMMANDS for a in argv[1:])
 
 
 def _parser():
     p = argparse.ArgumentParser(
         prog="app-entries",
-        description="%s %s: show, hide and restore apps in your launcher menus. "
-                    "Run without options to open the window." % (APP_NAME, VERSION))
+        description=f"{APP_NAME} {VERSION}: show, hide and restore apps in your launcher menus. "
+                    "Run without options to open the window.")
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--list", action="store_true",
                    help="list apps: ID, state and name. Add --hidden or --shown to filter.")
@@ -49,15 +49,15 @@ def _confirm(question: str, yes: bool) -> bool:
     if yes:
         return True
     if not sys.stdin.isatty():
-        print("%s Run again with --yes to go ahead." % question, file=sys.stderr)
+        print(f"{question} Run again with --yes to go ahead.", file=sys.stderr)
         return False
     try:
-        return input("%s [y/N] " % question).strip().lower() in ("y", "yes")
+        return input(f"{question} [y/N] ").strip().lower() in ("y", "yes")
     except EOFError:
         return False
 
 
-def find(apps: List[de.App], query: str) -> List[de.App]:
+def find(apps: list[de.App], query: str) -> list[de.App]:
     """Apps matching an ID (with or without .desktop) or an exact name."""
     q = query.strip()
     did = q if q.endswith(".desktop") else q + ".desktop"
@@ -87,7 +87,7 @@ def _list(apps, args):
         rows.append((a.id, st, a.name))
     width = max((len(r[0]) for r in rows), default=0)
     for did, st, name in rows:
-        print("%-*s  %-17s  %s" % (width, did, st, name))
+        print(f"{did:<{width}}  {st:<17}  {name}")
     return 0
 
 
@@ -96,11 +96,11 @@ def _set_hidden(apps, queries, hidden: bool, yes: bool):
     for q in queries:
         found = find(apps, q)
         if not found:
-            print("No app matches %r. Try --list to see IDs." % q, file=sys.stderr)
+            print(f"No app matches {q!r}. Try --list to see IDs.", file=sys.stderr)
             failed = True
             continue
         if len(found) > 1:
-            print("%r matches more than one app: %s. Use the ID." % (q, ", ".join(a.id for a in found)),
+            print("{!r} matches more than one app: {}. Use the ID.".format(q, ", ".join(a.id for a in found)),
                   file=sys.stderr)
             failed = True
             continue
@@ -112,17 +112,17 @@ def _set_hidden(apps, queries, hidden: bool, yes: bool):
         try:
             change = plan_set_hidden(app, hidden)
         except NeedsConfirmation as e:
-            if not _confirm("%s is hidden by a file App Entries didn't make (%s). Delete that file?"
-                            % (app.name, e.path), yes):
+            question = f"{app.name} is hidden by a file App Entries didn't make ({e.path}). Delete that file?"
+            if not _confirm(question, yes):
                 failed = True
                 continue
             change = plan_set_hidden(app, hidden, allow_delete=True)
         except OverrideError as e:
-            print("%s: %s" % (app.name, e.reason), file=sys.stderr)
+            print(f"{app.name}: {e.reason}", file=sys.stderr)
             failed = True
             continue
         if change is None:
-            print("%s is already %s." % (app.name, "hidden" if hidden else "shown"))
+            print("{} is already {}.".format(app.name, "hidden" if hidden else "shown"))
         else:
             changes.append(change)
     if changes:
@@ -130,16 +130,16 @@ def _set_hidden(apps, queries, hidden: bool, yes: bool):
         names = ", ".join(c.app_name for c in changes)
         history.record(("Hid %s" if hidden else "Showed %s") % names + " (command line)", changes)
         for c in changes:
-            print("%s %s  (%s)" % ("Hid" if hidden else "Showed", c.app_name, c.path))
+            print("{} {}  ({})".format("Hid" if hidden else "Showed", c.app_name, c.path))
     return 1 if failed else 0
 
 
 def _export(apps, args):
     items, others = profile.export(args.export, apps, args.all_files)
-    print("Saved %d item(s) to %s." % (len(items), args.export))
+    print(f"Saved {len(items)} item(s) to {args.export}.")
     if others:
-        print("%d file(s) in your folder weren't made by App Entries and were left out; "
-              "add --all-files to include them." % others)
+        print(f"{others} file(s) in your folder weren't made by App Entries and were left out; "
+              "add --all-files to include them.")
     return 0
 
 
@@ -150,18 +150,18 @@ def _import(apps, args):
         print("  " + line)
     icons = sum(1 for c in plan.changes if not c.app_id)
     if icons:
-        print("  Add %d icon file(s)" % icons)
+        print(f"  Add {icons} icon file(s)")
     for name, why in plan.skipped:
-        print("  Skip %s: %s" % (name, why))
+        print(f"  Skip {name}: {why}")
     if plan.unchanged:
-        print("  %d item(s) already match." % plan.unchanged)
+        print(f"  {plan.unchanged} item(s) already match.")
     if not plan.changes:
         print("Nothing to change.")
         return 0
-    if not _confirm("Make these %d change(s)?" % len(plan.changes), args.yes):
+    if not _confirm(f"Make these {len(plan.changes)} change(s)?", args.yes):
         return 1
     apply_all(plan.changes)
-    history.record("Imported %d change(s) from %s (command line)" % (len(plan.changes), os.path.basename(args.import_)),
+    history.record(f"Imported {len(plan.changes)} change(s) from {os.path.basename(args.import_)} (command line)",
                    plan.changes)
     print("Done.")
     return 0
@@ -169,13 +169,14 @@ def _import(apps, args):
 
 def _uninstall(apps, args):
     import subprocess
+
     from . import health, trash, uninstall
     from .terminal import shown
     health.check(apps, dict(os.environ))
     found = find(apps, args.uninstall)
     if len(found) != 1:
-        print("No app matches %r. Try --list to see IDs." % args.uninstall if not found else
-              "%r matches more than one app: %s. Use the ID." % (args.uninstall, ", ".join(a.id for a in found)),
+        print(f"No app matches {args.uninstall!r}. Try --list to see IDs." if not found else
+              "{!r} matches more than one app: {}. Use the ID.".format(args.uninstall, ", ".join(a.id for a in found)),
               file=sys.stderr)
         return 1
     app = found[0]
@@ -189,7 +190,7 @@ def _uninstall(apps, args):
         return 1
     opts = p.defaults() + (["data"] if args.with_data and "data" in p.folders else [])
     p.update(opts)
-    print("%s  (%s%s)" % (app.name, p.kind_label, ", " + p.target if p.target else ""))
+    print("{}  ({}{})".format(app.name, p.kind_label, ", " + p.target if p.target else ""))
     for line in p.removes:
         print("  remove: " + line.text)
     for f in uninstall.to_trash(p, opts):
@@ -208,7 +209,7 @@ def _uninstall(apps, args):
     cmds = p.commands(opts)
     if cmds:
         print("Runs:\n  " + shown(cmds).replace("\n", "\n  "))
-    if not _confirm("Uninstall %s?" % app.name, args.yes):
+    if not _confirm(f"Uninstall {app.name}?", args.yes):
         return 1
     for argv in cmds:
         if argv[0].startswith("#"):
@@ -221,13 +222,13 @@ def _uninstall(apps, args):
                 return 0
             code = subprocess.call(argv)
         except OSError as e:
-            print("Couldn't run %s: %s" % (argv[0], e.strerror or e), file=sys.stderr)
+            print(f"Couldn't run {argv[0]}: {e.strerror or e}", file=sys.stderr)
             return 1
         if code != 0:
-            print("It stopped with exit code %d. Nothing else was changed." % code, file=sys.stderr)
+            print(f"It stopped with exit code {code}. Nothing else was changed.", file=sys.stderr)
             return code
     if not p.gone():
-        print("%s is still installed. Nothing else was changed." % app.name, file=sys.stderr)
+        print(f"{app.name} is still installed. Nothing else was changed.", file=sys.stderr)
         return 1
     changes = apply_all(uninstall.file_changes(p, apps))
     trashed = []
@@ -236,13 +237,13 @@ def _uninstall(apps, args):
             trashed.append(trash.move(f))
         except trash.TrashError as e:
             print(str(e), file=sys.stderr)
-    history.record("Uninstalled %s (command line)" % app.name, changes, trashed, reinstall=p.reinstall(opts),
+    history.record(f"Uninstalled {app.name} (command line)", changes, trashed, reinstall=p.reinstall(opts),
                    reinstall_steam=p.kind == "steam")
-    print("Uninstalled %s. It's in History, where its files can be put back and it can be reinstalled." % app.name)
+    print(f"Uninstalled {app.name}. It's in History, where its files can be put back and it can be reinstalled.")
     return 0
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: Optional[list[str]] = None) -> int:
     args = _parser().parse_args((argv or sys.argv)[1:])
     try:
         if args.refresh_launchers:

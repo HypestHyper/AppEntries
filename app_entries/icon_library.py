@@ -11,7 +11,7 @@ import os
 import re
 import shutil
 import xml.etree.ElementTree as ET
-from typing import List, Optional
+from typing import Optional
 
 from .desktop_entries import user_data_dir
 
@@ -33,8 +33,8 @@ class IconError(Exception):
 # how to get the code (Paste SVG).
 SOURCES = [
     ("Iconify", "https://icon-sets.iconify.design",
-     "200,000+ icons from 150 sets. Open an icon and copy its SVG link, like "
-     "https://api.iconify.design/mdi/firefox.svg",
+     ("200,000+ icons from 150 sets. Open an icon and copy its SVG link, like "
+     "https://api.iconify.design/mdi/firefox.svg"),
      "200,000+ icons from 150 sets. Open an icon and use Copy SVG."),
     ("Dashboard Icons", "https://dashboardicons.com",
      "Logos for thousands of apps and services, in colour, as SVG and PNG",
@@ -51,7 +51,7 @@ def folder(env=None) -> str:
     return os.path.join(user_data_dir(env), "app-entries", "icons")
 
 
-def list_icons(env=None) -> List[str]:
+def list_icons(env=None) -> list[str]:
     d = folder(env)
     try:
         names = sorted(os.listdir(d), key=str.casefold)
@@ -70,7 +70,7 @@ def _unique(name: str, env=None) -> str:
     ext = ext.lower() if ext.lower() in EXTENSIONS else ".svg"
     path, n = os.path.join(folder(env), base + ext), 2
     while os.path.exists(path):
-        path, n = os.path.join(folder(env), "%s-%d%s" % (base, n, ext)), n + 1
+        path, n = os.path.join(folder(env), f"{base}-{n}{ext}"), n + 1
     return path
 
 
@@ -82,7 +82,7 @@ def check(data: bytes, name: str = "") -> str:
         root = ET.fromstring(data)
     except ET.ParseError:
         raise IconError("It isn't an SVG or PNG image.")
-    if root.tag not in ("{%s}svg" % SVG_NS, "svg"):
+    if root.tag not in (f"{{{SVG_NS}}}svg", "svg"):
         raise IconError("It's XML, but not an SVG image.")
     return "svg"
 
@@ -114,7 +114,7 @@ def add_file(path: str, env=None) -> str:
 
 def download(url: str, env=None, opener=None) -> str:
     """Download an SVG or PNG into the library and return its path."""
-    import urllib.request   # here, as it takes a while to load
+    import urllib.request  # here, as it takes a while to load
     opener = opener or urllib.request.urlopen
     parsed = urllib.parse.urlparse(url.strip())
     if parsed.scheme not in ("https", "http"):
@@ -124,7 +124,7 @@ def download(url: str, env=None, opener=None) -> str:
                     timeout=20) as resp:
             data = resp.read(MAX_DOWNLOAD + 1)
     except OSError as e:
-        raise IconError("Couldn't download it: %s" % getattr(e, "reason", e))
+        raise IconError("Couldn't download it: {}".format(getattr(e, "reason", e)))
     if len(data) > MAX_DOWNLOAD:
         raise IconError("It's bigger than 2 MB, which is too big for an icon.")
     kind = check(data)
@@ -167,7 +167,7 @@ def _length(value: Optional[str]) -> Optional[float]:
     return float(m.group(1)) if m else None
 
 
-def _viewbox(root) -> List[float]:
+def _viewbox(root) -> list[float]:
     vb = root.get("viewBox")
     if vb:
         nums = [float(n) for n in re.split(r"[\s,]+", vb.strip()) if n]
@@ -191,16 +191,16 @@ def _prefix_ids(root, prefix: str) -> None:
     for el in root.iter():
         for k, v in list(el.attrib.items()):
             if "url(#" in v:
-                el.set(k, pattern.sub(lambda m: "url(#%s)" % ids.get(m.group(1), m.group(1)), v))
-            elif k in ("href", "{%s}href" % XLINK_NS) and v.startswith("#") and v[1:] in ids:
+                el.set(k, pattern.sub(lambda m: f"url(#{ids.get(m.group(1), m.group(1))})", v))
+            elif k in ("href", f"{{{XLINK_NS}}}href") and v.startswith("#") and v[1:] in ids:
                 el.set(k, "#" + ids[v[1:]])
         if el.text and "url(#" in el.text:
-            el.text = pattern.sub(lambda m: "url(#%s)" % ids.get(m.group(1), m.group(1)), el.text)
+            el.text = pattern.sub(lambda m: f"url(#{ids.get(m.group(1), m.group(1))})", el.text)
 
 
 def _strip(root) -> None:
-    for bad in ("{%s}script" % SVG_NS, "{%s}foreignObject" % SVG_NS, "{%s}metadata" % SVG_NS,
-                "{%s}title" % SVG_NS):
+    for bad in (f"{{{SVG_NS}}}script", f"{{{SVG_NS}}}foreignObject", f"{{{SVG_NS}}}metadata",
+                f"{{{SVG_NS}}}title"):
         for parent in root.iter():
             for child in [c for c in parent if c.tag == bad]:
                 parent.remove(child)
@@ -209,13 +209,13 @@ def _strip(root) -> None:
             del el.attrib[k]
 
 
-def _fit(vb: List[float]) -> str:
+def _fit(vb: list[float]) -> str:
     """Transform from the file's viewBox to the 960 grid, centred."""
     minx, miny, w, h = vb
     scale = GRID / max(w, h)
     dx = (GRID - w * scale) / 2 - minx * scale
     dy = (GRID - h * scale) / 2 - miny * scale
-    return "translate(%g %g) scale(%g)" % (dx, dy, scale), scale
+    return f"translate({dx:g} {dy:g}) scale({scale:g})", scale
 
 
 _counter = [0]
@@ -232,10 +232,10 @@ def _local(tag: str) -> str:
 def _class_rules(root) -> dict:
     """Simple `.name { prop: value }` rules from <style> elements."""
     rules = {}
-    for st in root.iter("{%s}style" % SVG_NS):
+    for st in root.iter(f"{{{SVG_NS}}}style"):
         for sel, body in re.findall(r"([^{}]+)\{([^}]*)\}", st.text or ""):
-            decls = dict((k.strip(), v.strip()) for k, v in
-                         (d.split(":", 1) for d in body.split(";") if ":" in d))
+            decls = {k.strip(): v.strip() for k, v in
+                         (d.split(":", 1) for d in body.split(";") if ":" in d)}
             for one in sel.split(","):
                 one = one.strip()
                 if re.fullmatch(r"\.[\w-]+", one):
@@ -333,7 +333,7 @@ def _read_args(d: str, i: int, cmd: str):
     return args, i
 
 
-def subpaths(d: str) -> List[List[tuple]]:
+def subpaths(d: str) -> list[list[tuple]]:
     """Split path data into subpaths of absolute (command, args) segments."""
     return _parse(d)[0]
 
@@ -412,7 +412,7 @@ def _sub_area(sub) -> float:
 
 
 def _sub_d(sub) -> str:
-    return "".join(c + " ".join("%g" % v for v in a) for c, a in sub)
+    return "".join(c + " ".join(f"{v:g}" for v in a) for c, a in sub)
 
 
 def _points(sub):
@@ -461,11 +461,11 @@ def symbol_svg(path: str, ink: Optional[str], border_width: float, border: str, 
         data = f.read()
     if check(data, path) == "png":
         href = "data:image/png;base64," + base64.b64encode(data).decode()
-        return '<image x="0" y="0" width="960" height="960" xlink:href="%s" href="%s"/>' % (href, href)
+        return f'<image x="0" y="0" width="960" height="960" xlink:href="{href}" href="{href}"/>'
     root = ET.fromstring(data)
     _strip(root)
     _counter[0] += 1
-    _prefix_ids(root, "ae%d-" % _counter[0])
+    _prefix_ids(root, f"ae{_counter[0]}-")
     transform, scale = _fit(_viewbox(root))
     rules = _class_rules(root)
     base = {"fill": "#000000", "stroke": "none", "stroke-width": "1"}
@@ -492,9 +492,9 @@ def symbol_svg(path: str, ink: Optional[str], border_width: float, border: str, 
                 el.set("d", outer_only(el.get("d", "")))
 
         _walk(back, {}, rules, lambda el, c: outline(el, {**base, **c}))
-        for st in list(back.iter("{%s}style" % SVG_NS)):
+        for st in list(back.iter(f"{{{SVG_NS}}}style")):
             st.text = ""
-        out.append('<g transform="%s">%s</g>' % (transform, _children(back)))
+        out.append(f'<g transform="{transform}">{_children(back)}</g>')
 
     front = root
     if ink:
@@ -503,8 +503,8 @@ def symbol_svg(path: str, ink: Optional[str], border_width: float, border: str, 
             stroke = _resolve(c.get("stroke", "none"), c, ink)
             _set_paint(el, fill=ink if _visible(fill) else "none", stroke=ink if _visible(stroke) else "none")
         _walk(front, {}, rules, lambda el, c: paint(el, {**base, **c}))
-        for st in front.iter("{%s}style" % SVG_NS):
-            st.text = re.sub(r"(fill|stroke|stop-color)\s*:\s*(?!none)[^;}]+", r"\1:%s" % ink, st.text or "")
+        for st in front.iter(f"{{{SVG_NS}}}style"):
+            st.text = re.sub(r"(fill|stroke|stop-color)\s*:\s*(?!none)[^;}]+", rf"\1:{ink}", st.text or "")
     else:
         # Keep its own colours, but currentColor has nothing to inherit here.
         def dark(el, c):
@@ -514,9 +514,9 @@ def symbol_svg(path: str, ink: Optional[str], border_width: float, border: str, 
         _walk(front, {}, rules, lambda el, c: dark(el, {**base, **c}))
     root_paint = {k: v for k, v in _declared(root, rules).items() if k in ("fill", "stroke", "stroke-width",
                                                                           "stroke-linecap", "stroke-linejoin")}
-    attrs = "".join(' %s="%s"' % (k, v.replace('"', "&quot;")) for k, v in root_paint.items()
+    attrs = "".join(' {}="{}"'.format(k, v.replace('"', "&quot;")) for k, v in root_paint.items()
                     if not (ink and k in ("fill", "stroke")))
-    out.append('<g transform="%s"%s>%s</g>' % (transform, attrs, _children(front)))
+    out.append(f'<g transform="{transform}"{attrs}>{_children(front)}</g>')
     return "".join(out)
 
 
@@ -527,7 +527,7 @@ def _children(el) -> str:
 def _inner(el) -> str:
     text = ET.tostring(el, encoding="unicode")
     # Drop the namespace declaration ET adds; the outer <svg> has it.
-    text = text.replace(' xmlns="%s"' % SVG_NS, "").replace(' xmlns:xlink="%s"' % XLINK_NS, "")
+    text = text.replace(f' xmlns="{SVG_NS}"', "").replace(f' xmlns:xlink="{XLINK_NS}"', "")
     return text
 
 
@@ -557,7 +557,7 @@ def title_of(svg_text: str) -> str:
         root = ET.fromstring(svg_text.strip().encode("utf-8"))
     except ET.ParseError:
         return ""
-    for t in root.iter("{%s}title" % SVG_NS):
+    for t in root.iter(f"{{{SVG_NS}}}title"):
         if (t.text or "").strip():
             return t.text.strip()
     return ""

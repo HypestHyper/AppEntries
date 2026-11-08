@@ -1,11 +1,11 @@
-# Ruff (https://github.com/astral-sh/ruff): checks aimed at bugs, run in CI.
-# Style-only rules (import order, newer type-hint syntax, f-strings) are left
-# out: App Entries supports Python 3.9.
+# Ruff (https://github.com/astral-sh/ruff), run in CI with the version pinned
+# there: Ruff's own default rules, plus checks aimed at bugs. App Entries
+# supports Python 3.9, so newer syntax (like X | None) isn't suggested.
 target-version = "py39"
 line-length = 120
 
 [lint]
-select = [
+extend-select = [
     "F",       # pyflakes: undefined and unused names
     "E", "W",  # pycodestyle errors and warnings
     "B",       # bugbear: likely bugs
@@ -20,6 +20,7 @@ ignore = [
     "PLW1510",  # subprocess.run without check: return codes are read
     "PLW0603",  # module-level caches
     "PLW2901",  # cleaning up a loop value in place
+    "FA100",    # X | None needs `from __future__ import annotations` on 3.9; Optional is kept
 ]
 
 [lint.per-file-ignores]

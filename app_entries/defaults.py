@@ -12,7 +12,7 @@ overrides.Change, so it can be undone.
 """
 import os
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 from . import desktop_entries as de
 from .overrides import Change, read_text
@@ -27,7 +27,7 @@ class Category:
     key: str
     name: str
     icon: str
-    mimes: Tuple[str, ...]
+    mimes: tuple[str, ...]
     xfce: str = ""        # Xfce's helpers.rc key
     kde_browser: bool = False
 
@@ -56,7 +56,7 @@ CATEGORIES = [
 ]
 
 
-def _desktops(env) -> List[str]:
+def _desktops(env) -> list[str]:
     return [d.lower() for d in de.current_desktops(env)]
 
 
@@ -67,7 +67,7 @@ def config_home(env=None) -> str:
     return d if os.path.isabs(d) else os.path.join(home, ".config")
 
 
-def files(env=None) -> List[str]:
+def files(env=None) -> list[str]:
     """Every mimeapps.list, highest precedence first, per the spec."""
     env = os.environ if env is None else env
     config_dirs = [d for d in (env.get("XDG_CONFIG_DIRS") or "").split(":") if os.path.isabs(d)] or ["/etc/xdg"]
@@ -77,16 +77,16 @@ def files(env=None) -> List[str]:
     for folder in [config_home(env)] + config_dirs + [de.user_apps_dir(env)] + \
             [os.path.join(d, "applications") for d in data_dirs]:
         for d in _desktops(env):
-            out.append(os.path.join(folder, "%s-mimeapps.list" % d))
+            out.append(os.path.join(folder, f"{d}-mimeapps.list"))
         out.append(os.path.join(folder, "mimeapps.list"))
     return list(dict.fromkeys(out))
 
 
-def _ids(value: str) -> List[str]:
+def _ids(value: str) -> list[str]:
     return [v.strip() for v in value.split(";") if v.strip()]
 
 
-def _read(path: str) -> Dict[str, Dict[str, List[str]]]:
+def _read(path: str) -> dict[str, dict[str, list[str]]]:
     try:
         df = de.DesktopFile.load(path)
     except OSError:
@@ -94,7 +94,7 @@ def _read(path: str) -> Dict[str, Dict[str, List[str]]]:
     return {g: {k: _ids(v) for k, v in df.group_dict(g).items()} for g in (DEFAULT, ADDED, REMOVED)}
 
 
-def default_for(mime: str, installed, env=None) -> Tuple[str, str]:
+def default_for(mime: str, installed, env=None) -> tuple[str, str]:
     """(desktop ID, the file that chose it). The ID is "" when nothing is
     chosen; an ID that isn't installed is skipped, as the spec says."""
     removed = set()
@@ -109,7 +109,7 @@ def default_for(mime: str, installed, env=None) -> Tuple[str, str]:
     return "", ""
 
 
-def candidates(cat: Category, apps: List[de.App]) -> List[de.App]:
+def candidates(cat: Category, apps: list[de.App]) -> list[de.App]:
     """Apps that open these types, the ones that open most of them first.
     Helpers their package keeps out of menus are left out."""
     found = []
@@ -130,10 +130,10 @@ class State:
     app_id: str = ""                  # the default for all its types, or "" if none/mixed
     mixed: bool = False               # its types open in different apps
     chosen_by_you: bool = False       # set in your own mimeapps.list
-    per_type: Dict[str, str] = field(default_factory=dict)
+    per_type: dict[str, str] = field(default_factory=dict)
 
 
-def state(cat: Category, apps: List[de.App], env=None) -> State:
+def state(cat: Category, apps: list[de.App], env=None) -> State:
     installed = {a.id for a in apps}
     mine = {os.path.normpath(p) for p in files(env) if p.startswith(config_home(env) + os.sep)}
     s = State()
@@ -172,15 +172,15 @@ def _edit(path: str, fn) -> Optional[Change]:
     return Change("", os.path.basename(path), path, before, after, False)
 
 
-def _user_files(env) -> List[str]:
+def _user_files(env) -> list[str]:
     """Your own mimeapps.list and, if they exist, the desktop-specific ones
     that take precedence over it."""
     home = config_home(env)
-    specific = [os.path.join(home, "%s-mimeapps.list" % d) for d in _desktops(env)]
+    specific = [os.path.join(home, f"{d}-mimeapps.list") for d in _desktops(env)]
     return [p for p in specific if os.path.exists(p)] + [os.path.join(home, "mimeapps.list")]
 
 
-def plan_set(cat: Category, app: de.App, env=None) -> Tuple[List[Change], List[str]]:
+def plan_set(cat: Category, app: de.App, env=None) -> tuple[list[Change], list[str]]:
     """Changes that make `app` the default for this category, and notes for
     anything that could still override it."""
     env = os.environ if env is None else env
@@ -222,14 +222,14 @@ def plan_set(cat: Category, app: de.App, env=None) -> Tuple[List[Change], List[s
             if c is not None:
                 changes.append(c)
     if cat.key == "browser" and env.get("BROWSER"):
-        notes.append("Your BROWSER variable is set to %s. xdg-open uses it for links before this setting, "
-                     "so remove it from your shell or session to use this choice." % env["BROWSER"])
+        notes.append("Your BROWSER variable is set to {}. xdg-open uses it for links before this setting, "
+                     "so remove it from your shell or session to use this choice.".format(env["BROWSER"]))
     for c in changes:
         c.app_id, c.app_name = app.id, app.name
     return changes, notes
 
 
-def plan_reset(cat: Category, env=None) -> List[Change]:
+def plan_reset(cat: Category, env=None) -> list[Change]:
     """Remove your choices for this category, so your desktop's defaults apply."""
     changes = []
     for path in _user_files(env):
@@ -249,7 +249,7 @@ def plan_reset(cat: Category, env=None) -> List[Change]:
 # Xfce's preferred applications (exo-open, used by xdg-open on Xfce)
 
 
-def _xfce_helpers(env) -> Dict[str, Tuple[str, List[str]]]:
+def _xfce_helpers(env) -> dict[str, tuple[str, list[str]]]:
     """helper ID -> (category, binaries)."""
     env = os.environ if env is None else env
     dirs = [os.path.join(de.user_data_dir(env), "xfce4", "helpers")]
@@ -272,17 +272,17 @@ def _xfce_helpers(env) -> Dict[str, Tuple[str, List[str]]]:
     return out
 
 
-def _plan_xfce(key: str, app: de.App, env) -> Tuple[Optional[Change], str]:
+def _plan_xfce(key: str, app: de.App, env) -> tuple[Optional[Change], str]:
     exe = app.executable
     match = next((hid for hid, (cat, bins) in _xfce_helpers(env).items()
                   if cat == key and (exe in bins or any(os.path.basename(b) == exe for b in bins))), None)
     if match is None:
-        return None, ("Xfce has its own setting for this and doesn't list %s, so also choose it in Xfce's "
-                      "Default Applications." % app.name)
+        return None, (f"Xfce has its own setting for this and doesn't list {app.name}, so also choose it in Xfce's "
+                      "Default Applications.")
     path = os.path.join(config_home(env), "xfce4", "helpers.rc")
     before = read_text(path)
     lines = [l for l in (before or "").splitlines() if not l.startswith(key + "=")]
-    after = "\n".join(lines + ["%s=%s" % (key, match)]) + "\n"
+    after = "\n".join(lines + [f"{key}={match}"]) + "\n"
     if after == before:
         return None, ""
     return Change(app.id, app.name, path, before, after, False), ""

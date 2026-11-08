@@ -4,19 +4,18 @@ Only runs when you ask. Pure Python, no GTK."""
 import os
 import shutil
 import subprocess
-from typing import List
 
 from . import desktop_entries as de
 
 
-def steps(env=None) -> List[str]:
+def steps(env=None) -> list[str]:
     """What refresh() would do here, in plain words."""
     env = env if env is not None else os.environ
     out = ["Mark your applications folder as changed, so launchers that watch it reload"]
     if _has_mime_cache(env):
         out.append("Update the list of which apps open which files in that folder (update-desktop-database)")
     if _kde(env) and _kbuild():
-        out.append("Rebuild the KDE menu cache (%s)" % _kbuild())
+        out.append(f"Rebuild the KDE menu cache ({_kbuild()})")
     return out
 
 
@@ -35,18 +34,18 @@ def _kbuild() -> str:
     return shutil.which("kbuildsycoca6") or shutil.which("kbuildsycoca5") or ""
 
 
-def _run(cmd: List[str]) -> str:
+def _run(cmd: list[str]) -> str:
     try:
         r = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=60, text=True)
     except (OSError, subprocess.TimeoutExpired) as e:
-        return "%s failed: %s" % (os.path.basename(cmd[0]), e)
+        return f"{os.path.basename(cmd[0])} failed: {e}"
     if r.returncode != 0:
         msg = (r.stderr or "").strip().splitlines()
-        return "%s failed: %s" % (os.path.basename(cmd[0]), msg[-1] if msg else "exit %d" % r.returncode)
-    return "Ran %s" % os.path.basename(cmd[0])
+        return "{} failed: {}".format(os.path.basename(cmd[0]), msg[-1] if msg else f"exit {r.returncode}")
+    return f"Ran {os.path.basename(cmd[0])}"
 
 
-def refresh(env=None) -> List[str]:
+def refresh(env=None) -> list[str]:
     """Do it. Returns one line per step, saying what happened."""
     env = env if env is not None else os.environ
     folder = de.user_apps_dir(dict(env))
@@ -54,9 +53,9 @@ def refresh(env=None) -> List[str]:
     try:
         os.makedirs(folder, exist_ok=True)
         os.utime(folder)
-        done.append("Marked %s as changed" % folder)
+        done.append(f"Marked {folder} as changed")
     except OSError as e:
-        done.append("Couldn't touch %s: %s" % (folder, e.strerror or e))
+        done.append(f"Couldn't touch {folder}: {e.strerror or e}")
     if _has_mime_cache(env):
         done.append(_run(["update-desktop-database", folder]))
     if _kde(env) and _kbuild():

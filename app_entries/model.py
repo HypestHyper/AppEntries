@@ -1,4 +1,6 @@
 """GObject wrapper so apps can live in a Gio.ListStore."""
+from typing import ClassVar
+
 from gi.repository import Gio, GObject
 
 from .desktop_entries import App
@@ -7,7 +9,7 @@ from .desktop_entries import App
 class AppItem(GObject.Object):
     """One app in the list. Emits `changed` when its App data is replaced."""
 
-    __gsignals__ = {"changed": (GObject.SignalFlags.RUN_FIRST, None, ())}
+    __gsignals__: ClassVar[dict] = {"changed": (GObject.SignalFlags.RUN_FIRST, None, ())}
 
     def __init__(self, app: App):
         super().__init__()

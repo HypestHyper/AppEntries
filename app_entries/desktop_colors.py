@@ -10,7 +10,7 @@ in ui/appearance.py.
 """
 import os
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 # Names tried in order; the first defined one wins.
 ACCENT_NAMES = ("accent_color", "accent_bg_color", "theme_selected_bg_color", "selected_bg_color")
@@ -33,7 +33,7 @@ def config_home(env=None) -> str:
     return d if os.path.isabs(d) else os.path.join(home, ".config")
 
 
-def parse_color(text: str, defines: Optional[Dict[str, str]] = None, _depth: int = 0) -> Optional[str]:
+def parse_color(text: str, defines: Optional[dict[str, str]] = None, _depth: int = 0) -> Optional[str]:
     """A CSS colour as #rrggbb: #rgb, #rrggbb, #rrggbbaa, rgb(), rgba(), a
     few names, or @other_name. None if it can't be read."""
     t = (text or "").strip().rstrip(";").strip()
@@ -62,7 +62,7 @@ def parse_color(text: str, defines: Optional[Dict[str, str]] = None, _depth: int
             except ValueError:
                 return None
             vals.append(max(0, min(255, round(v))))
-        return "#%02x%02x%02x" % tuple(vals)
+        return "#{:02x}{:02x}{:02x}".format(*tuple(vals))
     return _NAMED.get(t.lower())
 
 
@@ -70,11 +70,11 @@ _DEFINE = re.compile(r"@define-color\s+([\w-]+)\s+([^;]+);")
 _IMPORT = re.compile(r"""@import\s+(?:url\(\s*)?["']?([^"')\s;]+)["']?\s*\)?\s*;""")
 
 
-def read_defines(path: str, _seen=None) -> Tuple[Dict[str, str], List[str]]:
+def read_defines(path: str, _seen=None) -> tuple[dict[str, str], list[str]]:
     """@define-color values from a GTK CSS file and the files it imports, and
     every file read (to watch). Later definitions win, as in CSS."""
     seen = _seen if _seen is not None else []
-    defines: Dict[str, str] = {}
+    defines: dict[str, str] = {}
     path = os.path.realpath(path)
     if path in seen or len(seen) > 20:
         return defines, seen
@@ -84,13 +84,12 @@ def read_defines(path: str, _seen=None) -> Tuple[Dict[str, str], List[str]]:
             text = f.read()
     except OSError:
         return defines, seen
-    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
     # Imports and definitions apply in the order they appear.
-    for m in re.finditer(r"%s|%s" % (_IMPORT.pattern, _DEFINE.pattern), text):
+    for m in re.finditer(rf"{_IMPORT.pattern}|{_DEFINE.pattern}", text):
         if m.group(0).startswith("@import"):
             target = m.group(1)
-            if target.startswith("file://"):
-                target = target[len("file://"):]
+            target = target.removeprefix("file://")
             target = os.path.expanduser(target)
             if not os.path.isabs(target):
                 target = os.path.join(os.path.dirname(path), target)
@@ -101,14 +100,14 @@ def read_defines(path: str, _seen=None) -> Tuple[Dict[str, str], List[str]]:
     return defines, seen
 
 
-def gtk_files(env=None) -> List[str]:
+def gtk_files(env=None) -> list[str]:
     home = config_home(env)
     return [os.path.join(home, "gtk-4.0", "gtk.css"), os.path.join(home, "gtk-3.0", "gtk.css")]
 
 
-def gtk_accent(env=None) -> Tuple[Optional[str], str, List[str]]:
+def gtk_accent(env=None) -> tuple[Optional[str], str, list[str]]:
     """(colour, the file it came from, every file to watch)."""
-    watch: List[str] = []
+    watch: list[str] = []
     for path in gtk_files(env):
         watch.append(path)
         defines, read = read_defines(path)
@@ -129,7 +128,7 @@ def kde_accent(env=None) -> Optional[str]:
             text = f.read()
     except OSError:
         return None
-    m = re.search(r"^\s*AccentColor\s*=\s*([^\n]+)$", text, flags=re.M)
+    m = re.search(r"^\s*AccentColor\s*=\s*([^\n]+)$", text, flags=re.MULTILINE)
     if not m:
         return None
     v = m.group(1).strip()
@@ -137,7 +136,7 @@ def kde_accent(env=None) -> Optional[str]:
         return parse_color(v)
     parts = [p.strip() for p in v.split(",")]
     if len(parts) >= 3 and all(p.isdigit() for p in parts[:3]):
-        return "#%02x%02x%02x" % tuple(min(255, int(p)) for p in parts[:3])
+        return "#{:02x}{:02x}{:02x}".format(*tuple(min(255, int(p)) for p in parts[:3]))
     return None
 
 
@@ -150,10 +149,10 @@ def portal_color(value) -> Optional[str]:
         return None
     if not all(0.0 <= c <= 1.0 for c in (r, g, b)):
         return None
-    return "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
+    return f"#{round(r * 255):02x}{round(g * 255):02x}{round(b * 255):02x}"
 
 
-def prefers_portal(desktops: List[str]) -> bool:
+def prefers_portal(desktops: list[str]) -> bool:
     """On GNOME and KDE the desktop's own accent setting comes first. Elsewhere
     the portal often reports a default no one chose (the GTK backend says blue),
     so the colours written to GTK theme files win."""

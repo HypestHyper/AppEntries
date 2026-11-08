@@ -13,10 +13,19 @@ import hashlib
 import os
 import tempfile
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import Optional, Union
 
-from .desktop_entries import (CHECKSUM_KEY, current_desktops, GROUP, HIDDEN_KEY, MANAGED_KEY, App, DesktopFile,
-                              is_true, user_apps_dir)
+from .desktop_entries import (
+    CHECKSUM_KEY,
+    GROUP,
+    HIDDEN_KEY,
+    MANAGED_KEY,
+    App,
+    DesktopFile,
+    current_desktops,
+    is_true,
+    user_apps_dir,
+)
 
 # Keys a file made by App Entries 1.0 may hold and still count as "ours only".
 MINIMAL_KEYS = {"Type", "Name", "Hidden", MANAGED_KEY}
@@ -26,7 +35,7 @@ class OverrideError(Exception):
     """A file couldn't be read or written. `path` is the file involved."""
 
     def __init__(self, path: str, reason: str):
-        super().__init__("%s: %s" % (path, reason))
+        super().__init__(f"{path}: {reason}")
         self.path = path
         self.reason = reason
 
@@ -194,7 +203,7 @@ def managed_copy(app: App, hidden: bool, env=None) -> str:
     df = DesktopFile(source)
     verb = "hide" if hidden else "show"
     df.lines[:0] = [
-        "# Copy made by App Entries to %s %s in app launchers." % (verb, app.id),
+        f"# Copy made by App Entries to {verb} {app.id} in app launchers.",
         "# Change it back in App Entries, or delete this file, to undo.",
     ]
     df.remove("Hidden")
@@ -289,7 +298,7 @@ def plan_restore_original(app: App) -> Change:
     return plan_delete(app.id, app.name, app.override_path, app.base_hidden)
 
 
-def plan_unhide_all(apps: List[App], env=None):
+def plan_unhide_all(apps: list[App], env=None):
     """Changes that show every app the user (or App Entries) hid. Apps hidden by
     their own package, and files that would need deleting without asking,
     are left out. Returns (changes, skipped apps)."""
@@ -307,7 +316,7 @@ def plan_unhide_all(apps: List[App], env=None):
     return changes, skipped
 
 
-def apply_all(changes: List[Change]) -> List[Change]:
+def apply_all(changes: list[Change]) -> list[Change]:
     """Apply in order. If one fails, the ones already made are undone and the
     error is raised, so it's all or nothing."""
     done = []
@@ -325,5 +334,5 @@ def apply_all(changes: List[Change]) -> List[Change]:
     return done
 
 
-def undo_all(changes: List[Change]) -> List[Change]:
+def undo_all(changes: list[Change]) -> list[Change]:
     return apply_all([c.reversed() for c in reversed(changes)])

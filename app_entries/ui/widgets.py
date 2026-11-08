@@ -2,6 +2,7 @@
 import json
 import os
 from gettext import gettext as _
+from typing import ClassVar
 
 from gi.repository import Gdk, GLib, GObject, Graphene, Gsk, Gtk, Pango
 
@@ -304,7 +305,7 @@ class SearchField(Gtk.Box):
     "search-changed" a moment after typing stops, "search-activate" on
     Enter, Esc clears it, and set_key_capture_widget() starts a search when
     you type anywhere in that widget."""
-    __gsignals__ = {
+    __gsignals__: ClassVar[dict] = {
         "search-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
         "search-activate": (GObject.SignalFlags.RUN_FIRST, None, ()),
     }
@@ -462,7 +463,7 @@ class Group(Gtk.Box):
 
 class Chip(Gtk.Box):
     """Status pill with a leading icon."""
-    KINDS = {"ok": "check_circle", "warn": "bedtime", "error": "error", "": "info"}
+    KINDS: ClassVar[dict] = {"ok": "check_circle", "warn": "bedtime", "error": "error", "": "info"}
 
     def __init__(self, text="", kind="ok"):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -489,7 +490,7 @@ class Chip(Gtk.Box):
 class TabBar(Gtk.Box):
     """A scrollable tab bar; chevrons show only when the tabs overflow."""
 
-    __gsignals__ = {"changed": (GObject.SignalFlags.RUN_FIRST, None, (str,))}
+    __gsignals__: ClassVar[dict] = {"changed": (GObject.SignalFlags.RUN_FIRST, None, (str,))}
 
     def __init__(self, items, active):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)

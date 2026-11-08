@@ -11,12 +11,12 @@ import json
 import os
 import re
 from dataclasses import dataclass, fields
-from typing import Dict, List, Optional
+from typing import Optional
 
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "material-symbols.json.gz")
 GRID = 960
 
-_icons: Optional[Dict[str, List[str]]] = None
+_icons: Optional[dict[str, list[str]]] = None
 
 STYLES = ("outlined", "filled")
 # Tile shapes, drawn on the same 960 grid.
@@ -28,7 +28,7 @@ STYLE_FIELDS = ("style", "shape", "color", "recolor", "border", "border_width", 
 _CHOICE_MARK = "app-entries-choice "
 
 
-def icons() -> Dict[str, List[str]]:
+def icons() -> dict[str, list[str]]:
     global _icons
     if _icons is None:
         with gzip.open(DATA, "rt", encoding="utf-8") as f:
@@ -36,11 +36,11 @@ def icons() -> Dict[str, List[str]]:
     return _icons
 
 
-def names() -> List[str]:
+def names() -> list[str]:
     return sorted(icons())
 
 
-def search(query: str, limit: int = 0) -> List[str]:
+def search(query: str, limit: int = 0) -> list[str]:
     """Names matching every word of the query; names that start with the
     query come first, then shorter names."""
     words = [w for w in query.casefold().replace("-", " ").replace("_", " ").split() if w]
@@ -95,7 +95,7 @@ def _shade(hex_color: str, lightness_delta: float) -> str:
     hue, light, sat = colorsys.rgb_to_hls(r, g, b)
     light = max(0.0, min(1.0, light + lightness_delta))
     r, g, b = colorsys.hls_to_rgb(hue, light, sat)
-    return "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
+    return f"#{round(r * 255):02x}{round(g * 255):02x}{round(b * 255):02x}"
 
 
 def glyph_color(tile: str) -> str:
@@ -113,11 +113,11 @@ def _tile_shape(shape: str, inset: float = 0.0) -> str:
     if shape == "circle":
         return '<circle cx="480" cy="480" r="%g"' % (456 - inset)
     if shape == "rounded":
-        return ('<rect x="%g" y="%g" width="%g" height="%g" rx="%g"'
-                % (24 + inset, 24 + inset, 912 - 2 * inset, 912 - 2 * inset, max(0, 216 - inset)))
+        return (f'<rect x="{24 + inset:g}" y="{24 + inset:g}" width="{912 - 2 * inset:g}" '
+                f'height="{912 - 2 * inset:g}" rx="{max(0, 216 - inset):g}"')
     k = (912 - 2 * inset) / 912
-    return ('<path transform="translate(480 480) scale(%g) translate(-480 -480)" '
-            'd="M480 24C820 24 936 140 936 480S820 936 480 936 24 820 24 480 140 24 480 24Z"' % k)
+    return (f'<path transform="translate(480 480) scale({k:g}) translate(-480 -480)" '
+            'd="M480 24C820 24 936 140 936 480S820 936 480 936 24 820 24 480 140 24 480 24Z"')
 
 
 def outer_edges(d: str) -> str:
@@ -142,8 +142,7 @@ def _border_units(choice: IconChoice) -> float:
 
 def _gradient(top: str, bottom: str) -> str:
     return ('<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="960" gradientUnits="userSpaceOnUse">'
-            '<stop offset="0" stop-color="%s"/><stop offset="1" stop-color="%s"/></linearGradient></defs>'
-            % (top, bottom))
+            f'<stop offset="0" stop-color="{top}"/><stop offset="1" stop-color="{bottom}"/></linearGradient></defs>')
 
 
 def dataclasses_asdict(choice: IconChoice) -> dict:
@@ -162,12 +161,12 @@ def _hue_shift(hex_color: str, delta: float) -> str:
     r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
     hue, light, sat = colorsys.rgb_to_hls(r, g, b)
     r, g, b = colorsys.hls_to_rgb((hue + delta) % 1.0, light, sat)
-    return "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
+    return f"#{round(r * 255):02x}{round(g * 255):02x}{round(b * 255):02x}"
 
 
 def choice_from_svg(text: str) -> Optional[IconChoice]:
     """The choice an App Entries icon was drawn from, or None for other SVGs."""
-    m = re.search(r"<!-- %s([A-Za-z0-9+/=]+) -->" % _CHOICE_MARK, text or "")
+    m = re.search(rf"<!-- {_CHOICE_MARK}([A-Za-z0-9+/=]+) -->", text or "")
     if not m:
         return None
     try:
@@ -198,25 +197,25 @@ def render(choice: IconChoice, size: int = 128, title: str = "") -> str:
     color = choice.color if choice.color.startswith("#") else "#" + choice.color
     tiled = choice.shape in ("circle", "rounded", "squircle")
     bw = _border_units(choice) if choice.border else 0
-    parts = ['<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
-             'width="%d" height="%d" viewBox="0 0 %d %d">' % (size, size, GRID, GRID)]
+    parts = [('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+             f'width="{int(size)}" height="{int(size)}" viewBox="0 0 {int(GRID)} {int(GRID)}">')]
     if title:
-        parts.append("<title>%s</title>" % (title.replace("&", "&amp;").replace("<", "&lt;")))
-    what = ("Material Symbols “%s” (Apache 2.0)" % choice.name if choice.source == "material"
+        parts.append("<title>{}</title>".format(title.replace("&", "&amp;").replace("<", "&lt;")))
+    what = (f"Material Symbols “{choice.name}” (Apache 2.0)" if choice.source == "material"
             else "an icon from your library")
-    parts.append("<!-- %s, made with App Entries -->" % what)
+    parts.append(f"<!-- {what}, made with App Entries -->")
     # The choice itself, so the icon can be opened again or restyled later.
     data = base64.b64encode(json.dumps(dataclasses_asdict(choice), sort_keys=True).encode()).decode("ascii")
-    parts.append("<!-- %s%s -->" % (_CHOICE_MARK, data))
+    parts.append(f"<!-- {_CHOICE_MARK}{data} -->")
 
     if tiled:
         # With a border, the border is the full shape and the tile sits on it,
         # shrunk by the border's width. Their edges never line up, so no thin
         # line of tile colour shows around the outside of the border.
         if bw:
-            parts.append(_tile_shape(choice.shape) + ' fill="%s"/>' % border_paint(choice, color))
+            parts.append(_tile_shape(choice.shape) + f' fill="{border_paint(choice, color)}"/>')
         if choice.gradient == "flat":
-            parts.append(_tile_shape(choice.shape, bw) + ' fill="%s"/>' % color)
+            parts.append(_tile_shape(choice.shape, bw) + f' fill="{color}"/>')
         else:
             top, bottom = _tile_colors(color, choice.gradient)
             parts.append(_gradient(top, bottom))
@@ -224,7 +223,7 @@ def render(choice: IconChoice, size: int = 128, title: str = "") -> str:
         ink = glyph_color(color)
         # The symbol sits centred, at `scale` % of the tile.
         k = max(40, min(80, int(choice.scale))) / 100
-        parts.append('<g transform="translate(%g %g) scale(%g)">' % (480 * (1 - k), 480 * (1 - k), k))
+        parts.append(f'<g transform="translate({480 * (1 - k):g} {480 * (1 - k):g}) scale({k:g})">')
         inner_bw = bw / k if (bw and choice.border_inner) else 0
         parts.append(_symbol(choice, ink, inner_bw, border_paint(choice, ink), outer_only=False))
         parts.append("</g>")
@@ -232,7 +231,7 @@ def render(choice: IconChoice, size: int = 128, title: str = "") -> str:
         if bw:
             # Keep the border inside the canvas.
             scale = (GRID - 2 * bw) / GRID
-            parts.append('<g transform="translate(%g %g) scale(%g)">' % (bw, bw, scale))
+            parts.append(f'<g transform="translate({bw:g} {bw:g}) scale({scale:g})">')
         parts.append(_symbol(choice, color, bw / (((GRID - 2 * bw) / GRID) or 1) if bw else 0,
                              border_paint(choice, color), outer_only=not choice.border_inner))
         if bw:
@@ -254,6 +253,5 @@ def _symbol(choice: IconChoice, ink: str, bw: float, border: str, outer_only: bo
     out = ""
     if bw:
         edge = outer_edges(d) if outer_only else d
-        out += ('<path d="%s" fill="none" stroke="%s" stroke-width="%g" stroke-linejoin="round"/>'
-                % (edge, border, bw * 2))
-    return out + '<path fill="%s" d="%s"/>' % (ink, d)
+        out += (f'<path d="{edge}" fill="none" stroke="{border}" stroke-width="{bw * 2:g}" stroke-linejoin="round"/>')
+    return out + f'<path fill="{ink}" d="{d}"/>'

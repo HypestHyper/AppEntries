@@ -61,7 +61,7 @@ class Application(Gtk.Application):
 
     def do_handle_local_options(self, options):
         if options.contains("version"):
-            print("%s %s" % (APP_NAME, VERSION))
+            print(f"{APP_NAME} {VERSION}")
             return 0
         return -1
 
@@ -118,7 +118,7 @@ class Application(Gtk.Application):
         self.set_accels_for_action("win.undo-last", ["<Control>z"])
         for i, key in enumerate(("all", "hidden", "customised", "issues", "mine", "autostart", "defaults",
                                  "settings", "updates"), 1):
-            self.set_accels_for_action("win.filter::" + key, ["<Alt>%d" % i])
+            self.set_accels_for_action("win.filter::" + key, [f"<Alt>{i}"])
 
     def do_activate(self):
         first = self.window is None
@@ -142,7 +142,7 @@ class Application(Gtk.Application):
     def _watch_first_frame(self, window):
         if timing.ON:
             native = window.get_renderer() if hasattr(window, "get_renderer") else None
-            timing.mark("  window created, renderer ready (%s, icon %s)" % (
+            timing.mark("  window created, renderer ready ({}, icon {})".format(
                 type(native).__name__ if native is not None else "?",
                 "skipped" if getattr(self, "_icon_unset", False) else "looked up"))
         clock = window.get_frame_clock()

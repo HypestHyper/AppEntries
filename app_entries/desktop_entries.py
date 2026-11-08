@@ -6,7 +6,7 @@ Specification 1.5 and the XDG Base Directory Specification.
 import os
 import shlex
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 GROUP = "Desktop Entry"
 MANAGED_KEY = "X-AppEntries-Managed"   # the file was made by App Entries
@@ -22,7 +22,7 @@ class DesktopFile:
     comments, key order or other groups."""
 
     def __init__(self, text: str = ""):
-        self.lines: List[str] = text.splitlines()
+        self.lines: list[str] = text.splitlines()
 
     @classmethod
     def load(cls, path: str) -> "DesktopFile":
@@ -34,7 +34,7 @@ class DesktopFile:
 
     # -- reading ----------------------------------------------------------
 
-    def _group_span(self, group: str) -> Optional[Tuple[int, int]]:
+    def _group_span(self, group: str) -> Optional[tuple[int, int]]:
         """(index of the header line, index after the last line) of a group."""
         start = None
         for i, raw in enumerate(self.lines):
@@ -46,7 +46,7 @@ class DesktopFile:
                     start = i
         return (start, len(self.lines)) if start is not None else None
 
-    def items(self, group: str = GROUP) -> List[Tuple[str, str]]:
+    def items(self, group: str = GROUP) -> list[tuple[str, str]]:
         span = self._group_span(group)
         if span is None:
             return []
@@ -59,8 +59,8 @@ class DesktopFile:
             out.append((k.strip(), v.strip()))
         return out
 
-    def group_dict(self, group: str = GROUP) -> Dict[str, str]:
-        d: Dict[str, str] = {}
+    def group_dict(self, group: str = GROUP) -> dict[str, str]:
+        d: dict[str, str] = {}
         for k, v in self.items(group):
             d.setdefault(k, v)  # first occurrence wins
         return d
@@ -68,7 +68,7 @@ class DesktopFile:
     def has_group(self, group: str = GROUP) -> bool:
         return self._group_span(group) is not None
 
-    def groups(self) -> List[str]:
+    def groups(self) -> list[str]:
         out = []
         for raw in self.lines:
             s = raw.strip()
@@ -83,19 +83,19 @@ class DesktopFile:
         if span is None:
             if self.lines and self.lines[-1].strip():
                 self.lines.append("")
-            self.lines += ["[%s]" % group, "%s=%s" % (key, value)]
+            self.lines += [f"[{group}]", f"{key}={value}"]
             return
         start, end = span
         for i in range(start + 1, end):
             s = self.lines[i].strip()
             if "=" in s and not s.startswith("#") and s.split("=", 1)[0].strip() == key:
-                self.lines[i] = "%s=%s" % (key, value)
+                self.lines[i] = f"{key}={value}"
                 return
         # Append after the group's last non-blank line.
         pos = end
         while pos > start + 1 and not self.lines[pos - 1].strip():
             pos -= 1
-        self.lines.insert(pos, "%s=%s" % (key, value))
+        self.lines.insert(pos, f"{key}={value}")
 
     def remove(self, key: str, group: str = GROUP) -> bool:
         span = self._group_span(group)
@@ -135,7 +135,7 @@ def is_true(value: Optional[str]) -> bool:
 # Locale
 
 
-def locale_names(env: Optional[Dict[str, str]] = None) -> List[str]:
+def locale_names(env: Optional[dict[str, str]] = None) -> list[str]:
     """Locale keys to try, best first, per the spec's matching rules."""
     env = os.environ if env is None else env
     raw = ""
@@ -146,15 +146,15 @@ def locale_names(env: Optional[Dict[str, str]] = None) -> List[str]:
     langs = [l for l in env.get("LANGUAGE", "").split(":") if l]
     if raw and raw not in ("C", "POSIX") and not raw.startswith("C."):
         langs.append(raw)
-    out: List[str] = []
+    out: list[str] = []
     for loc in langs:
         base, _, mod = loc.partition("@")
         base = base.split(".", 1)[0]
         lang, _, country = base.partition("_")
         for cand in (
-            country and mod and "%s_%s@%s" % (lang, country, mod),
-            country and "%s_%s" % (lang, country),
-            mod and "%s@%s" % (lang, mod),
+            country and mod and f"{lang}_{country}@{mod}",
+            country and f"{lang}_{country}",
+            mod and f"{lang}@{mod}",
             lang,
         ):
             if cand and cand not in out:
@@ -162,9 +162,9 @@ def locale_names(env: Optional[Dict[str, str]] = None) -> List[str]:
     return out
 
 
-def localized(d: Dict[str, str], key: str, locales: List[str]) -> str:
+def localized(d: dict[str, str], key: str, locales: list[str]) -> str:
     for loc in locales:
-        v = d.get("%s[%s]" % (key, loc))
+        v = d.get(f"{key}[{loc}]")
         if v:
             return unescape(v)
     return unescape(d.get(key, ""))
@@ -174,25 +174,25 @@ def localized(d: Dict[str, str], key: str, locales: List[str]) -> str:
 # Directories
 
 
-def user_data_dir(env: Optional[Dict[str, str]] = None) -> str:
+def user_data_dir(env: Optional[dict[str, str]] = None) -> str:
     env = os.environ if env is None else env
     home = env.get("HOME") or os.path.expanduser("~")
     d = env.get("XDG_DATA_HOME") or ""
     return d if os.path.isabs(d) else os.path.join(home, ".local", "share")
 
 
-def user_apps_dir(env: Optional[Dict[str, str]] = None) -> str:
+def user_apps_dir(env: Optional[dict[str, str]] = None) -> str:
     return os.path.join(user_data_dir(env), "applications")
 
 
-def application_dirs(env: Optional[Dict[str, str]] = None) -> List[str]:
+def application_dirs(env: Optional[dict[str, str]] = None) -> list[str]:
     """All application directories, highest precedence first."""
     env = os.environ if env is None else env
     # Per the base dir spec, the defaults apply only when XDG_DATA_DIRS is unset.
     data_dirs = [d for d in (env.get("XDG_DATA_DIRS") or "").split(":") if os.path.isabs(d)]
     if not data_dirs:
         data_dirs = ["/usr/local/share", "/usr/share"]
-    out: List[str] = []
+    out: list[str] = []
     for d in [user_data_dir(env)] + data_dirs:
         p = os.path.normpath(os.path.join(d, "applications"))
         if p not in out:
@@ -214,7 +214,7 @@ class Entry:
     """One .desktop file as found on disk."""
     id: str
     path: str
-    data: Dict[str, str]
+    data: dict[str, str]
     in_user_dir: bool
 
 
@@ -241,21 +241,21 @@ class App:
     base_path: str = ""            # that copy (the highest one), if any
     base_hidden: bool = False      # launchers would hide it without an override
     keywords: str = ""
-    shadowed: List[str] = field(default_factory=list)
+    shadowed: list[str] = field(default_factory=list)
     # Filled in by health.check() after a scan.
     source: str = ""               # system, flatpak, snap, appimage, steam or user
     missing: str = ""              # the program it runs, if that isn't installed
     # Names of other entries for the same app (same icon and first word of the
     # name) that are in the opposite state: shown when this one is hidden, or
     # hidden when this one is shown.
-    related: Tuple[str, ...] = ()
+    related: tuple[str, ...] = ()
     customised: bool = False       # the user's file for a system app changes more than hiding
     created: bool = False          # a launcher made with App Entries
     # OnlyShowIn/NotShowIn rules that leave it out on the current desktop.
-    only_show_in: Tuple[str, ...] = ()
-    not_show_in: Tuple[str, ...] = ()
+    only_show_in: tuple[str, ...] = ()
+    not_show_in: tuple[str, ...] = ()
     excluded_here: bool = False
-    mime_types: Tuple[str, ...] = ()   # the file types it says it opens (MimeType)
+    mime_types: tuple[str, ...] = ()   # the file types it says it opens (MimeType)
 
     @property
     def has_override(self) -> bool:
@@ -283,8 +283,8 @@ def executable_name(exec_line: str) -> str:
     return os.path.basename(parts[0]) if parts else ""
 
 
-def scan_dir(apps_dir: str, in_user_dir: bool) -> Dict[str, Entry]:
-    found: Dict[str, Entry] = {}
+def scan_dir(apps_dir: str, in_user_dir: bool) -> dict[str, Entry]:
+    found: dict[str, Entry] = {}
     if not os.path.isdir(apps_dir):
         return found
     for root, dirs, files in os.walk(apps_dir, followlinks=True):
@@ -304,16 +304,16 @@ def scan_dir(apps_dir: str, in_user_dir: bool) -> Dict[str, Entry]:
     return found
 
 
-def current_desktops(env: Optional[Dict[str, str]] = None) -> List[str]:
+def current_desktops(env: Optional[dict[str, str]] = None) -> list[str]:
     env = os.environ if env is None else env
     return [d for d in (env.get("XDG_CURRENT_DESKTOP") or "").split(":") if d]
 
 
-def _list(value: str) -> Tuple[str, ...]:
+def _list(value: str) -> tuple[str, ...]:
     return tuple(v for v in value.split(";") if v.strip())
 
 
-def excluded_on(data: Dict[str, str], desktops: List[str]) -> bool:
+def excluded_on(data: dict[str, str], desktops: list[str]) -> bool:
     """Whether OnlyShowIn/NotShowIn leave this entry out on these desktops,
     the way launchers check it (any match counts, case-insensitively)."""
     current = {d.casefold() for d in desktops}
@@ -324,13 +324,13 @@ def excluded_on(data: Dict[str, str], desktops: List[str]) -> bool:
     return bool(never & current)
 
 
-def scan(env: Optional[Dict[str, str]] = None, include_no_display: bool = True) -> List[App]:
+def scan(env: Optional[dict[str, str]] = None, include_no_display: bool = True) -> list[App]:
     """Every launchable application, sorted by name."""
     dirs = application_dirs(env)
     user_dir = os.path.normpath(user_apps_dir(env))
     locales = locale_names(env)
     desktops = current_desktops(env)
-    stacks: Dict[str, List[Entry]] = {}
+    stacks: dict[str, list[Entry]] = {}
     for d in dirs:
         for did, entry in scan_dir(d, d == user_dir).items():
             stacks.setdefault(did, []).append(entry)
@@ -344,12 +344,12 @@ def scan(env: Optional[Dict[str, str]] = None, include_no_display: bool = True) 
     return apps
 
 
-def is_bare_override(data: Dict[str, str]) -> bool:
+def is_bare_override(data: dict[str, str]) -> bool:
     """A user file that only exists to change state, with no Exec of its own."""
     return not data.get("Exec", "").strip()
 
 
-def build_app(did: str, stack: List[Entry], locales: List[str], desktops: Optional[List[str]] = None
+def build_app(did: str, stack: list[Entry], locales: list[str], desktops: Optional[list[str]] = None
               ) -> Optional[App]:
     desktops = desktops or []
     effective = stack[0]

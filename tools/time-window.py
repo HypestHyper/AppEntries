@@ -28,8 +28,9 @@ class Test(Gtk.Application):
         w = Gtk.Window(application=self)
         t = time.perf_counter()
         w.realize()
-        print("%-7s %-8s %5.0f ms  %s" % ((sys.argv[1:] or ["icon"])[0], os.environ.get("GSK_RENDERER", "default"),
-                                          (time.perf_counter() - t) * 1000, type(w.get_renderer()).__name__))
+        mode, renderer = (sys.argv[1:] or ["icon"])[0], os.environ.get("GSK_RENDERER", "default")
+        ms = (time.perf_counter() - t) * 1000
+        print(f"{mode:<7} {renderer:<8} {ms:5.0f} ms  {type(w.get_renderer()).__name__}")
         self.quit()
 
 

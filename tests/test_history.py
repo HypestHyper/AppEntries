@@ -1,6 +1,6 @@
 import pytest
-
 from conftest import entry
+
 from app_entries import desktop_entries as de
 from app_entries import history, trash
 from app_entries import overrides as ov
@@ -54,7 +54,7 @@ def test_trashed_files_and_binary_files_come_back(xdg):
 def test_history_is_trimmed_and_can_be_cleared(xdg, monkeypatch):
     monkeypatch.setattr(history, "KEEP", 3)
     for i in range(5):
-        history.record("change %d" % i, [ov.Change("a", "A", str(xdg.tmp / ("f%d" % i)), None, "x", False)],
+        history.record(f"change {i}", [ov.Change("a", "A", str(xdg.tmp / f"f{i}"), None, "x", False)],
                        env=xdg.env)
     assert [e.message for e in history.load(xdg.env)] == ["change 4", "change 3", "change 2"]
     history.clear(xdg.env)

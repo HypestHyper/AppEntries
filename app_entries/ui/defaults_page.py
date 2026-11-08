@@ -132,7 +132,7 @@ class DefaultsPage(Gtk.ScrolledWindow):
             if names.count(a.name.casefold()) > 1:
                 # Two entries with the same name: say which is which.
                 src = a.source or ("system" if a.system else "user")
-                text.append(label("%s · %s" % (label_for_source(src), a.id), ("small", "dim", "mono"),
+                text.append(label(f"{label_for_source(src)} · {a.id}", ("small", "dim", "mono"),
                                   ellipsize=True))
             row.set_child(hbox(10, img, text, mark))
             row.connect("clicked", lambda _r, app=a: (b.popdown(), self._set(cat, app)))
