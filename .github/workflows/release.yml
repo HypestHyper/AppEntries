@@ -50,10 +50,14 @@ jobs:
           fi
           grep -q "^## $v " CHANGELOG.md || { echo "CHANGELOG.md has no '## $v' section"; exit 1; }
           echo "VERSION=$v" >> "$GITHUB_ENV"
-      - name: Run the tests
+      # The same checks as the Tests workflow (keep Ruff's version the same in both):
+      # a release stops here if either fails.
+      - name: Ruff
         run: |
-          python3 -m pip install --quiet pytest
-          python3 -m pytest -q tests
+          python3 -m pip install --quiet pytest ruff==0.16.8
+          python3 -m ruff check app_entries tests tools
+      - name: Run the tests
+        run: python3 -m pytest -q tests
       - name: Build the archive
         run: |
           git archive --format=tar.gz --prefix="app-entries-$VERSION/" -o "app-entries-$VERSION.tar.gz" HEAD \
