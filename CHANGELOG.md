@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Under the hood: the code follows Ruff's checks (newer type hints, f-strings), which now run on every change. Nothing changes in how the app works.
+
 ## 1.0.5 — 2026-11-02
 
 - Uninstall reads apk-tools 3's output (Alpine, postmarketOS) correctly, and is tested against dnf5's (Fedora).
