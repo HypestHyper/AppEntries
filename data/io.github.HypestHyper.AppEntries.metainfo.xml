@@ -29,6 +29,24 @@
       <li>Export your changes to another computer, and update from GitHub with one button</li>
     </ul>
   </description>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Every installed app, with a switch to hide it from launcher menus</caption>
+      <image>https://raw.githubusercontent.com/HypestHyper/AppEntries/main/docs/screenshots/main.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Uninstall, showing everything that goes first</caption>
+      <image>https://raw.githubusercontent.com/HypestHyper/AppEntries/main/docs/screenshots/uninstall.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Choose which app opens links, folders and each kind of file</caption>
+      <image>https://raw.githubusercontent.com/HypestHyper/AppEntries/main/docs/screenshots/default-apps.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Launchers that run commands, in one terminal or several</caption>
+      <image>https://raw.githubusercontent.com/HypestHyper/AppEntries/main/docs/screenshots/commands-launcher.png</image>
+    </screenshot>
+  </screenshots>
   <launchable type="desktop-id">io.github.HypestHyper.AppEntries.desktop</launchable>
   <url type="homepage">https://github.com/HypestHyper/AppEntries</url>
   <content_rating type="oars-1.1"/>

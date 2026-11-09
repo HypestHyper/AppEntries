@@ -61,7 +61,7 @@ jobs:
       - name: Build the archive
         run: |
           git archive --format=tar.gz --prefix="app-entries-$VERSION/" -o "app-entries-$VERSION.tar.gz" HEAD \
-            -- . ':!tests' ':!.github' ':!tools'
+            -- . ':!tests' ':!.github' ':!tools' ':!docs'
       - name: Write the release notes
         run: |
           awk -v head="## $VERSION " 'index($0, head) == 1 {on = 1; next} /^## / {on = 0} on' CHANGELOG.md > notes.md

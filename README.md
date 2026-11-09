@@ -25,6 +25,10 @@
   <a href="CHANGELOG.md">Changelog</a>
 </p>
 
+<p align="center">
+  <img alt="App Entries in dark mode: a grid of apps, each with a switch to hide it from launcher menus and a badge showing where it came from" src="docs/screenshots/main.png" width="860">
+</p>
+
 ---
 
 > **AI disclosure:** This project was written almost entirely by an AI assistant, with direction and testing by the author. It has been tested on Arch Linux with Hyprland, but not yet on every desktop, so review the code before relying on it.
@@ -41,6 +45,10 @@
 - **Uninstall…** for Flatpak, Snap, AppImage, Steam, Distrobox and system packages (pacman, apt, dnf, zypper, rpm-ostree, xbps, apk, eopkg, Portage and Nix). Before anything runs it shows what goes, which other apps and packages need it or go with it, whether it's a default app or starts at login, and the exact command. Data folders and advanced options (like removing what depends on it) are off unless you turn them on, with warnings. Commands that need a password run in your terminal; packages the system or your desktop needs are never offered. History keeps a Reinstall button.
 - **Helper apps…** shortcuts to the apps that set up what App Entries doesn't, opened on that app where they allow it: Flatseal, Warehouse, Gear Lever, ProtonUp-Qt, Protontricks, BoxBuddy, DistroShelf, GNOME Settings' and KDE's app permissions, your software centre and Steam. Missing ones show what they do and the Flathub command, run in your terminal only if you ask.
 
+<p align="center">
+  <img alt="The Uninstall window for a Flatpak: what's removed, its data and unused runtime as options that are off, and the command it runs" src="docs/screenshots/uninstall.png" width="760">
+</p>
+
 **Launchers**
 - **New launcher** for a program or script, or for commands written as in a terminal (`paru -Syu && flatpak update`, pipes, loops, whole scripts) run by the shell you choose. Add more sets of commands to open each in its own terminal. Terminal options and a live preview of the entry.
 - **New web app**: a site in its own window with no address bar or tabs, using a Chromium-based browser. It shares your browser's sign-ins, or keeps its own, with an optional dark mode and a window name for docks and window rules.
@@ -56,6 +64,33 @@
 - Light and dark themes and a responsive layout. The accent can follow your desktop's (GNOME and KDE settings, or the colours Noctalia, matugen, wallust and other theme tools write for GTK apps), and palettes like Catppuccin, Gruvbox, Nord, Rosé Pine, Tokyo Night, Everforest and Solarized restyle the whole app.
 
 Nothing happens by itself: every option is explained, nothing is written until you press a button, and every change can be undone. App Entries never changes system files itself; only a package manager you run from it, in your terminal, does.
+
+<details>
+<summary><b>More screenshots</b></summary>
+
+<br>
+
+**Default apps**: which app opens links, folders and each kind of file.
+
+<img alt="The Default apps tab: web browser, email, files, text, PDFs, pictures, videos and music, each with the app that opens them" src="docs/screenshots/default-apps.png" width="760">
+
+**A launcher that runs commands**, here in two terminals.
+
+<img alt="Editing a launcher that runs commands with bash: paru -Syu and flatpak update in one terminal, journalctl -f in another" src="docs/screenshots/commands-launcher.png" width="520">
+
+**Styled icons** from Material Symbols or your own SVGs.
+
+<img alt="The icon picker: a grid of symbols, and the style, background, shading, size and colour of the tile" src="docs/screenshots/icon-picker.png" width="760">
+
+**Issues**: entries whose program is missing, leftover files and duplicates.
+
+<img alt="The Issues tab listing an entry whose program isn't installed, with a button to hide it" src="docs/screenshots/issues.png" width="760">
+
+**Appearance**: your desktop's accent or any colour, and palettes like Catppuccin and Nord.
+
+<img alt="The Settings tab: accent colours with a colour picker, palettes, light or dark, and size" src="docs/screenshots/settings.png" width="760">
+
+</details>
 
 ## Installation
 
