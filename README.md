@@ -40,7 +40,8 @@
 - Hide or show an app with one switch. Hidden apps still open links and files, and stay in "Open With".
 - **Select several** to hide, show, restore, restyle or uninstall many apps at once.
 - **Edit** any entry (name, icon, command, environment, folders, desktops, quick actions) with a live view of the file. Editing a system app saves your own copy; *Restore original* puts it back.
-- **Issues** finds leftover files, missing programs and duplicates, and explains each with a button to fix it.
+- **Issues** finds leftover files, missing programs and duplicates, and explains each with a button to fix it.<br>
+  <a href="docs/screenshots/issues.png"><img alt="The Issues tab listing an entry whose program isn't installed, with a button to hide it" src="docs/screenshots/issues.png" width="400"></a>
 - When a tab is empty because of the search, the source or the Hidden and Not in menus switches, it says how many apps they leave out, with a button to lift each.
 - **Uninstall…** for Flatpak, Snap, AppImage, Steam, Distrobox and system packages (pacman, apt, dnf, zypper, rpm-ostree, xbps, apk, eopkg, Portage and Nix). Before anything runs it shows what goes, which other apps and packages need it or go with it, whether it's a default app or starts at login, and the exact command. Data folders and advanced options (like removing what depends on it) are off unless you turn them on, with warnings. Commands that need a password run in your terminal; packages the system or your desktop needs are never offered. History keeps a Reinstall button.
 - **Helper apps…** shortcuts to the apps that set up what App Entries doesn't, opened on that app where they allow it: Flatseal, Warehouse, Gear Lever, ProtonUp-Qt, Protontricks, BoxBuddy, DistroShelf, GNOME Settings' and KDE's app permissions, your software centre and Steam. Missing ones show what they do and the Flathub command, run in your terminal only if you ask.
@@ -50,47 +51,24 @@
 </p>
 
 **Launchers**
-- **New launcher** for a program or script, or for commands written as in a terminal (`paru -Syu && flatpak update`, pipes, loops, whole scripts) run by the shell you choose. Add more sets of commands to open each in its own terminal. Terminal options and a live preview of the entry.
+- **New launcher** for a program or script, or for commands written as in a terminal (`paru -Syu && flatpak update`, pipes, loops, whole scripts) run by the shell you choose. Add more sets of commands to open each in its own terminal. Terminal options and a live preview of the entry.<br>
+  <a href="docs/screenshots/commands-launcher.png"><img alt="Editing a launcher that runs commands with bash: paru -Syu and flatpak update in one terminal, journalctl -f in another" src="docs/screenshots/commands-launcher.png" width="340"></a>
 - **New web app**: a site in its own window with no address bar or tabs, using a Chromium-based browser. It shares your browser's sign-ins, or keeps its own, with an optional dark mode and a window name for docks and window rules.
-- **Styled icons** from 4,000 Material Symbols or your own SVGs: tile shape, colour, shading, size and border, with a built-in colour picker. Paste SVG code, download from a link, or use a site's icon.
+- **Styled icons** from 4,000 Material Symbols or your own SVGs: tile shape, colour, shading, size and border, with a built-in colour picker. Paste SVG code, download from a link, or use a site's icon.<br>
+  <a href="docs/screenshots/icon-picker.png"><img alt="The icon picker: a grid of symbols, and the style, background, shading, size and colour of the tile" src="docs/screenshots/icon-picker.png" width="400"></a>
 
 **More**
 - **Autostart**: turn login programs on and off, or add your own.
-- **Default apps**: choose which app opens links, email, folders, text, PDFs, pictures, videos, music and archives. Uses the standard `mimeapps.list`, and also updates Xfce's and KDE's own browser settings.
+- **Default apps**: choose which app opens links, email, folders, text, PDFs, pictures, videos, music and archives. Uses the standard `mimeapps.list`, and also updates Xfce's and KDE's own browser settings.<br>
+  <a href="docs/screenshots/default-apps.png"><img alt="The Default apps tab: web browser, email, files, text, PDFs, pictures, videos and music, each with the app that opens them" src="docs/screenshots/default-apps.png" width="400"></a>
 - **History** of every change, each with Undo, kept between sessions.
 - **Export / Import** your changes to set up another computer.
 - **Updates** from GitHub releases, installed with one button.
 - A **command line** for scripts, and full keyboard and screen reader support.
-- Light and dark themes and a responsive layout. The accent can follow your desktop's (GNOME and KDE settings, or the colours Noctalia, matugen, wallust and other theme tools write for GTK apps), and palettes like Catppuccin, Gruvbox, Nord, Rosé Pine, Tokyo Night, Everforest and Solarized restyle the whole app.
+- Light and dark themes and a responsive layout. The accent can follow your desktop's (GNOME and KDE settings, or the colours Noctalia, matugen, wallust and other theme tools write for GTK apps), and palettes like Catppuccin, Gruvbox, Nord, Rosé Pine, Tokyo Night, Everforest and Solarized restyle the whole app.<br>
+  <a href="docs/screenshots/settings.png"><img alt="The Settings tab: accent colours with a colour picker, palettes, light or dark, and size" src="docs/screenshots/settings.png" width="400"></a>
 
 Nothing happens by itself: every option is explained, nothing is written until you press a button, and every change can be undone. App Entries never changes system files itself; only a package manager you run from it, in your terminal, does.
-
-<details>
-<summary><b>More screenshots</b></summary>
-
-<br>
-
-**Default apps**: which app opens links, folders and each kind of file.
-
-<img alt="The Default apps tab: web browser, email, files, text, PDFs, pictures, videos and music, each with the app that opens them" src="docs/screenshots/default-apps.png" width="760">
-
-**A launcher that runs commands**, here in two terminals.
-
-<img alt="Editing a launcher that runs commands with bash: paru -Syu and flatpak update in one terminal, journalctl -f in another" src="docs/screenshots/commands-launcher.png" width="520">
-
-**Styled icons** from Material Symbols or your own SVGs.
-
-<img alt="The icon picker: a grid of symbols, and the style, background, shading, size and colour of the tile" src="docs/screenshots/icon-picker.png" width="760">
-
-**Issues**: entries whose program is missing, leftover files and duplicates.
-
-<img alt="The Issues tab listing an entry whose program isn't installed, with a button to hide it" src="docs/screenshots/issues.png" width="760">
-
-**Appearance**: your desktop's accent or any colour, and palettes like Catppuccin and Nord.
-
-<img alt="The Settings tab: accent colours with a colour picker, palettes, light or dark, and size" src="docs/screenshots/settings.png" width="760">
-
-</details>
 
 ## Installation
 
