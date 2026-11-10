@@ -1,9 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.0.6 — 2026-11-10
 
 - Screenshots in the README and the app's store listing, in dark mode.
-- Under the hood: the code follows Ruff's checks (newer type hints, f-strings), which now run on every change. Nothing changes in how the app works.
+- Under the hood: the code follows Ruff's checks (newer type hints, f-strings), which now run on every change and before every release. Nothing changes in how the app works.
 
 ## 1.0.5 — 2026-11-02
 

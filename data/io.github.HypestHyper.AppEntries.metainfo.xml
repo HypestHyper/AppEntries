@@ -58,6 +58,14 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.0.6" date="2026-11-10">
+      <description>
+        <ul>
+          <li>Screenshots in the store listing</li>
+          <li>Code checks run before every release</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.0.5" date="2026-11-02">
       <description>
         <ul>
