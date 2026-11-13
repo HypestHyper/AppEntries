@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.8 — 2026-11-13
 
 - Text in the app can be selected with the mouse and copied with Ctrl+C or the right-click menu: descriptions, paths, commands, explanations. It stays out of the Tab order, so keyboard use is unchanged.
 - Default apps shows what really opens a type when you haven't chosen anything (your desktop's pick, explained when you hover), instead of "Not chosen", which read as if the app shown wasn't chosen.

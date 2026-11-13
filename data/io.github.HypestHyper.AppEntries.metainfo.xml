@@ -59,6 +59,15 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.0.8" date="2026-11-13">
+      <description>
+        <ul>
+          <li>Text can be selected and copied</li>
+          <li>Default apps shows what opens a type when you haven't chosen</li>
+          <li>Roomier app pickers and menus</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.0.7" date="2026-11-13">
       <description>
         <ul>
