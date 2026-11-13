@@ -95,3 +95,36 @@ def test_xfce_kde_and_the_browser_variable(env):
     ov.apply_all(changes)
     assert "BrowserApplication=firefox.desktop" in (env.config / "kdeglobals").read_text()
     assert any("BROWSER" in n for n in notes)
+
+
+def test_one_type_at_a_time(env):
+    env.write(env.sys_b, "gimp.desktop", entry("GIMP", "gimp %U", MimeType="image/png;image/x-xcf;application/pdf;"))
+    a = apps(env)
+    everything = list(a.values())
+    assert [x.id for x in df.type_candidates("application/pdf", everything)] == \
+        ["chromium.desktop", "evince.desktop", "gimp.desktop"]
+    assert [x.id for x in df.apps_with_types(everything)] == \
+        ["chromium.desktop", "evince.desktop", "firefox.desktop", "gimp.desktop"]
+    ov.apply_all(df.plan_set_types(["image/x-xcf"], a["gimp.desktop"], env.env))
+    s = df.type_state("image/x-xcf", everything, env.env)
+    assert s.app_id == "gimp.desktop" and s.chosen_by_you and s.category == ""
+    assert df.type_state("application/pdf", everything, env.env).app_id == ""   # others untouched
+    pictures = next(c for c in df.CATEGORIES if c.key == "images")
+    assert df.opened_types(pictures, everything, env.env) == ["image/png"]
+    ov.apply_all(df.plan_reset_types(["image/x-xcf"], env.env))
+    assert df.type_state("image/x-xcf", everything, env.env).app_id == ""
+
+
+def test_extensions_come_from_the_mime_database(tmp_path):
+    share = tmp_path / "share"
+    (share / "mime").mkdir(parents=True)
+    (share / "mime" / "globs2").write_text("50:image/jpeg:*.jfif\n50:image/jpeg:*.jpeg\n50:image/jpeg:*.jpg\n"
+                                           "50:image/jpeg:*.JPG\n50:text/x-readme:README*\n")
+    (share / "mime" / "aliases").write_text("image/pjpeg image/jpeg\n")
+    e = {"HOME": str(tmp_path), "XDG_DATA_DIRS": str(share)}
+    assert df.extensions("image/jpeg", e) == [".jpg", ".jfif", ".jpeg"]
+    assert df.extensions("image/pjpeg", e) == [".jpg", ".jfif", ".jpeg"]
+    (share / "mime" / "globs2").write_text("50:text/html:*.htm\n50:text/html:*.html\n")
+    df._globs.clear()
+    assert df.extensions("text/html", e) == [".html"]
+    assert df.extensions("text/x-readme", e) == []

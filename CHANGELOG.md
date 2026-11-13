@@ -6,6 +6,8 @@
 - The card says when that happened, and Issues lists these copies apart as "Uninstalled, your edits remain", with Remove.
 - Edited copies of system apps get a TryExec naming their program, so desktops that honour it (GNOME, KDE, Xfce) leave them out of menus straight away. A TryExec the entry came with is kept.
 - An Open button on each card starts the app, hidden ones included.
+- Default apps can be set per file type: Each type opens a category (Pictures, Videos…) so, say, PNG and TIFF can open in different apps, each with its own Reset.
+- By app, at the bottom of Default apps, lists every file type one app says it opens, including ones no category covers (like .xcf or .psd), what opens each now, and Make default, or the app for all of them. File types… in a card's ⋯ menu opens it for that app.
 - Sort the list newest first, by when each app appeared on this computer. Apps that appeared since App Entries last looked are marked New until you close it. (Package managers keep build dates on their files, so App Entries notes when it first sees each app instead; the first time, it starts from the file times and marks nothing.)
 
 ## 1.0.6 — 2026-11-10

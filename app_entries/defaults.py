@@ -158,6 +158,87 @@ def state(cat: Category, apps: list[de.App], env=None) -> State:
     return s
 
 
+@dataclass
+class TypeState:
+    mime: str
+    app_id: str = ""              # what opens it now, "" if nothing is chosen
+    chosen_by_you: bool = False   # set in your own mimeapps.list
+    category: str = ""            # the Category key it's part of, if any
+
+
+def type_state(mime: str, apps: list[de.App], env=None) -> TypeState:
+    installed = {a.id for a in apps}
+    did, path = default_for(mime, installed, env)
+    mine = path.startswith(config_home(env) + os.sep) if path else False
+    cat = next((c.key for c in CATEGORIES if mime in c.mimes), "")
+    return TypeState(mime, did, mine, cat)
+
+
+def type_candidates(mime: str, apps: list[de.App]) -> list[de.App]:
+    """Apps that say they open this type, by name. Helpers kept out of menus
+    by their package are left out."""
+    seen, out = set(), []
+    for a in sorted(apps, key=lambda a: (a.name.casefold(), a.id)):
+        if mime in a.mime_types and not (a.no_display and not a.has_override) and a.id not in seen:
+            seen.add(a.id)
+            out.append(a)
+    return out
+
+
+def apps_with_types(apps: list[de.App]) -> list[de.App]:
+    """Apps that open at least one file type, by name, for the By app list."""
+    return [a for a in sorted(apps, key=lambda a: (a.name.casefold(), a.id))
+            if a.mime_types and not (a.no_display and not a.has_override)]
+
+
+def opened_types(cat: Category, apps: list[de.App], env=None) -> list[str]:
+    """The category's types an installed app opens or one is chosen for."""
+    installed = {a.id for a in apps}
+    return [m for m in cat.mimes
+            if any(m in a.mime_types for a in apps) or default_for(m, installed, env)[0]]
+
+
+_globs: dict = {}
+
+
+def extensions(mime: str, env=None) -> list[str]:
+    """File name endings for a type, like [".jpg", ".jpeg"], from the shared
+    MIME database (globs2), with aliases resolved."""
+    env = os.environ if env is None else env
+    data_dirs = [d for d in (env.get("XDG_DATA_DIRS") or "").split(":") if os.path.isabs(d)] \
+        or ["/usr/local/share", "/usr/share"]
+    key = tuple([de.user_data_dir(env)] + data_dirs)
+    if key not in _globs:
+        table, aliases = {}, {}
+        for d in reversed(list(key)):
+            try:
+                with open(os.path.join(d, "mime", "globs2"), encoding="utf-8") as f:
+                    for line in f:
+                        parts = line.rstrip("\n").split(":")
+                        if len(parts) >= 3 and not line.startswith("#") and parts[2].startswith("*."):
+                            ext = parts[2][1:]
+                            if "*" not in ext and "[" not in ext:
+                                lst = table.setdefault(parts[1], [])
+                                if ext not in lst:
+                                    lst.append(ext)
+            except OSError:
+                pass
+            try:
+                with open(os.path.join(d, "mime", "aliases"), encoding="utf-8") as f:
+                    for line in f:
+                        a = line.split()
+                        if len(a) == 2:
+                            aliases[a[0]] = a[1]
+            except OSError:
+                pass
+        _globs[key] = (table, aliases)
+    table, aliases = _globs[key]
+    found = {e.lower() for e in table.get(aliases.get(mime, mime), [])}
+    # .jpe beside .jpeg, .htm beside .html: the longer one says it.
+    found = {e for e in found if not any(o != e and o.startswith(e) for o in found)}
+    return sorted(found, key=lambda e: (len(e), e))[:4]
+
+
 # ---------------------------------------------------------------------------
 # Changing
 
@@ -180,13 +261,12 @@ def _user_files(env) -> list[str]:
     return [p for p in specific if os.path.exists(p)] + [os.path.join(home, "mimeapps.list")]
 
 
-def plan_set(cat: Category, app: de.App, env=None) -> tuple[list[Change], list[str]]:
-    """Changes that make `app` the default for this category, and notes for
-    anything that could still override it."""
+def plan_set_types(mimes, app: de.App, env=None) -> list[Change]:
+    """Changes to your mimeapps.list files that make `app` the default for
+    these types."""
     env = os.environ if env is None else env
-    mimes = [m for m in cat.mimes if m in app.mime_types] or list(cat.mimes)
     main = os.path.join(config_home(env), "mimeapps.list")
-    changes, notes = [], []
+    changes = []
 
     for path in _user_files(env):
         def apply(df, is_main=(path == main)):
@@ -207,6 +287,17 @@ def plan_set(cat: Category, app: de.App, env=None) -> tuple[list[Change], list[s
         c = _edit(path, apply)
         if c is not None:
             changes.append(c)
+    for c in changes:
+        c.app_id, c.app_name = app.id, app.name
+    return changes
+
+
+def plan_set(cat: Category, app: de.App, env=None) -> tuple[list[Change], list[str]]:
+    """Changes that make `app` the default for this category, and notes for
+    anything that could still override it."""
+    env = os.environ if env is None else env
+    mimes = [m for m in cat.mimes if m in app.mime_types] or list(cat.mimes)
+    changes, notes = plan_set_types(mimes, app, env), []
 
     desktops = [d.upper() for d in de.current_desktops(env)]
     if cat.xfce and "XFCE" in desktops:
@@ -231,13 +322,18 @@ def plan_set(cat: Category, app: de.App, env=None) -> tuple[list[Change], list[s
 
 def plan_reset(cat: Category, env=None) -> list[Change]:
     """Remove your choices for this category, so your desktop's defaults apply."""
+    return plan_reset_types(cat.mimes, env)
+
+
+def plan_reset_types(mimes, env=None) -> list[Change]:
+    """Remove your choices for these types, so your desktop's defaults apply."""
     changes = []
     for path in _user_files(env):
         if not os.path.exists(path):
             continue
 
         def apply(df):
-            for m in cat.mimes:
+            for m in mimes:
                 df.remove(m, DEFAULT)
         c = _edit(path, apply)
         if c is not None:

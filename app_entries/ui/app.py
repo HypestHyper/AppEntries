@@ -1379,6 +1379,10 @@ class MainWindow(Gtk.ApplicationWindow):
             self._fix("hide-uninstalled", [health.Leftover(app.id, app.name, app.override_path)])
         elif action == "issues":
             self.settings.set("filter", "issues")
+        elif action == "file-types":
+            self._ensure_page("defaults")
+            self.settings.set("filter", "defaults")
+            self.defaults.show_app(app.id)
         elif action == "launch":
             self._launch(app)
         elif action == "open-folder":

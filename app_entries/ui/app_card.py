@@ -442,6 +442,11 @@ class AppCard(Gtk.Box):
                 "delete", _("Delete this launcher"),
                 _("Deletes this launcher file from your applications folder. "
                   "The program itself isn't touched. You can undo this."), act("delete"), danger=True))
+        if a.mime_types:
+            box.append(option_button(
+                "star", _("File types…"),
+                _("The file types it opens, and which of them open with it by default. Opens Default apps."),
+                act("file-types")))
         box.append(option_button(
             "open_in_new", _("Helper apps…"),
             _("Shortcuts to apps that change its permissions, versions or setup, like Flatseal. Each opens that "
