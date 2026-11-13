@@ -15,7 +15,8 @@ DEFAULTS = {
     "filter": "all",            # all | hidden | system
     "show-no-display": True,
     "show-hidden": True,
-    "source": "any",            # any, system, flatpak, snap, appimage, steam or user
+    "source": "any",
+    "sort": "name",             # name | newest            # any, system, flatpak, snap, appimage, steam or user
     "theme": "system",          # system | light | dark
     "accent": "53dbb0",         # six hex digits, "desktop" or "palette"
     "palette": "generated",     # generated, or one of theme.PRESETS

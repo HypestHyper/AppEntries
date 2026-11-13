@@ -202,6 +202,8 @@ class AppCard(Gtk.Box):
                                     "copy of this entry. Restore original in the ⋯ menu puts the system "
                                     "version back."))
         self.missing_badge = Badge("link_off", _("Missing program"), "error")
+        self.new_badge = Badge("auto_awesome", _("New"), "custom",
+                               _("Appeared since App Entries last looked. Marked until you close App Entries."))
         self.gone_badge = Badge("inventory_2", _("Uninstalled"), "error",
                                 _("The app was uninstalled, but your edited copy of its entry is still in "
                                   "your applications folder. It starts nothing now."))
@@ -211,7 +213,7 @@ class AppCard(Gtk.Box):
                                        "it anyway."))
         # Wraps onto a second line rather than making the card wider.
         self.badges = WrapBox(6, 4)
-        for b in (self.hidden_badge, self.source_badge, self.custom_badge, self.missing_badge,
+        for b in (self.new_badge, self.hidden_badge, self.source_badge, self.custom_badge, self.missing_badge,
                   self.gone_badge, self.nodisplay_badge):
             self.badges.append(b)
 
@@ -338,6 +340,7 @@ class AppCard(Gtk.Box):
                                    _("{program} wasn't found in your PATH or the usual program folders, "
                                      "so this entry can't start anything. It runs: {command}")
                                    .format(program=a.missing, command=a.exec))
+        self.new_badge.set_visible(a.new)
         self.gone_badge.set_visible(a.uninstalled)
         self.gone_note.set_visible(a.uninstalled)
         if a.uninstalled:

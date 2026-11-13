@@ -70,3 +70,5 @@ radio_button_unchecked
 play_arrow
 inventory_2
 settings_backup_restore
+sort
+auto_awesome

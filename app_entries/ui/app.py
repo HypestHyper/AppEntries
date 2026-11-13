@@ -21,6 +21,7 @@ from .. import (
     overrides,
     packages,
     profile,
+    seen,
     symbols,
     terminal,
     timing,
@@ -206,13 +207,23 @@ class MainWindow(Gtk.ApplicationWindow):
                                             "within it."))
         self.source_menu.update_property([Gtk.AccessibleProperty.LABEL], [_("Source")])
         self.source_menu.set_create_popup_func(self._source_popup)
+        self.sort_label = Gtk.Label(label=self._sort_text())
+        self.sort_menu = Gtk.MenuButton(valign=Gtk.Align.CENTER)
+        self.sort_menu.set_child(hbox(6, icon("sort"), self.sort_label, icon("expand_more")))
+        self.sort_menu.add_css_class("tonal")
+        self.sort_menu.add_css_class("source-menu")
+        self.sort_menu.set_tooltip_text(_("Sort by name, or newest first: by when each app appeared on this "
+                                          "computer"))
+        self.sort_menu.update_property([Gtk.AccessibleProperty.LABEL], [_("Sort")])
+        self.sort_menu.set_create_popup_func(self._sort_popup)
         self.select_btn = Gtk.ToggleButton(valign=Gtk.Align.CENTER)
         self.select_btn.set_child(hbox(6, icon("checklist"), label(_("Select"))))
         self.select_btn.add_css_class("tonal")
         self.select_btn.set_tooltip_text(_("Pick several apps, then hide, show or restore them together"))
         self.select_btn.update_property([Gtk.AccessibleProperty.LABEL], [_("Select several apps")])
         self.select_btn.connect("toggled", lambda b: self.set_selecting(b.get_active()))
-        self.toolbar = hbox(16, self.search_entry, self.source_menu, showhidden, nodisplay, self.select_btn)
+        self.toolbar = hbox(16, self.search_entry, self.source_menu, self.sort_menu, showhidden, nodisplay,
+                            self.select_btn)
         root.append(self.toolbar)
 
         # Model: store -> filter -> sort -> grid
@@ -263,6 +274,8 @@ class MainWindow(Gtk.ApplicationWindow):
         updates.connect(lambda: self.tabs.set_count("updates", "1" if updates.release else ""))
         self.report = None
         self._auto_busy = False
+        self._sort_newest = self.settings.get("sort") == "newest"
+        self._new_ids = set()   # apps that appeared this session: marked New until App Entries closes
 
         self.snackbar = Snackbar()
         overlay = Gtk.Overlay(vexpand=True)
@@ -430,6 +443,10 @@ class MainWindow(Gtk.ApplicationWindow):
             self.filter.changed(Gtk.FilterChange.DIFFERENT)
             self._update_tab_controls()
             self._update_state()
+        elif key == "sort":
+            self._sort_newest = self.settings.get("sort") == "newest"
+            self.sort_label.set_label(self._sort_text())
+            self.sorter.changed(Gtk.SorterChange.DIFFERENT)
         elif key == "source":
             if self._loaded:
                 self._update_sources()
@@ -569,7 +586,42 @@ class MainWindow(Gtk.ApplicationWindow):
     def _compare(self, a, b, *_):
         ka = (a.app.name.casefold(), a.app.id)
         kb = (b.app.name.casefold(), b.app.id)
+        if self._sort_newest:
+            ka, kb = (-a.app.first_seen,) + ka, (-b.app.first_seen,) + kb
         return (ka > kb) - (ka < kb)
+
+    @staticmethod
+    def _sort_choices():
+        return [("name", _("A–Z")), ("newest", _("Newest first"))]
+
+    def _sort_text(self):
+        return dict(self._sort_choices()).get(self.settings.get("sort"), _("A–Z"))
+
+    def _sort_popup(self, menu_button):
+        current = self.settings.get("sort")
+        box = vbox(2)
+        box.set_size_request(200, -1)
+        for key, text in self._sort_choices():
+            b = Gtk.Button()
+            b.add_css_class("flat")
+            b.add_css_class("source-item")
+            mark = icon("check", ("accent",))
+            mark.set_opacity(1 if key == current else 0)
+            b.set_child(hbox(10, mark, label(text, ("body",))))
+            b.connect("clicked", lambda _b, k=key: (menu_button.popdown(),
+                                                    GLib.idle_add(lambda: (self.settings.set("sort", k), False)[1])))
+            box.append(b)
+        note = label(_("Newest first goes by when App Entries first saw each app; ones that appeared since it "
+                       "last looked are marked New."), ("small", "dim"), wrap=True, chars=26)
+        note.set_margin_start(12)
+        note.set_margin_end(12)
+        note.set_margin_top(6)
+        note.set_margin_bottom(6)
+        box.append(note)
+        pop = Gtk.Popover()
+        pop.add_css_class("options")
+        pop.set_child(box)
+        menu_button.set_popover(pop)
 
     def _on_search(self, entry):
         q = entry.get_text().strip().casefold()
@@ -839,7 +891,21 @@ class MainWindow(Gtk.ApplicationWindow):
                 missing = list(result[1].missing)
                 run_bg(lambda: packages.owners(missing), owners_found)
 
-        run_bg(lambda: health.scan_and_check(owners=False), scanned)
+        def scan():
+            apps, report = health.scan_and_check(owners=False)
+            new = seen.update(apps)
+            return apps, report, new
+
+        def marked(result):
+            if isinstance(result, Exception):
+                return scanned(result)
+            apps, report, new = result
+            self._new_ids |= new
+            for a in apps:
+                a.new = a.id in self._new_ids
+            return scanned((apps, report))
+
+        run_bg(scan, marked)
         if self.autostart is not None:
             self.autostart.reload()
 

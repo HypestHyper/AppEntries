@@ -261,6 +261,8 @@ class App:
     excluded_here: bool = False
     mime_types: tuple[str, ...] = ()   # the file types it says it opens (MimeType)
     uninstalled: bool = False      # your edited copy of an app that's no longer installed (health.check)
+    first_seen: float = 0.0        # when App Entries first saw it (seen.update)
+    new: bool = False              # appeared since App Entries last looked
 
     @property
     def has_override(self) -> bool:

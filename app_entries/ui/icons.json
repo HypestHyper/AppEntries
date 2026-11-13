@@ -1,6 +1,7 @@
 {
  "add": 57669,
  "apps": 58819,
+ "auto_awesome": 58975,
  "bedtime": 57849,
  "category": 58740,
  "check": 58826,
@@ -57,6 +58,7 @@
  "select_all": 57698,
  "settings": 59576,
  "settings_backup_restore": 59578,
+ "sort": 57700,
  "sports_esports": 59116,
  "star": 59448,
  "sync": 58919,

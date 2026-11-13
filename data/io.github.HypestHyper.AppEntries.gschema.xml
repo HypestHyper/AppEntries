@@ -133,6 +133,15 @@
       <default>""</default>
       <summary>The newest version found by the last check</summary>
     </key>
+    <key name="sort" type="s">
+      <choices>
+        <choice value="name"/>
+        <choice value="newest"/>
+      </choices>
+      <default>"name"</default>
+      <summary>How the app list is sorted</summary>
+      <description>By name, or newest first: by when App Entries first saw each app.</description>
+    </key>
     <key name="hide-uninstalled-edits" type="b">
       <default>true</default>
       <summary>Hide edited apps when they're uninstalled</summary>
