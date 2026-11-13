@@ -10,18 +10,22 @@
 
 ## Waiting for a decision
 
-### File types / Open With per app
+### File types per app (design agreed, on hold)
 
-Two mockups (real widgets, not wired up):
+Lives in the Default apps tab, no new window:
 
-- **A: a File types… window** from the card's ⋯ menu. One row per type
-  the app declares (description, extensions, what opens it now, Make
-  default), "GIMP for all images" per group, and an option to leave the
-  app out of Open With for some types (saved in its edited copy).
-- **B: a section in the Edit window**, types as chips. Compact, but one
-  chip can't clearly mean both "default" and "offered in Open With".
+- **Each type** on every category card opens it up: one picker per type
+  (PNG, JPEG, WebP…), so a category can be split between apps. It also
+  shows which types the "open in different apps" note means.
+- **By app** section at the bottom: pick an app, see every type it says it
+  opens (also ones no category covers, like .xcf or .psd), what opens each
+  now, Make default, and "<App> for all of them".
+- The card's ⋯ menu gets File types…, which opens the tab with the app
+  picked.
+- Left out: changing which types an app offers in Open With (that edits its
+  entry file, not mimeapps.list). Maybe later as an Edit window option.
 
-Builds on defaults.py (mimeapps.list writing, already used by Default apps).
+Mockup: Default apps with Pictures opened and GIMP in By app.
 
 ### AppImage
 
