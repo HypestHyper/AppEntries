@@ -7,7 +7,7 @@ from gettext import gettext as _
 from gi.repository import Gdk, Gio, GLib, Gtk, Pango
 
 from .. import APP_ID, desktop_entries, icon_lookup, packages, uninstall
-from .widgets import Toggle, WrapBox, button, glyph, hbox, icon, label, option_button, set_text, vbox
+from .widgets import Toggle, WrapBox, button, copyable, glyph, hbox, icon, label, option_button, set_text, vbox
 
 
 def N_(s):
@@ -191,6 +191,7 @@ class AppCard(Gtk.Box):
         self.secondary = Gtk.Label(xalign=0, yalign=0, wrap=True, lines=2,
                                    ellipsize=Pango.EllipsizeMode.END, width_chars=10,
                                    max_width_chars=40, wrap_mode=Pango.WrapMode.WORD_CHAR)
+        copyable(self.secondary)
         self.secondary.add_css_class("small")
         self.secondary.add_css_class("dim")
         self.tertiary = label("", ("mono", "faint"), ellipsize=True)

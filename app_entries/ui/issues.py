@@ -35,7 +35,6 @@ def _row(lead, title, detail, *actions, extra=()):
         d = label(line, classes, ellipsize=True)
         d.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
         d.set_tooltip_text(line)
-        d.set_selectable(False)
         text.append(d)
     text.set_hexpand(True)
     text.set_valign(Gtk.Align.CENTER)

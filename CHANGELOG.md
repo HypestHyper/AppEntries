@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Text in the app can be selected with the mouse and copied with Ctrl+C or the right-click menu: descriptions, paths, commands, explanations. It stays out of the Tab order, so keyboard use is unchanged.
+- Default apps shows what really opens a type when you haven't chosen anything (your desktop's pick, explained when you hover), instead of "Not chosen", which read as if the app shown wasn't chosen.
+- More room between the icon or text and the edge of the app pickers and the Sources and Sort menus.
+
 ## 1.0.7 — 2026-11-13
 
 - Apps you edited, then uninstalled some other way (a terminal, a software centre), no longer linger in menus. Uninstalling removes only the app's own files, so your edited copy stays behind; App Entries now hides it (NoDisplay=true, which every launcher honours) and keeps your edits. When the app is reinstalled, the hide comes off and your edits apply again. Both happen once, show a message with Undo, and are options on the Issues page.

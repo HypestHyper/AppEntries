@@ -137,10 +137,16 @@ class DefaultsPage(Gtk.ScrolledWindow):
         text.set_valign(Gtk.Align.CENTER)
 
         current = by_id.get(s.app_id)
+        picked_by_desktop = current is None and not s.mixed and bool(types)
+        if picked_by_desktop:
+            current = self._desktop_pick(types[0].mime, by_id)
         if not cands:
             picker = label(_("No installed app opens these"), ("small", "dim"))
         else:
             picker = self._picker(cat, cands, current, s)
+            if picked_by_desktop and current is not None:
+                picker.set_tooltip_text(_("You haven't chosen one, so your desktop picks {app}. Choose to "
+                                          "change it.").format(app=current.name))
         picker.set_valign(Gtk.Align.CENTER)
         reset = button(icon_name="restart_alt", style="text", small=True,
                        tooltip=_("Reset: let your desktop choose again"), cb=lambda *_a: self._reset(cat))
@@ -171,6 +177,17 @@ class DefaultsPage(Gtk.ScrolledWindow):
             c.append(inner)
         return c
 
+    @staticmethod
+    def _desktop_pick(mime, by_id):
+        """With no default set for a type in any mimeapps.list, your desktop
+        still opens it with something, usually the first installed app that
+        says it can. That app, if it's one of the listed ones."""
+        try:
+            info = Gio.AppInfo.get_default_for_type(mime, False)
+        except GLib.Error:
+            info = None
+        return by_id.get(info.get_id()) if info is not None and info.get_id() else None
+
     def _toggle_types(self, key):
         self._open ^= {key}
         self._signature = None
@@ -192,9 +209,15 @@ class DefaultsPage(Gtk.ScrolledWindow):
     def _type_row(self, t, apps, by_id):
         cands = defaults.type_candidates(t.mime, apps)
         current = by_id.get(t.app_id)
+        tip = _("Choose the app for this type")
+        if current is None:
+            current = self._desktop_pick(t.mime, by_id)
+            if current is not None:
+                tip = _("You haven't chosen one, so your desktop picks {app}. Choose to change it.").format(
+                    app=current.name)
         if cands:
             picker = self._pick_button(cands, current, False, lambda a, m=t.mime: self._set_types([m], a),
-                                       _("Choose the app for this type"), small=True)
+                                       tip, small=True)
         else:
             picker = label(_("No installed app opens it"), ("small", "dim"))
         picker.set_valign(Gtk.Align.CENTER)
@@ -223,7 +246,9 @@ class DefaultsPage(Gtk.ScrolledWindow):
                 c.append(label(_("{app} doesn't say it opens any file types.").format(app=chosen.name),
                                ("small", "dim")))
             return c
-        not_yet = [t.mime for t in types if t.app_id != chosen.id]
+        # Types with no default set open with your desktop's pick.
+        opens = {t.mime: by_id.get(t.app_id) or self._desktop_pick(t.mime, by_id) for t in types}
+        not_yet = [t.mime for t in types if opens[t.mime] is None or opens[t.mime].id != chosen.id]
         gap = Gtk.Box(hexpand=True)
         head.append(gap)
         if not_yet:
@@ -243,19 +268,26 @@ class DefaultsPage(Gtk.ScrolledWindow):
         limit = len(ordered) if self._show_all else 25
         for t in ordered[:limit]:
             where = _("in {category}").format(category=names[t.category]) if t.category else ""
-            if t.app_id == chosen.id:
+            now = opens[t.mime]
+            by_desktop = not t.app_id and now is not None
+            if now is not None and now.id == chosen.id:
                 right = hbox(6, icon("check", ("accent",)),
                              label(_("Opens with {app}").format(app=chosen.name), ("small", "dim")))
+                if by_desktop:
+                    right.set_tooltip_text(_("You haven't chosen an app for this type; your desktop picks "
+                                             "{app}.").format(app=chosen.name))
             else:
-                now = by_id.get(t.app_id)
                 right = hbox(8)
                 if now is not None:
                     img = Gtk.Image(pixel_size=18, accessible_role=Gtk.AccessibleRole.PRESENTATION)
                     img.set_from_gicon(gicon_for(now.icon))
                     right.append(img)
                     right.append(label(now.name, ("small", "dim"), ellipsize=True))
+                    if by_desktop:
+                        right.set_tooltip_text(_("You haven't chosen an app for this type; your desktop "
+                                                 "picks {app}.").format(app=now.name))
                 else:
-                    right.append(label(_("Not chosen"), ("small", "dim")))
+                    right.append(label(_("No default set"), ("small", "dim")))
                 right.append(button(_("Make default"), style="text", small=True,
                                     tooltip=_("Open this type with {app}").format(app=chosen.name),
                                     cb=lambda *_a, m=t.mime: self._set_types([m], chosen)))
@@ -322,7 +354,7 @@ class DefaultsPage(Gtk.ScrolledWindow):
             img.set_from_gicon(gicon_for(current.icon))
             b.set_child(hbox(8, img, label(current.name, ("body",), ellipsize=True), icon("expand_more")))
         else:
-            b.set_child(hbox(8, label(placeholder or _("Not chosen"), ("body", "dim")), icon("expand_more")))
+            b.set_child(hbox(8, label(placeholder or _("None"), ("body", "dim")), icon("expand_more")))
         b.set_tooltip_text(tooltip)
 
         box = vbox(2)

@@ -298,6 +298,10 @@ button.fab.tonal:hover {{ background-color: mix({SECONDARY_CONTAINER}, {ON_SECON
 .history-row {{ padding: 14px 16px; }}
 .default-glyph {{ font-size: 26px; min-width: 36px; color: {PRIMARY}; }}
 button.default-pick {{ min-height: 40px; padding: 0 12px; border-radius: 20px; }}
+/* A pill's class sits on the menu button, the padding goes on the button inside. */
+menubutton.default-pick > button {{ min-height: 40px; padding: 0 12px 0 10px; border-radius: 20px; }}
+menubutton.default-pick.small > button {{ min-height: 34px; padding: 0 10px 0 8px; border-radius: 17px; }}
+menubutton.source-menu > button {{ padding: 0 12px 0 16px; }}
 button.pick-row {{ padding: 6px 10px; border-radius: 12px; }}
 .history-row.is-off .app-name {{ color: {ON_SURFACE_VARIANT}; }}
 .autostart-row.is-off .icon-tile {{ opacity: .55; }}

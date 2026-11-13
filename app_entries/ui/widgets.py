@@ -24,8 +24,75 @@ def _classes(w, classes):
     return w
 
 
+# Text can be selected with the mouse and copied. GTK makes a selectable label
+# take keyboard focus, which would add a Tab stop for every line of text, so
+# these labels stay out of the Tab order, and Ctrl+C anywhere in the window
+# copies the text selected last. Labels inside buttons, switches and menus
+# aren't selectable: selecting would swallow the click.
+_NOT_IN = (Gtk.Button, Gtk.MenuButton, Gtk.CheckButton, Gtk.Switch, Gtk.DropDown)
+_last_selected = []    # the label clicked last, at most one
+
+
+def _inside_control(w):
+    w = w.get_parent()
+    while w is not None:
+        if isinstance(w, _NOT_IN) or w.has_css_class("card-switch-row") or w.has_css_class("no-copy"):
+            return True
+        w = w.get_parent()
+    return False
+
+
+def _pressed(gesture, *_a):
+    lb = gesture.get_widget()
+    if _last_selected and _last_selected[0] is not lb:
+        old = _last_selected[0]
+        old.select_region(0, 0)
+    _last_selected[:] = [lb]
+
+
+def _copy_key(_ctl, keyval, _code, state):
+    if keyval not in (Gdk.KEY_c, Gdk.KEY_C, Gdk.KEY_Insert) or not state & Gdk.ModifierType.CONTROL_MASK:
+        return False
+    if not _last_selected:
+        return False
+    lb = _last_selected[0]
+    ok, start, end = lb.get_selection_bounds()
+    if not ok or start == end or not lb.get_mapped():
+        return False
+    text = lb.get_text()
+    lb.get_clipboard().set(text[start:end])
+    return True
+
+
+def _on_map(lb):
+    if lb.get_selectable() or getattr(lb, "_copy_checked", False):
+        return
+    lb._copy_checked = True
+    if _inside_control(lb):
+        return
+    lb.set_selectable(True)
+    lb.set_focusable(False)
+    click = Gtk.GestureClick()
+    click.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+    click.connect("pressed", _pressed)
+    lb.add_controller(click)
+    root = lb.get_root()
+    if root is not None and not getattr(root, "_copy_key", False):
+        root._copy_key = True
+        key = Gtk.EventControllerKey()
+        key.connect("key-pressed", _copy_key)
+        root.add_controller(key)
+
+
+def copyable(lb):
+    """Let the label's text be selected and copied (see above)."""
+    lb.connect("map", _on_map)
+    return lb
+
+
 def label(text, classes=(), wrap=False, xalign=0, chars=0, ellipsize=False):
     lb = Gtk.Label(label=text, xalign=xalign)
+    copyable(lb)
     _classes(lb, classes)
     if not wrap and len(text) > 60 and WRAP_CLASSES & set(classes):
         wrap = True
