@@ -1,38 +1,28 @@
 # Planned for the next version
 
-Not started. Nothing here is built until it's agreed.
+## Done on the branch (not released)
 
-## Edited apps left behind after uninstalling outside App Entries
+- Edited apps uninstalled elsewhere: hidden with their edits kept, brought
+  back on reinstall (options on the Issues page), a note on the card, an
+  Issues section, TryExec on edited copies of system apps.
+- Open button on each card.
+- Sort newest first (by when App Entries first saw each app), New badge.
 
-Editing a system app saves a full copy of its entry in
-`~/.local/share/applications`. When the package is removed some other way
-(a terminal, a software centre), the copy stays: the app can still show in
-menus, and it appears in Issues.
+## Waiting for a decision
 
-Agreed direction (must work with any desktop and launcher):
+### File types / Open With per app
 
-- **Hiding:** `TryExec` isn't enough on its own. GNOME, KDE and Xfce honour
-  it, but Noctalia 5 (C++, src/system/desktop_entry.cpp) and Quickshell
-  (older Noctalia, other Quickshell shells) only read `NoDisplay`, `Hidden`
-  and OnlyShowIn/NotShowIn, and other launchers vary. So the copy itself gets
-  `NoDisplay=true`, which every launcher honours, like the Hide switch does.
-- **Options in the Issues tab** (decided), each explained there:
-  - **Hide edited apps when they're uninstalled**, on by default. Package
-    managers remove their own entry from the system folders and never touch
-    the user's copy, so App Entries hides it: `NoDisplay=true`, marked with
-    an `X-AppEntries-` key as hidden for this reason, recorded in History
-    with Undo, and a snackbar says so.
-  - **Bring the edits back when the app is reinstalled**, on by default.
-    Without it, the hidden copy would keep the reinstalled app out of menus.
-    When the app's own entry reappears, the hide App Entries added (only
-    that, recognised by its mark) is removed, so the edits apply again.
-- **A note on the card:** "GIMP was uninstalled. Your edits are kept, hidden
-  from menus; remove them in Issues." With the option off, the note has a
-  Hide button instead.
-- **TryExec as well:** edited copies get `TryExec=` with their program when
-  saved, so desktops that honour it hide them even before App Entries runs.
-- **Issues:** these listed apart from other leftovers as "uninstalled, your
-  edits remain", with what the copy changed and one button to remove them,
-  with Undo.
+Two mockups (real widgets, not wired up):
 
-Still open: nothing. Waiting for the go-ahead.
+- **A: a File types… window** from the card's ⋯ menu. One row per type
+  the app declares (description, extensions, what opens it now, Make
+  default), "GIMP for all images" per group, and an option to leave the
+  app out of Open With for some types (saved in its edited copy).
+- **B: a section in the Edit window**, types as chips. Compact, but one
+  chip can't clearly mean both "default" and "offered in Open With".
+
+Builds on defaults.py (mimeapps.list writing, already used by Default apps).
+
+### AppImage
+
+Possible, with costs; see the assessment in the session notes. Not started.
