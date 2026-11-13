@@ -20,6 +20,7 @@ from .desktop_entries import (
     GROUP,
     HIDDEN_KEY,
     MANAGED_KEY,
+    UNINSTALLED_KEY,
     App,
     DesktopFile,
     current_desktops,
@@ -281,6 +282,44 @@ def plan_update_legacy(app: App) -> Change:
     if before is None or not is_minimal_managed(DesktopFile(before)):
         raise OverrideError(app.override_path, "this isn't a file from the earlier version")
     return Change(app.id, app.name, app.override_path, before, managed_copy(app, True), True)
+
+
+def plan_hide_uninstalled(app_id: str, name: str, path: str) -> Optional[Change]:
+    """Hide your edited copy of an app that was uninstalled, so it leaves
+    every launcher's menu (NoDisplay, which all of them honour), and mark it
+    so App Entries knows it did this. None when there's nothing to do: it's
+    hidden already, or was handled before (you may have shown it again)."""
+    before = read_text(path)
+    if before is None:
+        return None
+    df = DesktopFile(before)
+    d = df.group_dict()
+    if is_true(d.get(UNINSTALLED_KEY)) or is_true(d.get("NoDisplay")) or is_true(d.get("Hidden")):
+        return None
+    df.set("NoDisplay", "true")
+    df.set(HIDDEN_KEY, "true")
+    df.set(UNINSTALLED_KEY, "true")
+    return Change(app_id, name, path, before, df.text(), True)
+
+
+def plan_bring_back(app_id: str, name: str, path: str) -> Optional[Change]:
+    """The app is installed again: take off the hide App Entries added when it
+    was uninstalled, so your edits apply to it again. A hide you made
+    yourself stays."""
+    before = read_text(path)
+    if before is None:
+        return None
+    df = DesktopFile(before)
+    d = df.group_dict()
+    if not is_true(d.get(UNINSTALLED_KEY)):
+        return None
+    df.remove(UNINSTALLED_KEY)
+    hidden = is_true(d.get("NoDisplay"))
+    if hidden and is_true(d.get(HIDDEN_KEY)):
+        df.remove("NoDisplay")
+        df.remove(HIDDEN_KEY)
+        hidden = False
+    return Change(app_id, name, path, before, df.text(), hidden)
 
 
 def plan_delete(app_id: str, name: str, path: str, hidden_after: bool) -> Change:

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Apps you edited, then uninstalled some other way (a terminal, a software centre), no longer linger in menus. Uninstalling removes only the app's own files, so your edited copy stays behind; App Entries now hides it (NoDisplay=true, which every launcher honours) and keeps your edits. When the app is reinstalled, the hide comes off and your edits apply again. Both happen once, show a message with Undo, and are options on the Issues page.
+- The card says when that happened, and Issues lists these copies apart as "Uninstalled, your edits remain", with Remove.
+- Edited copies of system apps get a TryExec naming their program, so desktops that honour it (GNOME, KDE, Xfce) leave them out of menus straight away. A TryExec the entry came with is kept.
+- An Open button on each card starts the app, hidden ones included.
+
 ## 1.0.6 — 2026-11-10
 
 - Screenshots in the README and the app's store listing, in dark mode.

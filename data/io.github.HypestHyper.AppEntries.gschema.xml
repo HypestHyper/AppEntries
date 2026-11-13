@@ -133,5 +133,15 @@
       <default>""</default>
       <summary>The newest version found by the last check</summary>
     </key>
+    <key name="hide-uninstalled-edits" type="b">
+      <default>true</default>
+      <summary>Hide edited apps when they're uninstalled</summary>
+      <description>When an app you edited is uninstalled, your copy of its entry stays behind. This hides it from menus (NoDisplay=true) and keeps your edits.</description>
+    </key>
+    <key name="restore-reinstalled-edits" type="b">
+      <default>true</default>
+      <summary>Bring the edits back when the app is reinstalled</summary>
+      <description>Takes off the hide added when the app was uninstalled, so your edits apply again.</description>
+    </key>
   </schema>
 </schemalist>

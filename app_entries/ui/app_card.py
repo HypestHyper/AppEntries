@@ -7,7 +7,7 @@ from gettext import gettext as _
 from gi.repository import Gdk, Gio, GLib, Gtk, Pango
 
 from .. import APP_ID, desktop_entries, icon_lookup, packages, uninstall
-from .widgets import Toggle, WrapBox, glyph, hbox, icon, label, option_button, set_text, vbox
+from .widgets import Toggle, WrapBox, button, glyph, hbox, icon, label, option_button, set_text, vbox
 
 
 def N_(s):
@@ -185,6 +185,9 @@ class AppCard(Gtk.Box):
         self.more.add_css_class("small")
         self.more.update_property([Gtk.AccessibleProperty.LABEL], [_("More options")])
         self.more.set_create_popup_func(self._build_menu)
+        self.launch = button(icon_name="play_arrow", style="flat small", tooltip=_("Open"),
+                             cb=lambda *_: self._act("launch"))
+        self.launch.set_valign(Gtk.Align.START)
         self.secondary = Gtk.Label(xalign=0, yalign=0, wrap=True, lines=2,
                                    ellipsize=Pango.EllipsizeMode.END, width_chars=10,
                                    max_width_chars=40, wrap_mode=Pango.WrapMode.WORD_CHAR)
@@ -199,6 +202,9 @@ class AppCard(Gtk.Box):
                                     "copy of this entry. Restore original in the ⋯ menu puts the system "
                                     "version back."))
         self.missing_badge = Badge("link_off", _("Missing program"), "error")
+        self.gone_badge = Badge("inventory_2", _("Uninstalled"), "error",
+                                _("The app was uninstalled, but your edited copy of its entry is still in "
+                                  "your applications folder. It starts nothing now."))
         self.nodisplay_badge = Badge("bedtime", _("Not in menus"), "neutral",
                                      _("Its package asks for it to be left out of menus (NoDisplay), "
                                        "usually because it's a helper or a settings panel. You're showing "
@@ -206,7 +212,7 @@ class AppCard(Gtk.Box):
         # Wraps onto a second line rather than making the card wider.
         self.badges = WrapBox(6, 4)
         for b in (self.hidden_badge, self.source_badge, self.custom_badge, self.missing_badge,
-                  self.nodisplay_badge):
+                  self.gone_badge, self.nodisplay_badge):
             self.badges.append(b)
 
         # "Another entry for this app is shown: …" — click to search for it.
@@ -216,12 +222,24 @@ class AppCard(Gtk.Box):
         self.related.set_child(self.related_label)
         self.related.connect("clicked", self._find_related)
 
+        # "<App> was uninstalled. Your edits are kept…", with what can be done.
+        self.gone_text = label("", ("small",), wrap=True, chars=30)
+        self.gone_hide = button(_("Hide"), style="tonal", small=True,
+                                tooltip=_("Keep it out of launcher menus; your edits are kept"),
+                                cb=lambda *_: self._act("hide-uninstalled"))
+        self.gone_issues = button(_("Open Issues"), style="text", small=True,
+                                  tooltip=_("Remove your edits there, or keep them for when you reinstall"),
+                                  cb=lambda *_: self._act("issues"))
+        self.gone_note = vbox(6, self.gone_text, hbox(6, self.gone_hide, self.gone_issues))
+        self.gone_note.add_css_class("card-note")
+        self.gone_note.set_visible(False)
+
         self.check = Gtk.CheckButton(valign=Gtk.Align.START, visible=False)
         self.check.add_css_class("card-check")
         self.check.set_can_target(False)  # the whole card takes the click
         self.check.set_focusable(False)
-        text = vbox(4, hbox(4, self.name, self.more, self.check), self.secondary, self.tertiary,
-                    self.badges, self.related)
+        text = vbox(4, hbox(4, self.name, self.launch, self.more, self.check), self.secondary, self.tertiary,
+                    self.badges, self.related, self.gone_note)
         text.set_hexpand(True)
         self.append(hbox(14, tile, text))
 
@@ -320,6 +338,20 @@ class AppCard(Gtk.Box):
                                    _("{program} wasn't found in your PATH or the usual program folders, "
                                      "so this entry can't start anything. It runs: {command}")
                                    .format(program=a.missing, command=a.exec))
+        self.gone_badge.set_visible(a.uninstalled)
+        self.gone_note.set_visible(a.uninstalled)
+        if a.uninstalled:
+            set_text(self.gone_text,
+                     (_("{name} was uninstalled. Your edits are kept, hidden from menus; remove them in Issues.")
+                      if a.hidden else
+                      _("{name} was uninstalled. Your edits are kept, but it still shows in menus and starts "
+                        "nothing. Hide it, or remove your edits in Issues.")).format(name=a.name))
+            self.gone_hide.set_visible(not a.hidden)
+        can_launch = not (a.uninstalled or a.missing)
+        self.launch.set_sensitive(can_launch and not self._selecting())
+        self.launch.set_tooltip_text(_("Open {name}").format(name=a.name) if can_launch else
+                                     _("Can't open it: its program is missing"))
+        self.launch.update_property([Gtk.AccessibleProperty.LABEL], [_("Open {name}").format(name=a.name)])
         # Only worth saying when the app is shown anyway; when it's hidden,
         # "Hidden by its package" already says it.
         self.nodisplay_badge.set_visible(a.no_display and not a.hidden)
@@ -331,6 +363,7 @@ class AppCard(Gtk.Box):
         selecting = self._selecting()
         self.check.set_visible(selecting)
         self.more.set_visible(not selecting)
+        self.launch.set_visible(not selecting)
         self.switch_row.set_sensitive(not selecting)
         self.check.set_active(item.selected)
         if selecting and item.selected:
@@ -356,6 +389,10 @@ class AppCard(Gtk.Box):
         if a.has_override and a.override_path != a.source_path:
             details.append(_("Override: {path}").format(path=a.override_path))
         self.tertiary.set_tooltip_text("\n".join(details))
+
+    def _act(self, name):
+        if self.item is not None:
+            self._on_action(self.item, name)
 
     def _find_related(self, *_):
         if self.item is not None and self.item.app.related:

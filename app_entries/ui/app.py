@@ -262,6 +262,7 @@ class MainWindow(Gtk.ApplicationWindow):
         updates = self.get_application().updates
         updates.connect(lambda: self.tabs.set_count("updates", "1" if updates.release else ""))
         self.report = None
+        self._auto_busy = False
 
         self.snackbar = Snackbar()
         overlay = Gtk.Overlay(vexpand=True)
@@ -291,7 +292,7 @@ class MainWindow(Gtk.ApplicationWindow):
             return
         apps = lambda: [i.app for i in self.apps.items()]  # noqa: E731
         if name == "issues":
-            self.issues = page = IssuesPage(self._fix, self._toggle_app, self._copy_text)
+            self.issues = page = IssuesPage(self._fix, self._toggle_app, self._copy_text, self.settings)
             if self.report is not None:
                 page.update(self.report)
         elif name == "autostart":
@@ -444,6 +445,11 @@ class MainWindow(Gtk.ApplicationWindow):
             self._nd_action.set_state(GLib.Variant("b", v))
             self.filter.changed(Gtk.FilterChange.DIFFERENT)
             self._update_counts()
+        elif key in ("hide-uninstalled-edits", "restore-reinstalled-edits"):
+            if self.issues is not None and self.report is not None:
+                self.issues.update(self.report, force=True)
+            if self.settings.get(key) and self.report is not None:
+                self._handle_uninstalled(self.report)
         elif key == "window-controls":
             self._apply_window_controls()
         elif key == "size":
@@ -803,6 +809,7 @@ class MainWindow(Gtk.ApplicationWindow):
             if self.issues is not None:
                 self.issues.update(report)
             self.tabs.set_count("issues", report.count)
+            self._handle_uninstalled(report)
             first = not self._loaded
             self._loaded = True
             if first:
@@ -934,7 +941,7 @@ class MainWindow(Gtk.ApplicationWindow):
         if item is not None:
             self._on_toggle(item, hidden)
 
-    def _run_changes(self, plan, message, failed_title, after=None, allow_empty=False):
+    def _run_changes(self, plan, message, failed_title, after=None, allow_empty=False, done_anyway=None):
         """Plan (in the background), apply all-or-nothing, record it in the
         history and offer Undo. `after(changes)` runs once they're applied and
         returns anything it moved to the Trash, so Undo can put it back."""
@@ -944,6 +951,8 @@ class MainWindow(Gtk.ApplicationWindow):
 
         def done(result):
             self.queue_rescan(0)
+            if done_anyway is not None:
+                done_anyway()
             if isinstance(result, overrides.OverrideError):
                 error_dialog(self, failed_title,
                              _("The file below couldn't be changed: {reason}. Nothing was changed.")
@@ -1004,6 +1013,47 @@ class MainWindow(Gtk.ApplicationWindow):
             self.history_window.connect("destroy", lambda *_x: setattr(self, "history_window", None))
         self.history_window.present()
 
+    def _handle_uninstalled(self, report):
+        """Edited apps uninstalled elsewhere leave your copy of their entry
+        behind, still in menus but starting nothing. Hide those (keeping the
+        edits), and take that hide off when the app comes back. Each is done
+        once, is recorded in the history and can be undone; both are options
+        on the Issues page."""
+        if self._auto_busy:
+            return
+        hide = [lo for lo in report.uninstalled if self.settings.get("hide-uninstalled-edits")]
+        back = [lo for lo in report.reinstalled if self.settings.get("restore-reinstalled-edits")]
+        if not hide and not back:
+            return
+        self._auto_busy = True
+
+        def plan():
+            return ([overrides.plan_hide_uninstalled(lo.id, lo.name, lo.path) for lo in hide]
+                    + [overrides.plan_bring_back(lo.id, lo.name, lo.path) for lo in back])
+
+        def message(_n):
+            gone = [lo.name for lo in hide]
+            again = [lo.name for lo in back]
+            parts = []
+            if len(gone) == 1:
+                parts.append(_("Hid {name}: it was uninstalled. Your edits are kept").format(name=gone[0]))
+            elif gone:
+                parts.append(ngettext("Hid {n} uninstalled app; your edits are kept",
+                                      "Hid {n} uninstalled apps; your edits are kept", len(gone))
+                             .format(n=len(gone)))
+            if len(again) == 1:
+                parts.append(_("{name} is back: your edits apply again").format(name=again[0]))
+            elif again:
+                parts.append(ngettext("{n} app is back: your edits apply again",
+                                      "{n} apps are back: your edits apply again", len(again))
+                             .format(n=len(again)))
+            return ". ".join(parts)
+
+        def finished():
+            self._auto_busy = False
+
+        self._run_changes(plan, message, _("Couldn't update your edited copies"), done_anyway=finished)
+
     def _fix(self, kind, targets):
         n_ = ngettext
         if kind == "legacy":
@@ -1020,6 +1070,21 @@ class MainWindow(Gtk.ApplicationWindow):
                               _("Couldn't hide the apps"))
         elif kind == "delete":
             self._confirm_delete_launcher(targets[0])
+        elif kind == "hide-uninstalled":
+            self._run_changes(lambda: [overrides.plan_hide_uninstalled(l.id, l.name, l.path) for l in targets],
+                              lambda n: n_("Hid {n} uninstalled app; your edits are kept",
+                                           "Hid {n} uninstalled apps; your edits are kept", n).format(n=n),
+                              _("Couldn't hide the apps"))
+        elif kind == "remove-edits":
+            self._run_changes(lambda: [overrides.plan_delete(l.id, l.name, l.path, False) for l in targets],
+                              lambda n: n_("Removed your edits for {n} uninstalled app",
+                                           "Removed your edits for {n} uninstalled apps", n).format(n=n),
+                              _("Couldn't remove the edits"))
+        elif kind == "bring-back":
+            self._run_changes(lambda: [overrides.plan_bring_back(l.id, l.name, l.path) for l in targets],
+                              lambda n: n_("Your edits apply again to {n} app",
+                                           "Your edits apply again to {n} apps", n).format(n=n),
+                              _("Couldn't bring the edits back"))
 
     def _save_edit(self, app, fields, picked=None):
         def plan():
@@ -1244,12 +1309,38 @@ class MainWindow(Gtk.ApplicationWindow):
         elif action.startswith("find:"):
             self.settings.set("filter", "all")
             self.search_entry.set_text(action[len("find:"):])
+        elif action == "hide-uninstalled":
+            self._fix("hide-uninstalled", [health.Leftover(app.id, app.name, app.override_path)])
+        elif action == "issues":
+            self.settings.set("filter", "issues")
+        elif action == "launch":
+            self._launch(app)
         elif action == "open-folder":
             path = app.override_path or app.source_path
             try:
                 Gio.AppInfo.launch_default_for_uri(Gio.File.new_for_path(os.path.dirname(path)).get_uri(), None)
             except GLib.Error as e:
                 error_dialog(self, _("Couldn't open the folder"), e.message, os.path.dirname(path))
+
+    def _launch(self, app):
+        """Start the app the way a launcher would, from the entry launchers use."""
+        path = app.override_path or app.source_path
+        try:
+            info = Gio.DesktopAppInfo.new_from_filename(path)
+        except (TypeError, GLib.Error):
+            info = None
+        if info is None:
+            error_dialog(self, _("Couldn't open {name}").format(name=app.name),
+                         _("Its entry file couldn't be read."), path)
+            return
+        ctx = self.get_display().get_app_launch_context()
+        try:
+            info.launch([], ctx)
+        except GLib.Error as e:
+            error_dialog(self, _("Couldn't open {name}").format(name=app.name), e.message,
+                         _("Runs: {cmd}").format(cmd=app.exec))
+            return
+        self.snackbar.show(_("Opening {name}…").format(name=app.name))
 
     def _unhide_all(self):
         apps = [i.app for i in self.apps.items()]

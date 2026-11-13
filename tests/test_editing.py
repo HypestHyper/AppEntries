@@ -166,3 +166,29 @@ def test_preview_shows_the_file_after_saving(xdg):
     assert ed.preview(app, f, xdg.env) == FULL
     assert "Name=Changed" in ed.preview(app, ed.copy_fields(f, name="Changed"), xdg.env)
     assert ed.preview(app, ed.copy_fields(f, name=""), xdg.env) == FULL   # invalid: shows the file as it is
+
+
+def test_edited_copy_gets_try_exec(xdg, monkeypatch):
+    monkeypatch.setattr(ed.shutil, "which", lambda prog, path=None: f"/usr/bin/{prog}")
+    monkeypatch.setattr(ed.os.path, "isfile", lambda p: p.startswith("/usr/bin/"))
+    xdg.write(xdg.sys_b, "files.desktop", FULL)
+    ov.apply(ed.plan_edit(only(xdg), ed.copy_fields(ed.read_fields(only(xdg), xdg.env), name="Mine"), xdg.env))
+    d = group(xdg.user / "files.desktop")
+    assert d["TryExec"] == "/usr/bin/nautilus" and d[de.TRY_EXEC_KEY] == "true"
+    # A new command moves it along.
+    app = only(xdg)
+    ov.apply(ed.plan_edit(app, ed.copy_fields(ed.read_fields(app, xdg.env), command="thunar %U"), xdg.env))
+    assert group(xdg.user / "files.desktop")["TryExec"] == "/usr/bin/thunar"
+    # Through a wrapper, the program says nothing about the app: no TryExec.
+    app = only(xdg)
+    ov.apply(ed.plan_edit(app, ed.copy_fields(ed.read_fields(app, xdg.env), command="flatpak run x.y"), xdg.env))
+    d = group(xdg.user / "files.desktop")
+    assert "TryExec" not in d and de.TRY_EXEC_KEY not in d
+
+
+def test_try_exec_the_entry_came_with_is_kept(xdg, monkeypatch):
+    monkeypatch.setattr(ed.shutil, "which", lambda prog, path=None: f"/usr/bin/{prog}")
+    xdg.write(xdg.sys_b, "files.desktop", FULL.replace("Icon=", "TryExec=nautilus\nIcon="))
+    ov.apply(ed.plan_edit(only(xdg), ed.copy_fields(ed.read_fields(only(xdg), xdg.env), name="Mine"), xdg.env))
+    d = group(xdg.user / "files.desktop")
+    assert d["TryExec"] == "nautilus" and de.TRY_EXEC_KEY not in d

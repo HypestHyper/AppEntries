@@ -32,6 +32,8 @@ DEFAULTS = {
     "last-update-check": 0,
     "latest-version": "",
     "recent-colors": [],
+    "hide-uninstalled-edits": True,
+    "restore-reinstalled-edits": True,
 }
 
 

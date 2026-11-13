@@ -66,7 +66,9 @@ def test_leftovers(xdg):
     xdg.write(xdg.sys_b, "still.desktop", entry("Still"))
     ov.set_hidden(de.scan(xdg.env)[0], True, xdg.env)
     # Files for apps that are gone: one App Entries made, one bare Hidden file.
-    xdg.write(xdg.user, "gone.desktop", entry("Gone", NoDisplay="true", **{de.MANAGED_KEY: "true"}))
+    hide = de.DesktopFile(entry("Gone", NoDisplay="true", **{de.MANAGED_KEY: "true"}))
+    hide.set(de.CHECKSUM_KEY, ov._digest(hide))   # as App Entries writes a hide copy
+    xdg.write(xdg.user, "gone.desktop", hide.text())
     xdg.write(xdg.user, "bare.desktop", "[Desktop Entry]\nType=Application\nName=Bare\nHidden=true\n")
     # The user's own launcher is not a leftover.
     xdg.write(xdg.user, "mine.desktop", entry("Mine"))
@@ -152,3 +154,53 @@ def test_bare_hide_file_is_not_customised(xdg):
     apps = de.scan(xdg.env)
     health.check(apps, xdg.env)
     assert apps[0].hidden and not apps[0].customised
+
+
+def test_edited_copies_of_uninstalled_apps(xdg):
+    xdg.write(xdg.sys_b, "gimp.desktop", entry("GIMP", "gimp"))
+    gimp = de.scan(xdg.env)[0]
+    from app_entries import editing
+    fields = editing.read_fields(gimp, xdg.env)
+    fields.name = "GIMP (mine)"
+    ov.apply(editing.plan_edit(gimp, fields, xdg.env))
+    copy = xdg.user / "gimp.desktop"
+    assert health.find_uninstalled_edits(xdg.env) == ([], [])
+
+    # Uninstalled: the edited copy is the app's only entry now. It isn't a leftover.
+    (xdg.sys_b / "gimp.desktop").unlink()
+    gone, back = health.find_uninstalled_edits(xdg.env)
+    assert [lo.id for lo in gone] == ["gimp.desktop"] and back == []
+    assert health.find_leftovers(xdg.env) == []
+    apps = de.scan(xdg.env)
+    report = health.check(apps, xdg.env)
+    assert apps[0].uninstalled and [lo.id for lo in report.uninstalled] == ["gimp.desktop"]
+    assert report.missing == []    # its own section, not "missing program"
+
+    # Hidden from every launcher, and marked so it's done once.
+    change = ov.plan_hide_uninstalled("gimp.desktop", "GIMP", str(copy))
+    ov.apply(change)
+    d = de.DesktopFile(copy.read_text()).group_dict()
+    assert d["NoDisplay"] == "true" and d[de.UNINSTALLED_KEY] == "true" and d["Name"] == "GIMP (mine)"
+    assert ov.plan_hide_uninstalled("gimp.desktop", "GIMP", str(copy)) is None
+
+    # Shown again by hand: it stays shown (the mark says it was handled).
+    ov.set_hidden(de.scan(xdg.env)[0], False, xdg.env)
+    assert ov.plan_hide_uninstalled("gimp.desktop", "GIMP", str(copy)) is None
+    ov.set_hidden(de.scan(xdg.env)[0], True, xdg.env)
+
+    # Reinstalled: App Entries' hide comes off, the edits apply again.
+    xdg.write(xdg.sys_b, "gimp.desktop", entry("GIMP", "gimp"))
+    gone, back = health.find_uninstalled_edits(xdg.env)
+    assert gone == [] and [lo.id for lo in back] == ["gimp.desktop"]
+    ov.apply(ov.plan_bring_back("gimp.desktop", "GIMP", str(copy)))
+    d = de.DesktopFile(copy.read_text()).group_dict()
+    assert "NoDisplay" not in d and de.UNINSTALLED_KEY not in d and d["Name"] == "GIMP (mine)"
+    assert health.find_uninstalled_edits(xdg.env) == ([], [])
+
+
+def test_a_hide_you_made_yourself_stays_on_reinstall(xdg, tmp_path):
+    xdg.write(xdg.user, "tool.desktop", entry("Tool", NoDisplay="true", **{de.MANAGED_KEY: "true",
+                                                                          de.UNINSTALLED_KEY: "true"}))
+    change = ov.plan_bring_back("tool.desktop", "Tool", str(xdg.user / "tool.desktop"))
+    d = de.DesktopFile(change.after).group_dict()
+    assert d["NoDisplay"] == "true" and de.UNINSTALLED_KEY not in d and change.hidden

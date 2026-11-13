@@ -5,11 +5,12 @@ there isn't one yet), touching only the keys that changed. Pure Python, no GTK.
 """
 import os
 import re
+import shutil
 from dataclasses import dataclass, field, replace
 from typing import Optional
 
 from . import desktop_entries as de
-from .desktop_entries import CHECKSUM_KEY, HIDDEN_KEY, MANAGED_KEY, DesktopFile, is_true
+from .desktop_entries import CHECKSUM_KEY, HIDDEN_KEY, MANAGED_KEY, TRY_EXEC_KEY, DesktopFile, is_true
 from .overrides import Change, OverrideError, override_path, read_text
 
 # Main menu categories from the Desktop Menu Specification, with plain names.
@@ -209,6 +210,38 @@ def _set_list(df: DesktopFile, key: str, items: list[str]) -> None:
         df.remove(key)
 
 
+# Programs that start something else; their presence says nothing about the app.
+_WRAPPERS = {"env", "sh", "bash", "dash", "zsh", "fish", "flatpak", "snap", "steam", "distrobox",
+             "distrobox-enter", "gtk-launch", "xdg-open", "gio", "kioclient", "kioclient5", "exo-open",
+             "pkexec", "sudo", "nix", "toolbox", "python", "python3", "java", "wine", "mono"}
+
+
+def _set_try_exec(df: DesktopFile, app: de.App, env=None) -> None:
+    """Give an edited copy of a system package's app a TryExec naming its
+    program, so desktops that honour TryExec (GNOME, KDE, Xfce and others)
+    leave the copy out of menus as soon as the package is removed, before
+    App Entries next runs. Only for a program found under /usr or /opt, and
+    never over a TryExec the entry came with."""
+    from . import health
+    d = df.group_dict()
+    ours = is_true(d.get(TRY_EXEC_KEY))
+    if d.get("TryExec") and not ours:
+        return
+    if ours:
+        df.remove("TryExec")
+        df.remove(TRY_EXEC_KEY)
+    if health.source_of(app) != "system":
+        return
+    program = health.program_of(de.unescape(d.get("Exec", "")))
+    if not program or "$" in program or "%" in program or os.path.basename(program) in _WRAPPERS:
+        return
+    env = os.environ if env is None else env
+    found = program if os.path.isabs(program) else shutil.which(program, path=":".join(health.search_dirs(env)))
+    if found and found.startswith(("/usr/", "/opt/")) and os.path.isfile(found):
+        df.set("TryExec", found)
+        df.set(TRY_EXEC_KEY, "true")
+
+
 def plan_edit(app: de.App, new: Fields, env=None) -> Optional[Change]:
     """The change that saves `new`, or None if nothing changed."""
     problems = validate(new)
@@ -278,6 +311,7 @@ def plan_edit(app: de.App, new: Fields, env=None) -> Optional[Change]:
 
     if not changed:
         return None
+    _set_try_exec(df, app, env)
     return Change(app.id, new.name.strip() or app.name, path, before, df.text(), new.hidden)
 
 

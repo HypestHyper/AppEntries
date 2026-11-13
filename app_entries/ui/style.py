@@ -273,6 +273,7 @@ button.related-hint {{
   border-radius: 8px; font-weight: 500;
 }}
 button.related-hint:hover {{ background-color: alpha({PRIMARY}, .10); }}
+.card-note {{ background: alpha({ERROR}, .08); border-radius: 12px; padding: 10px 12px; margin-top: 4px; }}
 
 textview.textarea, textview.textarea > text {{
   background: {SURFACE_CONTAINER_HIGHEST}; color: {ON_SURFACE}; caret-color: {PRIMARY};

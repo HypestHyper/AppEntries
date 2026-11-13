@@ -50,8 +50,9 @@ class IssuesPage(Gtk.ScrolledWindow):
     """`fix(kind, targets)` is called when a button is pressed; `toggle(app,
     hidden)` when a duplicate's switch is flipped."""
 
-    def __init__(self, fix, toggle, copy):
+    def __init__(self, fix, toggle, copy, settings):
         super().__init__(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
+        self._settings = settings
         self._fix = fix
         self._toggle = toggle
         self._copy = copy
@@ -62,17 +63,19 @@ class IssuesPage(Gtk.ScrolledWindow):
         self.page.set_margin_end(4)
         self.set_child(self.page)
 
-    def update(self, report):
+    def update(self, report, force=False):
         sig = (tuple(a.id for a in report.legacy), tuple(l.path for l in report.leftovers),
+               tuple((l.path, l.hidden) for l in report.uninstalled), tuple(l.path for l in report.reinstalled),
                tuple((a.id, a.missing) for a in report.missing),
                tuple(sorted((k, o.command) for k, o in report.owners.items())),
                tuple(tuple((a.id, a.hidden) for a in g) for g in report.duplicates))
-        if sig == self._signature:
+        if sig == self._signature and not force:
             return
         self._signature = sig
         clear(self.page)
 
-        if not report.count:
+        back = report.reinstalled if not self._settings.get("restore-reinstalled-edits") else []
+        if not report.count and not back:
             empty = vbox(10, icon("check_circle", ("big", "accent")),
                          label(_("Nothing to fix"), ("title",), xalign=0.5),
                          label(_("No leftover files, missing programs or duplicates were found. "
@@ -80,6 +83,7 @@ class IssuesPage(Gtk.ScrolledWindow):
                                ("body", "dim"), wrap=True, xalign=0.5, chars=50))
             empty.set_margin_top(80)
             self.page.append(empty)
+            self._options()
             return
 
         if report.legacy:
@@ -106,6 +110,40 @@ class IssuesPage(Gtk.ScrolledWindow):
                              tooltip=_("Delete this leftover file"),
                              cb=lambda _b, l=l: self._fix("leftovers", [l])))
                  for l in report.leftovers])
+
+        if report.uninstalled:
+            rows = []
+            for l in report.uninstalled:
+                hidden = l.hidden
+                actions = [button(_("Remove"), style="tonal", small=True,
+                                  tooltip=_("Delete your edited copy. You can undo this."),
+                                  cb=lambda _b, l=l: self._fix("remove-edits", [l]))]
+                if not hidden:
+                    actions.insert(0, button(_("Hide"), style="text", small=True,
+                                             tooltip=_("Keep it out of launcher menus; your edits are kept"),
+                                             cb=lambda _b, l=l: self._fix("hide-uninstalled", [l])))
+                rows.append(_row(_glyph_tile("inventory_2"), l.name, l.path, *actions,
+                                 extra=[((_("Hidden from menus") if hidden else _("Still shows in menus")),
+                                         ("small", "dim"))]))
+            self._section(
+                _("Uninstalled, your edits remain"),
+                _("You edited these apps, then they were uninstalled, by a package manager or another app. "
+                  "Uninstalling only removes the app's own files, so your edited copy stays in your "
+                  "applications folder. It starts nothing now. Keep it if you'll reinstall the app and want "
+                  "your edits back; otherwise remove it. Removing can be undone."),
+                _("Remove all"), "remove-edits", report.uninstalled, rows)
+
+        if back:
+            self._section(
+                _("Reinstalled, your edits are hidden"),
+                _("These apps were uninstalled and are back. Your edited copy is still hidden from menus. "
+                  "Bring back takes that hide off so your edits apply again."),
+                _("Bring all back"), "bring-back", back,
+                [_row(_glyph_tile("settings_backup_restore"), l.name, l.path,
+                      button(_("Bring back"), style="tonal", small=True,
+                             tooltip=_("Your edits apply again"),
+                             cb=lambda _b, l=l: self._fix("bring-back", [l])))
+                 for l in back])
 
         if report.missing:
             rows = []
@@ -156,6 +194,28 @@ class IssuesPage(Gtk.ScrolledWindow):
                   "installed two ways (for example as a system package and as a Flatpak). Hide the "
                   "copies you don't use."),
                 None, "duplicates", report.duplicates, rows)
+
+        self._options()
+
+    def _options(self):
+        """What App Entries does by itself when an app you edited is
+        uninstalled or reinstalled."""
+        self.page.append(section(_("When an app you edited is uninstalled"),
+                                 _("Each of these is done once, shows a message and can be undone in History.")))
+        c = card()
+        for key, title, detail in (
+                ("hide-uninstalled-edits", _("Hide edited apps when they're uninstalled"),
+                 _("Your copy is hidden from menus (NoDisplay=true). Your edits are kept.")),
+                ("restore-reinstalled-edits", _("Bring the edits back when the app is reinstalled"),
+                 _("Takes off that hide, so your edits apply again. A hide you made yourself stays."))):
+            sw = Toggle(self._settings.get(key), lambda v, key=key: self._settings.set(key, v))
+            sw.update_property([Gtk.AccessibleProperty.LABEL], [title])
+            text = vbox(2, label(title, ("body",)), label(detail, ("small", "dim"), wrap=True))
+            text.set_hexpand(True)
+            row = hbox(14, text, sw)
+            row.add_css_class("issue-row")
+            c.append(row)
+        self.page.append(c)
 
     def _section(self, title, explanation, fix_all, kind, targets, rows):
         head = section(title, explanation)

@@ -12,6 +12,10 @@ GROUP = "Desktop Entry"
 MANAGED_KEY = "X-AppEntries-Managed"   # the file was made by App Entries
 HIDDEN_KEY = "X-AppEntries-Hidden"     # App Entries added NoDisplay=true to it
 CHECKSUM_KEY = "X-AppEntries-Checksum"  # of the copy as written, to spot later edits
+# App Entries hid this edited copy because its app was uninstalled.
+UNINSTALLED_KEY = "X-AppEntries-Uninstalled"
+# App Entries added this copy's TryExec (so a later edit may change it).
+TRY_EXEC_KEY = "X-AppEntries-TryExec"
 
 # ---------------------------------------------------------------------------
 # Parsing
@@ -256,6 +260,7 @@ class App:
     not_show_in: tuple[str, ...] = ()
     excluded_here: bool = False
     mime_types: tuple[str, ...] = ()   # the file types it says it opens (MimeType)
+    uninstalled: bool = False      # your edited copy of an app that's no longer installed (health.check)
 
     @property
     def has_override(self) -> bool:

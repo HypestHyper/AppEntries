@@ -67,3 +67,6 @@ wallpaper
 colorize
 progress_activity
 radio_button_unchecked
+play_arrow
+inventory_2
+settings_backup_restore

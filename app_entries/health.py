@@ -20,19 +20,25 @@ class Leftover:
     id: str
     name: str
     path: str
+    hidden: bool = False   # kept out of menus (NoDisplay or Hidden)
 
 
 @dataclass
 class Report:
     legacy: list[de.App] = field(default_factory=list)       # hidden the old way
     leftovers: list[Leftover] = field(default_factory=list)
+    # Your edited copies of apps that were uninstalled (not counted as leftovers).
+    uninstalled: list[Leftover] = field(default_factory=list)
+    # Copies App Entries hid that way, whose app is installed again.
+    reinstalled: list[Leftover] = field(default_factory=list)
     missing: list[de.App] = field(default_factory=list)      # shown, but the program is gone
     duplicates: list[list[de.App]] = field(default_factory=list)
     owners: dict[str, "packages.Owner"] = field(default_factory=dict)  # for `missing`, by app ID
 
     @property
     def count(self) -> int:
-        return len(self.legacy) + len(self.leftovers) + len(self.missing) + len(self.duplicates)
+        return (len(self.legacy) + len(self.leftovers) + len(self.uninstalled) + len(self.missing)
+                + len(self.duplicates))
 
 
 def source_of(app: de.App) -> str:
@@ -128,9 +134,43 @@ def is_customised(app: de.App) -> bool:
     return not is_pristine(df)
 
 
+def _is_edited_copy(entry) -> bool:
+    """A full copy of an app's entry made by App Entries and edited since
+    (not a plain hide copy)."""
+    data = entry.data
+    if not de.is_true(data.get(de.MANAGED_KEY)) or not data.get("Exec", "").strip():
+        return False
+    from .overrides import is_pristine
+    try:
+        return not is_pristine(de.DesktopFile.load(entry.path))
+    except OSError:
+        return False
+
+
+def find_uninstalled_edits(env=None) -> tuple[list[Leftover], list[Leftover]]:
+    """(your edited copies of apps that are no longer installed, and copies
+    App Entries hid for that reason whose app is installed again)."""
+    user_dir = os.path.normpath(de.user_apps_dir(env))
+    others = set()
+    for d in de.application_dirs(env):
+        if d != user_dir:
+            others |= set(de.scan_dir(d, False))
+    gone, back = [], []
+    for did, entry in sorted(de.scan_dir(user_dir, True).items()):
+        lo = Leftover(did, de.unescape(entry.data.get("Name", "")) or did, entry.path,
+                      de.is_true(entry.data.get("NoDisplay")) or de.is_true(entry.data.get("Hidden")))
+        if did in others:
+            if de.is_true(entry.data.get(de.UNINSTALLED_KEY)):
+                back.append(lo)
+        elif _is_edited_copy(entry):
+            gone.append(lo)
+    return gone, back
+
+
 def find_leftovers(env=None) -> list[Leftover]:
     """Files in the user's folder that only change an app (hide it, or were
-    made by App Entries) for an app that's no longer installed anywhere."""
+    made by App Entries) for an app that's no longer installed anywhere.
+    Edited copies are left to find_uninstalled_edits."""
     dirs = de.application_dirs(env)
     user_dir = os.path.normpath(de.user_apps_dir(env))
     others = set()
@@ -144,7 +184,7 @@ def find_leftovers(env=None) -> list[Leftover]:
         data = entry.data
         managed = de.is_true(data.get(de.MANAGED_KEY))
         bare = not data.get("Exec", "").strip()
-        if managed or (bare and de.is_true(data.get("Hidden"))):
+        if (managed and not _is_edited_copy(entry)) or (bare and de.is_true(data.get("Hidden"))):
             out.append(Leftover(did, de.unescape(data.get("Name", "")) or did, entry.path))
     return out
 
@@ -200,11 +240,18 @@ def check(apps: list[de.App], env=None) -> Report:
         a.missing = missing_program(a, env)
         a.customised = is_customised(a)
     find_related(apps)
+    gone, back = find_uninstalled_edits(env)
+    gone_ids = {lo.id for lo in gone}
+    for a in apps:
+        a.uninstalled = a.id in gone_ids
     return Report(
         legacy=legacy_hidden(apps),
         leftovers=find_leftovers(env),
-        # App Entries never offers to hide itself.
-        missing=[a for a in apps if a.missing and not a.hidden and a.id != APP_ID + ".desktop"],
+        uninstalled=gone,
+        reinstalled=back,
+        # App Entries never offers to hide itself; uninstalled apps have their own section.
+        missing=[a for a in apps if a.missing and not a.hidden and a.id != APP_ID + ".desktop"
+                 and a.id not in gone_ids],
         duplicates=find_duplicates(apps),
     )
 
