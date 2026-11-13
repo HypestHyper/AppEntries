@@ -1,18 +1,10 @@
 # Planned for the next version
 
-## Done on the branch (not released)
+Nothing agreed yet. Ideas on hold:
 
-- Edited apps uninstalled elsewhere: hidden with their edits kept, brought
-  back on reinstall (options on the Issues page), a note on the card, an
-  Issues section, TryExec on edited copies of system apps.
-- Open button on each card.
-- Sort newest first (by when App Entries first saw each app), New badge.
-- File types per app in Default apps: Each type on every category, a By
-  app section, File types… in the card's ⋯ menu. Not done: choosing which
-  types an app offers in Open With (would edit its entry; maybe later).
-
-## Waiting for a decision
-
-### AppImage
-
-Possible, with costs; see the assessment in the session notes. Not started.
+- Choosing which file types an app offers in Open With (would edit its
+  entry, not mimeapps.list). Maybe an option in the Edit window.
+- An AppImage as an extra download. Would bundle Python and GTK 4 (about
+  60–80 MB) and must restore the original environment for every program it
+  starts. The openSUSE Build Service (.deb, .rpm, Arch from one setup) may
+  reach more people with less risk.

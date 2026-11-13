@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.7 — 2026-11-13
 
 - Apps you edited, then uninstalled some other way (a terminal, a software centre), no longer linger in menus. Uninstalling removes only the app's own files, so your edited copy stays behind; App Entries now hides it (NoDisplay=true, which every launcher honours) and keeps your edits. When the app is reinstalled, the hide comes off and your edits apply again. Both happen once, show a message with Undo, and are options on the Issues page.
 - The card says when that happened, and Issues lists these copies apart as "Uninstalled, your edits remain", with Remove.

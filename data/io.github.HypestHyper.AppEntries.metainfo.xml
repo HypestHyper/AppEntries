@@ -22,7 +22,8 @@
       <li>Make launchers for programs, scripts and commands (in one terminal or several), and web apps that open a site in its own window</li>
       <li>Styled icons from thousands of symbols or your own SVGs</li>
       <li>Turn login programs on and off</li>
-      <li>Choose which app opens links, folders and each kind of file</li>
+      <li>Choose which app opens links, folders and each kind of file, or each file type one app opens</li>
+      <li>Edited apps that are uninstalled are hidden from menus, with the edits kept for a reinstall</li>
       <li>Uninstall Flatpak, Snap, AppImage, Steam and package-manager apps, showing what else uses them first</li>
       <li>Shortcuts to helper apps like Flatseal, Gear Lever and ProtonUp-Qt</li>
       <li>A history of every change, each with Undo</li>
@@ -58,6 +59,16 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.0.7" date="2026-11-13">
+      <description>
+        <ul>
+          <li>Edited apps that were uninstalled elsewhere are hidden, and come back with your edits on reinstall</li>
+          <li>Default apps per file type, and every type one app opens</li>
+          <li>An Open button on each card</li>
+          <li>Sort newest first, with new apps marked</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.0.6" date="2026-11-10">
       <description>
         <ul>
