@@ -8,7 +8,7 @@ from gi.repository import Gdk, Gtk, Pango
 
 from .. import APP_ID
 from .app_card import Badge, gicon_later, menu_box
-from .widgets import copyable, glyph, icon, label, set_text, vbox
+from .widgets import glyph, icon, label, set_text, vbox
 
 
 class AppRow(Gtk.Box):
@@ -16,9 +16,11 @@ class AppRow(Gtk.Box):
     `on_action(item, name)` runs a menu action. While `selecting()` is
     true, a click selects the row instead."""
 
-    def __init__(self, on_toggle, on_action, selecting=lambda: False):
+    def __init__(self, on_toggle, on_action, selecting=lambda: False, current=lambda: None):
         super().__init__(spacing=12)
         self.add_css_class("app-row")
+        self.add_css_class("no-copy")   # a click opens the app, it doesn't select text
+        self._current = current
         self._on_toggle = on_toggle
         self._on_action = on_action
         self._selecting = selecting
@@ -55,7 +57,6 @@ class AppRow(Gtk.Box):
         self.desc = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END)
         self.desc.add_css_class("small")
         self.desc.add_css_class("dim")
-        copyable(self.desc)
         text = vbox(1, top, self.desc)
         text.set_hexpand(True)
         text.set_valign(Gtk.Align.CENTER)
@@ -80,6 +81,9 @@ class AppRow(Gtk.Box):
         menu = Gtk.GestureClick(button=Gdk.BUTTON_SECONDARY)
         menu.connect("pressed", self._menu_pressed)
         self.add_controller(menu)
+        opening = Gtk.GestureClick(button=Gdk.BUTTON_PRIMARY)
+        opening.connect("released", self._released)
+        self.add_controller(opening)
         select = Gtk.GestureClick()
         select.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         select.connect("pressed", self._select_pressed)
@@ -136,6 +140,10 @@ class AppRow(Gtk.Box):
             self.add_css_class("is-selected")
         else:
             self.remove_css_class("is-selected")
+        if a.id == self._current() and not selecting:
+            self.add_css_class("is-current")
+        else:
+            self.remove_css_class("is-current")
         self._update_eye()
         state = _("hidden from launcher") if a.hidden else _("shown in launcher")
         self.update_property([Gtk.AccessibleProperty.LABEL],
@@ -179,6 +187,16 @@ class AppRow(Gtk.Box):
         """Space on the row: hide or show it."""
         if self.item is not None and self.eye.get_sensitive():
             self._eye_clicked()
+
+    def _released(self, gesture, _n, x, y):
+        if self.item is None or self._selecting():
+            return
+        picked = self.pick(x, y, Gtk.PickFlags.DEFAULT)
+        while picked is not None and picked is not self:
+            if picked is self.eye:
+                return
+            picked = picked.get_parent()
+        self._on_action(self.item, "open")
 
     def _select_pressed(self, gesture, _n, _x, _y):
         if self.item is None or not self._selecting():

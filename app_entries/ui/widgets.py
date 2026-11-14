@@ -650,7 +650,7 @@ class NavRail(Gtk.Box):
     __gsignals__: ClassVar[dict] = {"changed": (GObject.SignalFlags.RUN_FIRST, None, (str,))}
 
     def __init__(self, items, bottom, active):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=False)
         self.add_css_class("navrail")
         self._buttons = {}
         self._badges = {}

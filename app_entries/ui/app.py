@@ -74,6 +74,7 @@ AutostartPage = _lazy(".autostart_page", "AutostartPage")
 DefaultsPage = _lazy(".defaults_page", "DefaultsPage")
 SettingsPage = _lazy(".settings_page", "SettingsPage")
 UpdatesPage = _lazy(".updates", "UpdatesPage")
+from .app_page import AppPage  # noqa: E402 - shown with the list, so not lazy
 
 # The places in the navigation rail: (setting value, label, icon).
 RAIL = [
@@ -92,6 +93,8 @@ LEGACY_FILTERS = {"hidden": ("view", "hidden"), "customised": ("only", "customis
 PAGES = ("issues", "autostart", "defaults", "settings", "updates")  # tabs that aren't app lists
 SELF_ID = APP_ID + ".desktop"
 COMPACT_BELOW = 900
+SPLIT_FROM = 980        # window width from which the list and the app page sit side by side
+LIST_WIDTH = 440
 HYSTERESIS = 60
 
 
@@ -309,8 +312,14 @@ class MainWindow(Gtk.ApplicationWindow):
         overlay.set_child(self.stack)
         overlay.add_overlay(self.snackbar)
         overlay.add_overlay(self._build_selection_bar())
+        self.list_area = overlay
+        self._current = None        # the AppItem whose page is open
+        self._narrow = False
+        self.app_page = AppPage(self)
+        self.split = hbox(16, overlay, self.app_page)
+        self.split.set_vexpand(True)
         self._update_tab_controls()
-        content.append(overlay)
+        content.append(self.split)
         body = hbox(0, self.rail, content)
         self.set_child(body)
 
@@ -340,7 +349,8 @@ class MainWindow(Gtk.ApplicationWindow):
         self.stack.add_named(page, name)
 
     def _setup_card(self, _f, list_item):
-        list_item.set_child(AppRow(self._on_toggle, self._on_card_action, lambda: self._selecting))
+        list_item.set_child(AppRow(self._on_toggle, self._on_card_action, lambda: self._selecting,
+                                   lambda: self._current.app.id if self._current is not None else None))
 
     def _focused_row(self):
         w = self.grid.get_focus_child()
@@ -517,6 +527,8 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.settings.set("filter", "all")
                 return
             self.rail.set_active(v)
+            if self._current is not None and (v == "mine") != self._current.app.created:
+                self.close_app()
             self._filter_action.set_state(GLib.Variant("s", v))
             self.filter.changed(Gtk.FilterChange.DIFFERENT)
             self._update_tab_controls()
@@ -602,6 +614,13 @@ class MainWindow(Gtk.ApplicationWindow):
     def do_size_allocate(self, width, height, baseline):
         Gtk.ApplicationWindow.do_size_allocate(self, width, height, baseline)
         self._apply_size(width)
+        self._apply_split(width)
+
+    def _apply_split(self, width):
+        narrow = width < SPLIT_FROM
+        if narrow != self._narrow:
+            self._narrow = narrow
+            GLib.idle_add(lambda: (self._update_split(), False)[1])
 
     def _apply_size(self, width):
         size = self.settings.get("size")
@@ -657,6 +676,8 @@ class MainWindow(Gtk.ApplicationWindow):
         f = self.settings.get("filter")
         # Issues, Autostart, Defaults, Settings and Updates aren't app lists.
         self.toolbar.set_visible(f in ("all", "mine"))
+        if hasattr(self, "app_page"):
+            self._update_split()
         self.view_seg.set_visible(f == "all")
         self.new_btns.set_visible(f == "mine")
 
@@ -950,6 +971,12 @@ class MainWindow(Gtk.ApplicationWindow):
             if not self._loaded:
                 timing.mark("  list being filled")
             self._keeping_place(lambda: self.apps.sync(apps))
+            if self._current is not None:
+                now = self.apps.by_id.get(self._current.app.id)
+                if now is None:
+                    self.close_app()
+                elif now is not self._current:
+                    self._open_app(now)
             self._update_sources()
             if self.defaults is not None:
                 self.defaults.reload()
@@ -1037,8 +1064,38 @@ class MainWindow(Gtk.ApplicationWindow):
             self._open_app(item)
 
     def _open_app(self, item):
-        """Enter or double-click on a row."""
-        self._on_card_action(item, "edit")
+        """A click or Enter on a row: its page, beside the list or (in a
+        narrow window) instead of it."""
+        old, self._current = self._current, item
+        self.app_page.show(item)
+        for it in (old, item):
+            if it is not None:
+                it.emit("changed")
+        self._update_split()
+
+    def close_app(self):
+        old, self._current = self._current, None
+        self.app_page.show(None)
+        if old is not None:
+            old.emit("changed")
+        self._update_split()
+        if old is not None:
+            pos = next((i for i in range(self.sorted.get_n_items()) if self.sorted.get_item(i) is old), -1)
+            if pos >= 0 and hasattr(self.grid, "scroll_to"):
+                self.grid.scroll_to(pos, Gtk.ListScrollFlags.FOCUS, None)
+
+    def _update_split(self):
+        """List and page side by side, or one of them in a narrow window."""
+        lists = self.settings.get("filter") in ("all", "mine")
+        page = lists and (not self._narrow or self._current is not None)
+        listing = not lists or not self._narrow or self._current is None
+        self.app_page.set_visible(page)
+        self.app_page.set_narrow(self._narrow)
+        self.list_area.set_visible(listing)
+        self.toolbar.set_visible(lists and listing)
+        side = lists and not self._narrow
+        self.list_area.set_hexpand(not side)
+        self.list_area.set_size_request(LIST_WIDTH if side else -1, -1)
 
     def _on_toggle(self, item: AppItem, hidden: bool, allow_delete=False):
         if item.busy or (hidden and item.app.id == SELF_ID):
@@ -1475,6 +1532,8 @@ class MainWindow(Gtk.ApplicationWindow):
         elif action.startswith("find:"):
             self.settings.set("filter", "all")
             self.search_entry.set_text(action[len("find:"):])
+        elif action == "open":
+            self._open_app(item)
         elif action == "toggle-hidden":
             self._on_toggle(item, not app.hidden)
         elif action == "hide-uninstalled":
@@ -1567,6 +1626,9 @@ class MainWindow(Gtk.ApplicationWindow):
     def _on_key(self, _c, keyval, _code, _state):
         if keyval == Gdk.KEY_Escape and self._selecting:
             self.set_selecting(False)
+            return True
+        if keyval == Gdk.KEY_Escape and self._current is not None and self._narrow:
+            self.close_app()
             return True
         return False
 

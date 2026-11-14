@@ -131,6 +131,17 @@ listview.app-list > row:focus-visible {{ outline: 2px solid {PRIMARY}; outline-o
 button.row-eye {{ min-width: 36px; min-height: 36px; padding: 0; color: {ON_SURFACE_VARIANT};
   transition: opacity 120ms {EASE}; }}
 button.row-eye.is-on {{ color: {ON_SURFACE_VARIANT}; }}
+.app-row.is-current {{ background-color: {SECONDARY_CONTAINER}; }}
+.app-row.is-current .app-name {{ color: {ON_SECONDARY_CONTAINER}; }}
+/* App page */
+.page-head {{ background: {SURFACE_CONTAINER_HIGH}; border-radius: 28px; padding: 22px 24px; margin-top: 2px; }}
+.page-title {{ font-size: 24px; }}
+.launcher-preview {{ background: {SURFACE_DIM}; border-radius: 20px; padding: 12px 14px; }}
+.preview-row {{ padding: 6px 10px; border-radius: 12px; }}
+.preview-row.is-me {{ background: alpha({PRIMARY}, .16); }}
+.preview-row.is-faded {{ opacity: .38; }}
+.page-switch {{ padding: 0 2px; }}
+.page-note {{ background: alpha({ERROR}, .10); border-radius: 16px; padding: 12px 14px; margin-top: 12px; }}
 /* Navigation rail */
 .navrail {{ padding: 4px 0 8px 0; min-width: 64px; }}
 .navrail > button.rail-item {{ background: none; box-shadow: none; padding: 4px 0 6px 0; min-height: 0;

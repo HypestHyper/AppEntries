@@ -50,6 +50,7 @@ class HelpersWindow(Gtk.Window):
         super().__init__(transient_for=win, modal=True, title=_("Helper apps"))
         self.win = win
         self.app = app
+        self.actions = HelperActions(self, self.close)
         self.add_css_class("prefs")
         self.set_default_size(520, 560)
         hb = Gtk.HeaderBar()
@@ -120,10 +121,23 @@ class HelpersWindow(Gtk.Window):
         c.append(hbox(14, _tile(s.icon), text, b))
         return c
 
-    # -- opening ------------------------------------------------------------
+    def _open(self, s):
+        self.actions.open(s)
+
+    def _install(self, s):
+        self.actions.install(s)
+
+
+class HelperActions:
+    """Opening a helper app, or offering to install one. `parent` is the
+    window for dialogs; `done()` runs after one has opened."""
+
+    def __init__(self, parent, done=lambda: None):
+        self.parent = parent
+        self.done = done
 
     def _fail(self, s, why):
-        error_dialog(self, _("Couldn't open {name}").format(name=s.name), str(why))
+        error_dialog(self.parent, _("Couldn't open {name}").format(name=s.name), str(why))
 
     def _launch_desktop(self, s, did, files):
         info = Gio.DesktopAppInfo.new(did)
@@ -137,7 +151,7 @@ class HelpersWindow(Gtk.Window):
             return False
         return True
 
-    def _open(self, s):
+    def open(self, s):
         kind = s.action[0]
         if kind == "desktop":
             ok = self._launch_desktop(s, s.action[1], s.action[2])
@@ -146,7 +160,7 @@ class HelpersWindow(Gtk.Window):
             if ok:
                 _flatseal_show(s.action[2])
         elif kind == "argv":
-            ok = _spawn(self, s, s.action[1])
+            ok = _spawn(self.parent, s, s.action[1])
         elif kind == "uri":
             try:
                 Gio.AppInfo.launch_default_for_uri(s.action[1], None)
@@ -161,15 +175,18 @@ class HelpersWindow(Gtk.Window):
                 r = pkgmanagers.run(["flatpak", "info", "--show-ref", app_id])
                 return r[1].strip() if r and r[0] == 0 else ""
 
-            run_bg(ref, lambda r: _spawn(self, s, helpers.kde_argv(app_id, r if isinstance(r, str) else "", module)))
+            run_bg(ref, lambda r: _spawn(self.parent, s,
+                                         helpers.kde_argv(app_id, r if isinstance(r, str) else "", module)))
             ok = True
         else:
             ok = False
         if ok:
-            self.close()
+            self.done()
 
-    def _install(self, s):
+    def install(self, s):
         cmd = s.install
+        win = self.parent.get_root() if hasattr(self.parent, "get_root") else self.parent
+        main = getattr(win, "win", win)
 
         def on_response(resp):
             if resp != "install":
@@ -177,16 +194,18 @@ class HelpersWindow(Gtk.Window):
             try:
                 terminal.start([cmd])
             except terminal.NoTerminal:
-                error_dialog(self, _("No terminal app was found"), _("Run this in a terminal to install it:"),
+                error_dialog(self.parent, _("No terminal app was found"), _("Run this in a terminal to install it:"),
                              terminal.shown([cmd]))
                 return
             except OSError as e:
-                error_dialog(self, _("The terminal couldn't be started"), str(e.strerror or e), terminal.shown([cmd]))
+                error_dialog(self.parent, _("The terminal couldn't be started"), str(e.strerror or e),
+                             terminal.shown([cmd]))
                 return
-            self.win.snackbar.show(_("Opened your terminal to install {name}").format(name=s.name))
-            self.close()
+            if hasattr(main, "snackbar"):
+                main.snackbar.show(_("Opened your terminal to install {name}").format(name=s.name))
+            self.done()
 
-        Dialog(self, _("Install {name}?").format(name=s.name),
+        Dialog(self.parent, _("Install {name}?").format(name=s.name),
                _("{what} Your terminal opens running this command, which installs it from Flathub. Flatpak shows "
                  "what it downloads and asks before installing. Afterwards it's listed here with an Open button.")
                .format(what=s.what),
