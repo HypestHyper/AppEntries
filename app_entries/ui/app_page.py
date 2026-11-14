@@ -3,6 +3,8 @@ launcher, whether it's hidden, what it runs, which files open with it,
 whether it starts at login, helper apps, the changes made to it, and
 uninstalling. Nothing changes until a button or switch is used, and every
 change can be undone."""
+import os
+import shlex
 from gettext import gettext as _
 
 from gi.repository import Gio, GLib, Gtk, Pango
@@ -24,6 +26,19 @@ def _tile(name, size, small=False):
         t.add_css_class("small-tile")
     t.append(img)
     return t
+
+
+def _program_file(a):
+    """The file a launcher you made runs (an AppImage, or a program in an
+    app folder), if it's a file in your home folder."""
+    try:
+        words = shlex.split(a.exec)
+    except ValueError:
+        words = a.exec.split()
+    for w in words:
+        if os.path.isabs(w) and os.path.isfile(w) and w.startswith(os.path.expanduser("~") + os.sep):
+            return w
+    return ""
 
 
 def _when(ts):
@@ -167,6 +182,8 @@ class AppPage(Gtk.Box):
         src = a.source or ("system" if a.system else "user")
         origin = (_("Made with App Entries") if a.created else
                   _("From {source}").format(source=label_for_source(src)))
+        if a.created and src == "appimage":
+            origin = _("An AppImage you added")
         name = label(a.name, ("title", "page-title"), wrap=True)
         name.set_width_chars(6)      # wraps rather than holding the page wide
         ident = label(a.id, ("mono", "faint"), ellipsize=True)
@@ -568,6 +585,15 @@ class AppPage(Gtk.Box):
             row.append(button(text, glyph, style, small=True, tooltip=tip,
                               cb=lambda *_: self.win._on_card_action(self.item, action)))
 
+        program = _program_file(a)
+        if a.created and program and program.lower().endswith(".appimage"):
+            add(_("Use a newer file…"), "upload", "newer-file",
+                tip=_("Point this launcher at a newer download of the AppImage. The old file goes to the Trash, "
+                      "and Undo brings it back."))
+        if a.created and program:
+            add(_("Show the app's file"), "folder_open", "show-program",
+                tip=_("Opens the folder that holds {file} in your file manager.").format(
+                    file=os.path.basename(program)))
         kind = uninstall.kind_of(a)
         if kind:
             add(_("Uninstall {name}…").format(name=a.name), "delete_forever", "uninstall", "danger",

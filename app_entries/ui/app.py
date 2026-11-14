@@ -16,6 +16,7 @@ from .. import (
     health,
     history,
     icon_lookup,
+    importers,
     launcher_refresh,
     launchers,
     overrides,
@@ -72,6 +73,7 @@ AutostartPage = _lazy(".autostart_page", "AutostartPage")
 DefaultsPage = _lazy(".defaults_page", "DefaultsPage")
 SettingsPage = _lazy(".settings_page", "SettingsPage")
 UpdatesPage = _lazy(".updates", "UpdatesPage")
+from . import importing  # noqa: E402
 from .app_page import AppPage  # noqa: E402 - shown with the list, so not lazy
 from .status_bar import StatusBar  # noqa: E402
 
@@ -230,15 +232,15 @@ class MainWindow(Gtk.ApplicationWindow):
         self.select_btn.set_tooltip_text(_("Pick several apps, then hide, show or restore them together"))
         self.select_btn.update_property([Gtk.AccessibleProperty.LABEL], [_("Select several apps")])
         self.select_btn.connect("toggled", lambda b: self.set_selecting(b.get_active()))
-        # On Launchers, making a new one takes the place of Shown/Hidden/All.
-        self.new_btns = hbox(8,
-                             button(_("New launcher"), "add", "filled", small=True,
-                                    tooltip=_("Make a launcher for a program, a script or commands (Ctrl+N)"),
-                                    cb=lambda *_: self.new_launcher()),
-                             button(_("New web app"), "language", "tonal", small=True,
-                                    tooltip=_("Open a site in its own window, without the address bar "
-                                              "(Ctrl+Shift+N)"),
-                                    cb=lambda *_: self.new_web_app()))
+        # On Launchers, making a new one takes the place of Shown/Hidden/All:
+        # a launcher, a web app, or one for something you downloaded.
+        self.new_btns = Gtk.MenuButton(valign=Gtk.Align.CENTER)
+        self.new_btns.set_child(hbox(6, icon("add"), label(_("New")), icon("expand_more")))
+        self.new_btns.add_css_class("filled")
+        self.new_btns.add_css_class("new-menu")
+        self.new_btns.set_tooltip_text(_("Make a launcher for a program, a site, an AppImage, an app folder, a "
+                                         "Windows program and more"))
+        self.new_btns.set_create_popup_func(lambda b: importing.menu(self, b))
         self.new_btns.set_valign(Gtk.Align.CENTER)
         # The list's own controls, at its top: search, then which apps and how.
         row = hbox(8, self.view_seg, self.new_btns)
@@ -322,7 +324,19 @@ class MainWindow(Gtk.ApplicationWindow):
         overlay.set_child(self.stack)
         overlay.add_overlay(self.snackbar)
         overlay.add_overlay(self._build_selection_bar())
-        self.list_area = vbox(10, self.toolbar, self.hint, overlay)
+        # On Launchers: AppImages, app folders and Windows programs found in
+        # the usual places that have no launcher yet. Only looked at.
+        self.unlaunched = []
+        self.found_btn = Gtk.MenuButton(halign=Gtk.Align.START)
+        self.found_label = Gtk.Label()
+        self.found_btn.set_child(hbox(8, icon("auto_awesome"), self.found_label, icon("expand_more")))
+        self.found_btn.add_css_class("tonal")
+        self.found_btn.add_css_class("found-line")
+        self.found_btn.set_tooltip_text(_("Found in ~/Applications, ~/AppImages, ~/Games and ~/Downloads. Nothing is "
+                                          "changed until you add one."))
+        self.found_btn.set_create_popup_func(self._found_popup)
+        self.found_btn.set_visible(False)
+        self.list_area = vbox(10, self.toolbar, self.hint, self.found_btn, overlay)
         self._current = None        # the AppItem whose page is open
         self.drafts = {}            # app ID -> (fields, picked icon): unsaved edits kept while elsewhere
         self._narrow = False
@@ -567,6 +581,7 @@ class MainWindow(Gtk.ApplicationWindow):
                 return
             self.rail.set_active(v)
             self.status.update()
+            self._update_found()
             if self._current is not None and (v == "mine") != self._current.app.created:
                 self.close_app()
             self._filter_action.set_state(GLib.Variant("s", v))
@@ -1052,6 +1067,11 @@ class MainWindow(Gtk.ApplicationWindow):
             if not self._loaded:
                 timing.mark("  list being filled")
             self._keeping_place(lambda: self.apps.sync(apps))
+            # Something just made (an imported app): show its page.
+            made = getattr(self, "open_after_scan", None)
+            if made and made in self.apps.by_id and not self.app_page.form_open():
+                self.open_after_scan = None
+                self._open_app(self.apps.by_id[made])
             if self._current is not None:
                 now = self.apps.by_id.get(self._current.app.id)
                 if now is None:
@@ -1099,12 +1119,18 @@ class MainWindow(Gtk.ApplicationWindow):
         def scan():
             apps, report = health.scan_and_check(owners=False)
             new = seen.update(apps)
-            return apps, report, new
+            try:
+                found = importers.find_without_launcher(apps)
+            except OSError:
+                found = []
+            return apps, report, new, found
 
         def marked(result):
             if isinstance(result, Exception):
                 return scanned(result)
-            apps, report, new = result
+            apps, report, new, found = result
+            self.unlaunched = found
+            self._update_found()
             self._new_ids |= new
             for a in apps:
                 a.new = a.id in self._new_ids
@@ -1157,6 +1183,39 @@ class MainWindow(Gtk.ApplicationWindow):
             if it is not None:
                 it.emit("changed")
         self._update_split()
+
+    def _update_found(self):
+        n = len(self.unlaunched)
+        set_text(self.found_label, ngettext("{n} app without a launcher", "{n} apps without a launcher", n)
+                 .format(n=n))
+        self.found_btn.set_visible(bool(n) and self.settings.get("filter") == "mine")
+
+    def _found_popup(self, menu_button):
+        names = {"appimage": _("AppImage"), "exe": _("Windows program"), "folder": _("App folder")}
+        glyphs = {"appimage": "deployed_code", "exe": "computer", "folder": "folder_open"}
+        box = vbox(4)
+        box.set_size_request(340, -1)
+        for path, kind in self.unlaunched:
+            text = vbox(0, label(importers._pretty(path), ("body",), ellipsize=True),
+                        label(names.get(kind, kind) + " · " + path.replace(os.path.expanduser("~"), "~"),
+                              ("small", "dim"), ellipsize=True))
+            text.set_hexpand(True)
+
+            def add(*_a, path=path, kind=kind):
+                menu_button.popdown()
+                GLib.idle_add(lambda: (importing.start(self, kind, path), False)[1])
+            row = hbox(10, icon(glyphs.get(kind, "apps")), text,
+                       button(_("Add"), style="tonal", small=True, cb=add))
+            row.set_margin_start(8)
+            row.set_margin_end(8)
+            box.append(row)
+        pop = Gtk.Popover()
+        pop.add_css_class("options")
+        scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, propagate_natural_height=True,
+                                    max_content_height=420)
+        scroll.set_child(box)
+        pop.set_child(scroll)
+        menu_button.set_popover(pop)
 
     def open_draft(self, item):
         """A status chip for unsaved edits: back to that app's page."""
@@ -1518,6 +1577,15 @@ class MainWindow(Gtk.ApplicationWindow):
         profile = ""
         if spec is not None and spec.web_profile:
             profile = webapps.own_data(spec.args)
+        # A launcher for an app folder in ~/Applications can take the folder with it.
+        from .app_page import _program_file
+        app_folder = ""
+        program = _program_file(app) if app.created else ""
+        apps_dir = os.path.realpath(importers.applications_dir())
+        if program and os.path.realpath(program).startswith(apps_dir + os.sep):
+            rel = os.path.relpath(os.path.realpath(program), apps_dir)
+            if os.sep in rel:
+                app_folder = os.path.join(apps_dir, rel.split(os.sep)[0])
 
         def on_response(resp):
             if resp not in ("delete", "delete-data"):
@@ -1528,6 +1596,12 @@ class MainWindow(Gtk.ApplicationWindow):
                 return changes
 
             def after(result):
+                if resp == "delete-data" and app_folder:
+                    try:
+                        return [trash.move(app_folder)]
+                    except trash.TrashError as e:
+                        error_dialog(self, _("Couldn't move the folder to the Trash"), str(e), app_folder)
+                        return []
                 if resp == "delete-data" and profile:
                     try:
                         return [trash.move(profile)]
@@ -1552,6 +1626,11 @@ class MainWindow(Gtk.ApplicationWindow):
                             "with data moves only that folder to the Trash.")
             buttons = [("cancel", _("Cancel"), "tonal"), ("delete", _("Keep data"), "tonal"),
                        ("delete-data", _("Delete with data"), "danger")]
+        if app_folder:
+            body += " " + _("Its app folder, {folder}, can go to the Trash too, so it's gone from your computer. "
+                            "Undo brings it back.").format(folder=app_folder)
+            buttons = [("cancel", _("Cancel"), "tonal"), ("delete", _("Keep the folder"), "tonal"),
+                       ("delete-data", _("Delete with its folder"), "danger")]
         Dialog(self, _("Delete {name}?").format(name=app.name), body, buttons,
                on_response, icon_name="delete", icon_class="error-text", detail=app.override_path).present()
 
@@ -1692,6 +1771,17 @@ class MainWindow(Gtk.ApplicationWindow):
             self._ensure_page("defaults")
             self.settings.set("filter", "defaults")
             self.defaults.show_app(app.id)
+        elif action == "show-program":
+            from .app_page import _program_file
+            path = _program_file(app)
+            if path:
+                try:
+                    Gio.AppInfo.launch_default_for_uri(Gio.File.new_for_path(os.path.dirname(path)).get_uri(),
+                                                       None)
+                except GLib.Error as e:
+                    error_dialog(self, _("Couldn't open the folder"), e.message, os.path.dirname(path))
+        elif action == "newer-file":
+            self._newer_file(app)
         elif action == "launch":
             self._launch(app)
         elif action == "open-folder":
@@ -1700,6 +1790,51 @@ class MainWindow(Gtk.ApplicationWindow):
                 Gio.AppInfo.launch_default_for_uri(Gio.File.new_for_path(os.path.dirname(path)).get_uri(), None)
             except GLib.Error as e:
                 error_dialog(self, _("Couldn't open the folder"), e.message, os.path.dirname(path))
+
+    def _newer_file(self, app):
+        """Point an AppImage launcher at a newer download; the old file goes
+        to the Trash (Undo brings it back) and the new one moves next to it."""
+        from .app_page import _program_file
+        old = _program_file(app)
+        if not old:
+            return
+
+        def chosen(new):
+            if os.path.realpath(new) == os.path.realpath(old):
+                return
+            text = overrides.read_text(app.override_path) or ""
+            spec = launchers.read_spec(text)
+            if spec is None:
+                error_dialog(self, _("Couldn't change {name}").format(name=app.name),
+                             _("Its launcher was changed by hand, so App Entries can't safely edit it."),
+                             app.override_path)
+                return
+            target = os.path.join(os.path.dirname(old), os.path.basename(new))
+            moved = []
+
+            def plan():
+                import shutil as sh
+                if os.path.realpath(os.path.dirname(new)) != os.path.realpath(os.path.dirname(old)):
+                    if os.path.exists(target):
+                        raise overrides.OverrideError(target, "a file with that name is already there")
+                    sh.move(new, target)
+                    moved.append(target)
+                importers.make_executable(target)
+                spec.program = spec.program.replace(old, target)
+                return launchers.plan_save(spec, app.id)[1]
+
+            def after(_changes):
+                try:
+                    return [trash.move(old)]
+                except trash.TrashError:
+                    return []
+
+            self._run_changes(plan, lambda n: _("{name} now uses {file}").format(
+                name=app.name, file=os.path.basename(target)), _("Couldn't change {name}").format(name=app.name),
+                after=after)
+
+        choose_file(self, _("Choose the newer AppImage"), chosen, patterns=["*.AppImage", "*.appimage"],
+                    filter_name=_("AppImages"), start=os.path.expanduser("~/Downloads"))
 
     def _launch(self, app):
         """Start the app the way a launcher would, from the entry launchers use."""

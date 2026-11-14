@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- New ▾ in Launchers adds what you downloaded, each filled in for you in the launcher form:
+  - **AppImage**: its name, description, icon, categories, file types and window class are read from inside it with unsquashfs, without running it. (Without unsquashfs, it asks before using the AppImage's own extractor.) It can move to ~/Applications and is made executable.
+  - **App folder** from a tar.gz or zip: the program and icon are found inside, or taken from an entry that came with it.
+  - **Windows program**: run with Wine or Proton (umu), with its own icon when icoutils is installed.
+  - **Java app**, a **.desktop file** that came with an app (paths next to it are fixed so it keeps working), and **Distrobox** apps, added with distrobox-export.
+- Launchers lists AppImages, app folders and Windows programs in ~/Applications, ~/AppImages, ~/Games and ~/Downloads that have no launcher yet, each with Add. It only looks.
+- An AppImage's page has Use a newer file…, which points the launcher at a newer download and moves the old one to the Trash (Undo brings it back), and Show the app's file. Deleting a launcher for an app folder in ~/Applications can take the folder to the Trash too.
+- Launchers keep their window class and file types when edited.
+
 ## 1.1.2 — 2026-11-14
 
 - No more dot on the Filter button. When the list is narrowed to a source, customised or new apps, the button is tinted and each filter shows under it as a chip that lifts it. Leaving out apps that aren't in menus is a preference, so it isn't marked.

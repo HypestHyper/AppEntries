@@ -41,11 +41,14 @@ class LauncherWindow(Gtk.Box):
     Advanced mode; on_close() when it's done or cancelled."""
 
     def __init__(self, parent, on_save, on_save_raw, did=None, text=None, glyph_color="#888888", highlight=None,
-                 on_close=lambda: None):
+                 on_close=lambda: None, start=None, title=None, extra=None):
+        """`start` is a filled-in Spec for a new launcher (from an import),
+        `extra` a widget shown under the preview."""
         editing_existing = did is not None
+        self._extra = extra
         super().__init__(orientation=Gtk.Orientation.VERTICAL, vexpand=True, hexpand=True)
         self.add_css_class("embedded-form")
-        self._title_text = _("Edit launcher") if editing_existing else _("New launcher")
+        self._title_text = title or (_("Edit launcher") if editing_existing else _("New launcher"))
         self._on_close = on_close
         self.did = did
         self._on_save = on_save
@@ -54,8 +57,8 @@ class LauncherWindow(Gtk.Box):
         self._highlight = highlight
         self._original_text = text
         spec = launchers.read_spec(text) if text else None
-        self.spec = spec or launchers.Spec()
-        if not text:
+        self.spec = start or spec or launchers.Spec()
+        if not text and start is None:
             self.spec.icon = symbols.IconChoice("terminal", "outlined", "rounded", "#2e9e7e")
         if self.spec.kind == "program" and self.spec.args.strip():
             # One field now: older launchers' arguments join the program.
@@ -116,6 +119,8 @@ class LauncherWindow(Gtk.Box):
         prev.add_css_class("card-inner")
         prev.set_margin_top(12)
         page.append(prev)
+        if self._extra is not None:
+            page.append(self._extra)
 
         # What it runs
         page.append(section(_("What it runs")))
@@ -366,6 +371,9 @@ class LauncherWindow(Gtk.Box):
             icon=self.spec.icon,
             icon_value="" if kind == "symbol" else self.icon_value.get_text().strip(),
             hidden=self.hidden.get_active(),
+            # Not in the form, so kept as they were.
+            wm_class=self.spec.wm_class,
+            mime_types=list(self.spec.mime_types) if self.files.get_active() else [],
         )
 
     def _raw_text(self):

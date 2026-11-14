@@ -165,5 +165,10 @@ def test_finds_apps_without_a_launcher(tmp_path):
     (tmp_path / "x").mkdir()
     shutil.move(str(make_appimage(tmp_path / "x", name="A.AppImage")), apps_dir / "A.AppImage")
     shutil.copy(apps_dir / "A.AppImage", apps_dir / "B.AppImage")
+    game = tmp_path / "Games" / "Solitaire"
+    game.mkdir(parents=True)
+    (game / "solitaire.exe").write_bytes(b"MZ")
+    (game / "unins000.exe").write_bytes(b"MZ")
     known = [de.App(id="b.desktop", name="B", exec=f"{apps_dir / 'B.AppImage'} %U")]
-    assert im.find_without_launcher(known, env) == [(str(apps_dir / "A.AppImage"), "appimage")]
+    assert im.find_without_launcher(known, env) == [(str(apps_dir / "A.AppImage"), "appimage"),
+                                                    (str(game / "solitaire.exe"), "exe")]

@@ -579,6 +579,15 @@ def find_without_launcher(apps, env=None) -> list[tuple[str, str]]:
             kind = detect(p)
             file_app = kind in ("appimage", "exe") and os.path.isfile(p)
             folder_app = kind == "folder" and rel != "Downloads" and bool(_executables(p, 1))
+            if kind == "folder" and rel != "Downloads" and not folder_app:
+                # A Windows program kept in its own folder: the one .exe in it.
+                try:
+                    exes = [x for x in os.listdir(p) if x.lower().endswith(".exe")
+                            and not _HELPERS.search(x) and "unins" not in x.lower()]
+                except OSError:
+                    exes = []
+                if len(exes) == 1:
+                    p, kind, file_app = os.path.join(p, exes[0]), "exe", True
             if not (file_app or folder_app):
                 continue
             if not has_entry(p, apps):

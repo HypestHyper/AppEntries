@@ -160,6 +160,10 @@ button.status-chip:hover {{ background: {SURFACE_CONTAINER_HIGHEST}; }}
 button.status-chip.warn {{ background: {TERTIARY_CONTAINER}; color: {ON_TERTIARY_CONTAINER}; }}
 button.status-chip.error {{ background: {ERROR_CONTAINER}; color: {ON_ERROR_CONTAINER}; }}
 button.status-chip.accent {{ background: {PRIMARY_CONTAINER}; color: {ON_PRIMARY_CONTAINER}; }}
+menubutton.new-menu > button {{ background-color: {PRIMARY}; color: {ON_PRIMARY}; min-height: 36px;
+  padding: 0 12px 0 14px; border-radius: 18px; }}
+menubutton.found-line > button {{ min-height: 34px; padding: 0 12px; border-radius: 17px;
+  background-color: {PRIMARY_CONTAINER}; color: {ON_PRIMARY_CONTAINER}; }}
 .draft-dot {{ background: {PRIMARY}; border-radius: 4px; min-width: 8px; min-height: 8px; }}
 expander.entry-expander > title {{ padding: 6px 4px; }}
 /* Navigation rail */
