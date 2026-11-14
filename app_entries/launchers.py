@@ -90,6 +90,7 @@ class Spec:
     web_browser: str = ""        # the browser's ID in webapps.BROWSERS
     web_profile: bool = False    # its own sign-ins and data, apart from the browser's
     wm_class: str = ""           # StartupWMClass: lets docks match the window to the launcher
+    mime_types: list[str] = field(default_factory=list)   # file types it opens (MimeType)
 
 
 def split_program(program: str, args: str = "") -> tuple[str, str]:
@@ -380,6 +381,8 @@ def build_entry(spec: Spec, did: str, env=None) -> str:
     kw = join_list(spec.keywords)
     if kw:
         lines.append("Keywords=" + kw)
+    if spec.mime_types:
+        lines.append("MimeType=" + join_list(spec.mime_types))
     lines += [CREATED_KEY + "=true"]
     if spec.kind == "commands":
         lines += ["X-AppEntries-Kind=commands", "X-AppEntries-Shell=" + spec.shell,
@@ -437,6 +440,7 @@ def read_spec(text: str) -> Optional[Spec]:
         web_browser=de.unescape(d.get("X-AppEntries-WebApp-Browser", "")),
         web_profile=de.is_true(d.get("X-AppEntries-WebApp-Profile")),
         wm_class=de.unescape(d.get("StartupWMClass", "")),
+        mime_types=split_list(d.get("MimeType", "")),
     )
     try:
         did = (os.path.splitext(os.path.basename(scripts[0]))[0] + ".desktop") if scripts else ""
