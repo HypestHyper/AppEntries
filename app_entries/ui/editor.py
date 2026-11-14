@@ -1,9 +1,9 @@
-"""The Edit window: change an app's launcher entry, every field explained.
-Nothing is written until Save is pressed."""
+"""The edit form for an app's launcher entry, shown on its page. Nothing is
+written until Save is pressed."""
 import os
 from gettext import gettext as _
 
-from gi.repository import Gdk, Gtk
+from gi.repository import Gtk
 
 from .. import editing, health, launchers, overrides, symbols
 from .app_card import gicon_for
@@ -14,9 +14,11 @@ from .widgets import Group, Toggle, WrapBox, button, card, hbox, label, section,
 
 
 def _field(title, explanation, widget):
-    """A titled field with a sentence under it saying what it does."""
-    box = vbox(6, label(title, ("body", "option-title")), widget,
-               label(explanation, ("small", "dim"), wrap=True, chars=60))
+    """A titled field, with a sentence under it where what it does isn't
+    obvious from its title."""
+    box = vbox(6, label(title, ("body", "option-title")), widget)
+    if explanation:
+        box.append(label(explanation, ("small", "dim"), wrap=True, chars=60))
     return box
 
 
@@ -32,7 +34,10 @@ def _switch_field(title, explanation, active, cb):
     sw.update_property([Gtk.AccessibleProperty.LABEL], [title])
     head = hbox(12, label(title, ("body", "option-title")), sw)
     head.get_first_child().set_hexpand(True)
-    return vbox(4, head, label(explanation, ("small", "dim"), wrap=True, chars=60)), sw
+    box = vbox(4, head)
+    if explanation:
+        box.append(label(explanation, ("small", "dim"), wrap=True, chars=60))
+    return box, sw
 
 
 def _chips(options, selected):
@@ -46,54 +51,31 @@ def _chips(options, selected):
     return box, buttons
 
 
-class EditWindow(Gtk.Window):
-    def __init__(self, parent, app, on_save, glyph_color="#888888", highlight=None):
-        super().__init__(transient_for=parent, modal=True,
-                         title=_("Edit {name}").format(name=app.name))
-        self.add_css_class("prefs")
-        self.set_default_size(620, 720)
+class EditForm(Gtk.Box):
+    """The fields for one app. `on_change(form)` runs after every change;
+    `start` is a draft to begin from instead of the saved entry. The Hidden
+    switch is on the page, so the form keeps whatever the app is."""
+
+    def __init__(self, app, on_change, glyph_color="#888888", highlight=None, start=None):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.app = app
-        self._on_save = on_save
+        self._on_change = on_change
         self._glyph = glyph_color
         self.original = editing.read_fields(app)
-        f = self.original
-
-        hb = Gtk.HeaderBar()
-        hb.set_show_title_buttons(False)
-        hb.set_title_widget(label(_("Edit {name}").format(name=app.name), ("title",), ellipsize=True))
-        cancel = button(_("Cancel"), style="tonal", small=True, cb=lambda *_: self.close())
-        self.save = button(_("Save"), style="filled", small=True, cb=self._save)
-        for b in (cancel, self.save):
-            b.set_valign(Gtk.Align.CENTER)
-        hb.pack_start(cancel)
-        hb.pack_end(self.save)
-        self.set_titlebar(hb)
-
-        page = vbox(0)
-        page.set_margin_start(20)
-        page.set_margin_end(20)
-        page.set_margin_bottom(24)
-
-        # Shown in launchers
-        c = card()
-        c.set_margin_top(12)
-        box, self.hidden = _switch_field(
-            _("Hidden from launcher"),
-            _("Keeps it out of launcher menus. It still opens files and links as before. Saved with your other "
-              "changes when you press Save."), f.hidden, lambda _v: self._changed())
-        c.append(box)
-        page.append(c)
+        f = start or self.original
+        page = self
+        self._ready = False
 
         # Name and description
         page.append(section(_("Name and description"), _("What launchers show for this app.")))
         c = card()
         self.name = _entry(f.name)
-        c.append(_field(_("Name"), _("The app's name in launchers and menus."), self.name))
+        c.append(_field(_("Name"), "", self.name))
         self.generic = _entry(f.generic_name, _("For example: Web Browser"))
         c.append(_field(_("Kind of app"), _("A short description of what kind of app it is. Some launchers show it "
                                             "under the name or search it."), self.generic))
         self.comment = _entry(f.comment)
-        c.append(_field(_("Description"), _("A longer description, often shown as a tooltip."), self.comment))
+        c.append(_field(_("Description"), "", self.comment))
         self.keywords = _entry(", ".join(f.keywords), _("For example: browser, internet, web"))
         c.append(_field(_("Search words"), _("Extra words that find this app when you search a launcher, "
                                              "separated by commas."), self.keywords))
@@ -114,10 +96,8 @@ class EditWindow(Gtk.Window):
                           tooltip=_("A Material Symbol or one of your own icons, with your tile, colour and border"))
         for b in (choose, material):
             b.set_valign(Gtk.Align.CENTER)
-        c.append(_field(_("Icon"), _("An icon name from your icon theme, like firefox, or an image file. File… "
-                                     "copies the image to your icon library first, so it stays safe. Styled… draws "
-                                     "a Material Symbol or one of your icons with a tile, colour and border, saved "
-                                     "when you press Save."),
+        c.append(_field(_("Icon"), _("An icon name from your icon theme, like firefox, or an image file. Styled… "
+                                     "draws a symbol or one of your icons on a tile, saved when you press Save."),
                         hbox(12, tile, self.icon, material, choose)))
         self.picked = None
         page.append(c)
@@ -138,9 +118,7 @@ class EditWindow(Gtk.Window):
         self.env.set_size_request(-1, 64)
         c.append(_field(_("Environment variables"), _("Settings passed to this app only, one per line, like "
                                                       "GDK_SCALE=2 or GTK_THEME=Adwaita:dark."), self.env))
-        box, self.terminal = _switch_field(
-            _("Run in a terminal"), _("Opens a terminal window and runs the command in it. For command-line "
-                                      "programs."), f.terminal, lambda _v: self._changed())
+        box, self.terminal = _switch_field(_("Run in a terminal"), "", f.terminal, lambda _v: self._changed())
         c.append(box)
         box, self.gpu = _switch_field(
             _("Use the dedicated graphics card"),
@@ -158,8 +136,7 @@ class EditWindow(Gtk.Window):
         page.append(section(_("Where it appears")))
         c = card()
         cats, self.cat_buttons = _chips([(k, _(n)) for k, n in editing.MAIN_CATEGORIES], f.categories)
-        c.append(_field(_("Menu folders"), _("The folders it's listed in, for launchers that sort apps into "
-                                             "folders. Apps can be in more than one."), cats))
+        c.append(_field(_("Menu folders"), _("For launchers that sort apps into folders."), cats))
         self.show_in = Group([("all", _("Every desktop")), ("only", _("Only these")),
                               ("except", _("All except these"))], f.show_in, lambda _v: self._changed())
         known = [k for k, _n in editing.DESKTOPS]
@@ -186,31 +163,28 @@ class EditWindow(Gtk.Window):
                 self.action_switches.append((a, sw))
             page.append(c)
 
-        # The file itself
-        page.append(section(_("The entry file"), _("Launchers read this file. It updates as you make changes; "
-                                                    "highlighted lines are what Save changes.")))
-        self.code = EntryView(_("Each line is a key and its value. Everything above is a friendlier way to "
-                                "change these lines."))
+        # The file itself, folded away: the fields above are the friendly way.
+        self.code = EntryView(_("Each line is a key and its value. The fields above are a friendlier way to "
+                                "change these lines; highlighted lines are what Save changes."))
         if highlight is not None:
             self.code.set_colors(highlight)
         c = card()
         c.append(self.code)
-        page.append(c)
-        self._current_text = editing.preview(app, f)
+        file_box = Gtk.Expander(label=_("The entry file launchers read"))
+        file_box.add_css_class("entry-expander")
+        file_box.set_child(c)
+        file_box.set_margin_top(18)
+        page.append(file_box)
+        self._current_text = editing.preview(app, self.original)
 
         self.problems = label("", ("small", "error-text"), wrap=True, chars=60)
         self.problems.set_margin_top(12)
         page.append(self.problems)
         where = app.override_path or os.path.join("~/.local/share/applications", app.id)
-        page.append(label(_("Saving writes your own copy of this entry to {path}. Restore original in the card's "
-                            "menu puts the system version back.").format(path=where) if app.system and
-                          not app.override_path else
+        page.append(label(_("Saving writes your own copy of this entry to {path}. Restore original puts the "
+                            "system version back.").format(path=where) if app.system and not app.override_path else
                           _("Saving changes {path}. You can undo it right after.").format(path=where),
                           ("small", "faint"), wrap=True, chars=60))
-
-        scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
-        scroll.set_child(page)
-        self.set_child(scroll)
 
         for e in (self.name, self.generic, self.comment, self.keywords, self.icon, self.command, self.wm_class):
             e.connect("changed", lambda *_: self._changed())
@@ -218,20 +192,8 @@ class EditWindow(Gtk.Window):
         for b in list(self.cat_buttons.values()) + list(self.desk_buttons.values()):
             b.connect("toggled", lambda *_: self._changed())
 
-        keys = Gtk.EventControllerKey()
-        keys.connect("key-pressed", self._on_key)
-        self.add_controller(keys)
+        self._ready = True
         self._changed()
-
-    def _on_key(self, _c, keyval, _code, state):
-        if keyval == Gdk.KEY_Escape:
-            self.close()
-            return True
-        if keyval in (Gdk.KEY_s, Gdk.KEY_S) and state & Gdk.ModifierType.CONTROL_MASK:
-            if self.save.get_sensitive():
-                self._save()
-            return True
-        return False
 
     def fields(self):
         buf = self.env.get_buffer()
@@ -252,7 +214,7 @@ class EditWindow(Gtk.Window):
             show_in=self.show_in.active() or "all",
             desktops=[k for k, b in self.desk_buttons.items() if b.get_active()],
             actions=actions,
-            hidden=self.hidden.get_active(),
+            hidden=self.app.hidden,
         )
 
     def _changed(self):
@@ -260,7 +222,6 @@ class EditWindow(Gtk.Window):
         problems = editing.validate(f)
         self.problems.set_label(" ".join(_(p) for p in problems))
         self.problems.set_visible(bool(problems))
-        self.save.set_sensitive(not problems)
         self.code.show(editing.preview(self.app, f), self._current_text)
         if self.picked is not None and f.icon == self._picked_path():
             self.preview.set_from_paintable(preview_texture(self.picked, 48))
@@ -273,6 +234,15 @@ class EditWindow(Gtk.Window):
             self.command_warning.set_visible(True)
         else:
             self.command_warning.set_visible(False)
+        if self._ready:
+            self._on_change(self)
+
+    def is_valid(self):
+        return not editing.validate(self.fields())
+
+    def dirty(self):
+        """Whether anything differs from the saved entry."""
+        return self.picked is not None or _comparable(self.fields()) != _comparable(self.original)
 
     def _picked_path(self):
         return launchers.icon_path(launchers.PREFIX + "icon-" + self.app.id)
@@ -292,18 +262,26 @@ class EditWindow(Gtk.Window):
             except overrides.OverrideError:
                 previous = None
         start = self.picked or previous or symbols.IconChoice("apps", "outlined", "rounded", "#2e9e7e")
-        IconPicker(self, start, picked, self._glyph).present()
+        IconPicker(self.get_root(), start, picked, self._glyph).present()
 
     def _choose_icon(self, *_args):
         current = self.icon.get_text()
-        choose_icon_file(self, self.icon.set_text, start=os.path.dirname(current) if os.path.isabs(current) else None)
+        choose_icon_file(self.get_root(), self.icon.set_text,
+                         start=os.path.dirname(current) if os.path.isabs(current) else None)
 
-    def _save(self, *_):
+    def result(self):
+        """(fields, picked icon or None) to save, or None if a field is wrong."""
         fields = self.fields()
         if editing.validate(fields):
-            return
-        if self.picked is not None and fields.icon == self._picked_path():
-            self._on_save(self.app, fields, self.picked)
-        else:
-            self._on_save(self.app, fields, None)
-        self.close()
+            return None
+        picked = self.picked if self.picked is not None and fields.icon == self._picked_path() else None
+        return fields, picked
+
+
+def _comparable(f):
+    """Fields with what the form tidies (spaces, empty lines) tidied."""
+    from dataclasses import replace
+    return replace(f, name=f.name.strip(), generic_name=f.generic_name.strip(), comment=f.comment.strip(),
+                   command=f.command.strip(), icon=f.icon.strip(), wm_class=f.wm_class.strip(),
+                   keywords=[k.strip() for k in f.keywords if k.strip()], env=[e.strip() for e in f.env if e.strip()],
+                   categories=sorted(f.categories), desktops=sorted(f.desktops))

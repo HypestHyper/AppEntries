@@ -48,19 +48,39 @@ class AppPage(Gtk.Box):
         self._handler = 0
         self._gen = 0
         self._narrow = False
+        self._quiet = False
 
         self.back = button(_("Apps"), "chevron_left", "text", small=True, tooltip=_("Back to the list (Esc)"),
                            cb=lambda *_: win.close_app())
         self.back.set_halign(Gtk.Align.START)
         self.back.set_visible(False)
         self.page = vbox(0)
-        self.page.set_margin_bottom(32)
+        self.page.set_margin_bottom(96)   # room for the save bar
         self.page.set_margin_start(4)
         self.page.set_margin_end(12)
         self.scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
         self.scroll.set_child(self.page)
+        self.form = None            # the edit form, kept while it has unsaved changes
+        self._was_dirty = False
+        # Save or discard: shown only once something has changed.
+        self.bar_text = label("", ("body",), ellipsize=True)
+        self.bar_text.set_hexpand(True)
+        self.bar_save = button(_("Save"), style="filled", small=True, tooltip=_("Save your changes (Ctrl+S)"),
+                               cb=lambda *_: self.save())
+        discard = button(_("Discard"), style="text", small=True, tooltip=_("Forget these changes"),
+                         cb=lambda *_: self.discard())
+        bar = hbox(10, self.bar_text, discard, self.bar_save)
+        bar.add_css_class("save-bar")
+        self.savebar = Gtk.Revealer(child=bar, transition_type=Gtk.RevealerTransitionType.SLIDE_UP,
+                                    valign=Gtk.Align.END, reveal_child=False)
+        self.savebar.set_margin_start(16)
+        self.savebar.set_margin_end(28)
+        self.savebar.set_margin_bottom(16)
+        overlay = Gtk.Overlay(vexpand=True)
+        overlay.set_child(self.scroll)
+        overlay.add_overlay(self.savebar)
         self.append(self.back)
-        self.append(self.scroll)
+        self.append(overlay)
         self._empty()
 
     # -- showing ------------------------------------------------------------
@@ -70,14 +90,19 @@ class AppPage(Gtk.Box):
         self.back.set_visible(narrow)
 
     def show(self, item):
-        """Show this AppItem, or nothing (None)."""
+        """Show this AppItem, or nothing (None). Unsaved edits to the one
+        shown before are kept as a draft."""
+        if self.form is not None and (item is None or item.app.id != self.form.app.id):
+            self._keep_draft()
+            self.form = None
+            self.savebar.set_reveal_child(False)
         if self.item is not None and self._handler:
             self.item.disconnect(self._handler)
         self.item, self._handler = item, 0
         if item is None:
             self._empty()
             return
-        self._handler = item.connect("changed", lambda *_: self._build(keep_scroll=True))
+        self._handler = item.connect("changed", lambda *_: None if self._quiet else self._build(keep_scroll=True))
         self.back.set_label(_("Launchers") if self.win.settings.get("filter") == "mine" else _("Apps"))
         self._build()
 
@@ -103,7 +128,10 @@ class AppPage(Gtk.Box):
         self.page.append(self._head(a))
         for w in self._notes(a):
             self.page.append(w)
-        self.page.append(self._details(a))
+        if a.created:
+            self.page.append(self._details(a))
+        else:
+            self._add_form(a)
         self._file_types(a)
         self._login(a)
         self._helpers(a)
@@ -134,7 +162,10 @@ class AppPage(Gtk.Box):
             run.set_valign(Gtk.Align.CENTER)
             top.append(run)
         box.append(top)
-        box.append(self._preview(a))
+        self.head_name = name
+        self.preview_holder = vbox(0)
+        self.preview_holder.append(self._preview(a))
+        box.append(self.preview_holder)
 
         is_self = a.id == SELF_ID and not a.hidden
         sw = Toggle(a.hidden, lambda v: self.win._on_toggle(self.item, v))
@@ -149,12 +180,15 @@ class AppPage(Gtk.Box):
         box.append(row)
         return box
 
-    def _preview(self, a):
-        """The app among its neighbours, as a launcher lists them (by name)."""
+    def _preview(self, a, name=None, desc=None, icon_name=None, gicon=None):
+        """The app among its neighbours, as a launcher lists them (by name).
+        `name`, `desc` and the icon (a name, or `gicon`, a picture of a
+        styled icon) are what the edit form says now."""
         listed = sorted((i.app for i in self.win.apps.items()
                          if not i.app.hidden and not i.app.no_display and i.app.id != a.id),
                         key=lambda x: x.name.casefold())
-        key = a.name.casefold()
+        own_name = name if name is not None else a.name
+        key = own_name.casefold()
         at = next((n for n, x in enumerate(listed) if x.name.casefold() > key), len(listed))
         before = listed[at - 1] if at > 0 else None
         after = listed[at] if at < len(listed) else None
@@ -165,10 +199,18 @@ class AppPage(Gtk.Box):
         for x, me in ((before, False), (a, True), (after, False)):
             if x is None:
                 continue
-            desc = x.generic_name or x.comment
-            r = hbox(12, _tile(x.icon, 28, small=True),
-                     vbox(0, label(x.name, ("body", "app-name"), ellipsize=True),
-                          label(desc, ("small", "dim"), ellipsize=True)))
+            text = (desc if me and desc is not None else x.generic_name or x.comment)
+            if me and gicon is not None:
+                img = Gtk.Image(pixel_size=28)
+                img.set_from_paintable(gicon)
+                t = Gtk.Box(valign=Gtk.Align.CENTER)
+                t.add_css_class("icon-tile")
+                t.add_css_class("small-tile")
+                t.append(img)
+            else:
+                t = _tile(icon_name if me and icon_name else x.icon, 28, small=True)
+            r = hbox(12, t, vbox(0, label(own_name if me else x.name, ("body", "app-name"), ellipsize=True),
+                                 label(text, ("small", "dim"), ellipsize=True)))
             r.get_last_child().set_hexpand(True)
             r.add_css_class("preview-row")
             if me and not a.hidden:
@@ -244,6 +286,113 @@ class AppPage(Gtk.Box):
                              "the version its package installed back."), ("small", "dim"), wrap=True, chars=50))
         box.append(c)
         return box
+
+    # -- editing ------------------------------------------------------------
+
+    def _add_form(self, a):
+        from .editor import EditForm
+        if self.form is not None and self.form.app.id == a.id and self.form.dirty():
+            form = self.form            # keep what's being typed through a rescan
+            form.unparent()
+        else:
+            draft = self.win.drafts.get(a.id)
+            try:
+                form = EditForm(a, self._form_changed, self.win.style.palette["ON_SURFACE"], self.win._highlight(),
+                                start=draft[0] if draft else None)
+            except Exception as e:  # noqa: BLE001 - an unreadable entry shouldn't break the page
+                self.page.append(label(_("Its entry file couldn't be read: {reason}").format(reason=e),
+                                       ("small", "error-text"), wrap=True))
+                return
+            if draft and draft[1] is not None:
+                form.picked = draft[1]
+            self.form = form
+            self._was_dirty = False
+        self.page.append(form)
+        self._form_changed(form)
+
+    def _form_changed(self, form):
+        if form is not self.form or self.item is None:
+            return
+        dirty = form.dirty()
+        f = form.fields()
+        # The preview shows the edits as they're made.
+        if hasattr(self, "preview_holder") and self.preview_holder.get_parent() is not None:
+            from .icon_picker import preview_texture
+            gicon = None
+            if form.picked is not None and f.icon == form._picked_path():
+                gicon = preview_texture(form.picked, 28)
+            clear(self.preview_holder)
+            self.preview_holder.append(self._preview(self.item.app, f.name.strip() or self.item.app.name,
+                                                     f.comment, f.icon, gicon))
+            self.head_name.set_label(f.name.strip() or self.item.app.name)
+        self.bar_text.set_label(_("Unsaved changes to {name}").format(name=self.item.app.name))
+        self.bar_save.set_sensitive(form.is_valid())
+        self.savebar.set_reveal_child(dirty)
+        if dirty != self._was_dirty:
+            self._was_dirty = dirty
+            self._keep_draft()
+
+    def _keep_draft(self):
+        """Note unsaved edits so they survive opening another app, and mark
+        the app in the list."""
+        form = self.form
+        if form is None:
+            return
+        did = form.app.id
+        had = did in self.win.drafts
+        if form.dirty():
+            self.win.drafts[did] = (form.fields(), form.picked)
+        else:
+            self.win.drafts.pop(did, None)
+        if had != (did in self.win.drafts):
+            item = self.win.apps.by_id.get(did)
+            if item is not None:
+                self._quiet = True
+                item.emit("changed")
+                self._quiet = False
+
+    def focus_form(self):
+        if self.form is not None:
+            self.form.name.grab_focus()
+            ok, rect = self.form.compute_bounds(self.page)
+            if ok:
+                self.scroll.get_vadjustment().set_value(max(0, rect.origin.y - 12))
+
+    def save(self):
+        """Ctrl+S or the Save button. Returns whether there was anything to save."""
+        form = self.form
+        if form is None or not form.dirty():
+            return False
+        result = form.result()
+        if result is None:
+            return True
+        fields, picked = result
+        app = form.app
+
+        def saved():
+            self.win.drafts.pop(app.id, None)
+            if self.form is form:
+                self.form = None
+                self._was_dirty = False
+                self.savebar.set_reveal_child(False)
+                self._build(keep_scroll=True)
+
+        self.win._save_edit(app, fields, picked, after=saved)
+        return True
+
+    def discard(self):
+        form = self.form
+        if form is None:
+            return
+        self.win.drafts.pop(form.app.id, None)
+        self.form = None
+        self._was_dirty = False
+        self.savebar.set_reveal_child(False)
+        item = self.win.apps.by_id.get(form.app.id)
+        if item is not None:
+            item.emit("changed")
+        else:
+            self._build(keep_scroll=True)
 
     def _file_types(self, a):
         if not a.mime_types:

@@ -61,7 +61,6 @@ def _lazy(module, name):
     return make
 
 
-EditWindow = _lazy(".editor", "EditWindow")
 HelpersWindow = _lazy(".helpers_window", "HelpersWindow")
 HistoryWindow = _lazy(".history_window", "HistoryWindow")
 UninstallWindow = _lazy(".uninstall_window", "UninstallWindow")
@@ -124,6 +123,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self._apply_window_controls()
         settings.connect(self._on_setting)
         self.connect("close-request", self._save_size)
+        self.connect("close-request", self._close_with_drafts)
 
         self.rescan()
         self._watch_dirs()
@@ -320,6 +320,7 @@ class MainWindow(Gtk.ApplicationWindow):
         overlay.add_overlay(self._build_selection_bar())
         self.list_area = overlay
         self._current = None        # the AppItem whose page is open
+        self.drafts = {}            # app ID -> (fields, picked icon): unsaved edits kept while elsewhere
         self._narrow = False
         self.app_page = AppPage(self)
         self.split = hbox(16, overlay, self.app_page)
@@ -356,7 +357,8 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def _setup_card(self, _f, list_item):
         list_item.set_child(AppRow(self._on_toggle, self._on_card_action, lambda: self._selecting,
-                                   lambda: self._current.app.id if self._current is not None else None))
+                                   lambda: self._current.app.id if self._current is not None else None,
+                                   lambda did: did in self.drafts))
 
     def _focused_row(self):
         w = self.grid.get_focus_child()
@@ -569,6 +571,25 @@ class MainWindow(Gtk.ApplicationWindow):
         elif key == "size":
             self._compact = None
             self._apply_size(self.get_width())
+
+    def _close_with_drafts(self, *_a):
+        """Unsaved edits aren't lost without asking."""
+        if not self.drafts or getattr(self, "_closing", False):
+            return False
+        names = [self.apps.by_id[d].app.name for d in self.drafts if d in self.apps.by_id] or [_("an app")]
+
+        def on_response(resp):
+            if resp == "discard":
+                self._closing = True
+                self.close()
+
+        Dialog(self, ngettext("Close without saving your changes to {names}?",
+                              "Close without saving your changes to {names}?", len(names))
+               .format(names=", ".join(names)),
+               _("Your changes haven't been saved. Go back to save them, or close and lose them."),
+               [("cancel", _("Go back"), "tonal"), ("discard", _("Close without saving"), "danger")],
+               on_response, icon_name="warning", icon_class="warn-text").present()
+        return True
 
     def _save_size(self, *_):
         self.settings.set("maximized", self.is_maximized())
@@ -1315,7 +1336,7 @@ class MainWindow(Gtk.ApplicationWindow):
                                            "Your edits apply again to {n} apps", n).format(n=n),
                               _("Couldn't bring the edits back"))
 
-    def _save_edit(self, app, fields, picked=None):
+    def _save_edit(self, app, fields, picked=None, after=None):
         def plan():
             changes = []
             if picked is not None:
@@ -1328,7 +1349,8 @@ class MainWindow(Gtk.ApplicationWindow):
 
         self._run_changes(plan,
                           lambda n: _("Saved your changes to {name}").format(name=fields.name.strip()),
-                          _("Couldn't save your changes"))
+                          _("Couldn't save your changes"),
+                          after=(lambda _r: (after(), [])[1]) if after is not None else None)
 
     def new_launcher(self):
         LauncherWindow(self, self._save_launcher, self._save_raw,
@@ -1529,12 +1551,10 @@ class MainWindow(Gtk.ApplicationWindow):
             else:
                 self._save_launcher(None, spec, False)
         elif action == "edit":
-            try:
-                EditWindow(self, app, self._save_edit, self.style.palette["ON_SURFACE"],
-                           self._highlight()).present()
-            except overrides.OverrideError as e:
-                error_dialog(self, _("Couldn't open {name}").format(name=app.name),
-                             _("The entry file couldn't be read: {reason}.").format(reason=e.reason), e.path)
+            # Editing is on the app's page.
+            if self._current is not item:
+                self._open_app(item)
+            self.app_page.focus_form()
         elif action.startswith("find:"):
             self.settings.set("filter", "all")
             self.search_entry.set_text(action[len("find:"):])
@@ -1633,6 +1653,8 @@ class MainWindow(Gtk.ApplicationWindow):
         if keyval == Gdk.KEY_Escape and self._selecting:
             self.set_selecting(False)
             return True
+        if keyval in (Gdk.KEY_s, Gdk.KEY_S) and _state & Gdk.ModifierType.CONTROL_MASK:
+            return self.app_page.save()
         if keyval == Gdk.KEY_Escape and self._current is not None and self._narrow:
             self.close_app()
             return True

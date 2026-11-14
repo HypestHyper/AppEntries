@@ -16,11 +16,13 @@ class AppRow(Gtk.Box):
     `on_action(item, name)` runs a menu action. While `selecting()` is
     true, a click selects the row instead."""
 
-    def __init__(self, on_toggle, on_action, selecting=lambda: False, current=lambda: None):
+    def __init__(self, on_toggle, on_action, selecting=lambda: False, current=lambda: None,
+                 has_draft=lambda _did: False):
         super().__init__(spacing=12)
         self.add_css_class("app-row")
         self.add_css_class("no-copy")   # a click opens the app, it doesn't select text
         self._current = current
+        self._has_draft = has_draft
         self._on_toggle = on_toggle
         self._on_action = on_action
         self._selecting = selecting
@@ -71,7 +73,11 @@ class AppRow(Gtk.Box):
         self.eye.set_child(self.eye_glyph)
         self.eye.connect("clicked", self._eye_clicked)
 
-        for w in (self.check, tile, text, self.eye):
+        # A dot for unsaved changes on its page.
+        self.draft_dot = Gtk.Box(valign=Gtk.Align.CENTER, visible=False)
+        self.draft_dot.add_css_class("draft-dot")
+        self.draft_dot.set_tooltip_text(_("Unsaved changes"))
+        for w in (self.check, tile, text, self.draft_dot, self.eye):
             self.append(w)
 
         motion = Gtk.EventControllerMotion()
@@ -128,6 +134,7 @@ class AppRow(Gtk.Box):
             self.missing_badge.set_tooltip_text(
                 _("{program} wasn't found, so this entry can't start anything.").format(program=a.missing))
         self.gone_badge.set_visible(a.uninstalled)
+        self.draft_dot.set_visible(self._has_draft(a.id))
         self.nodisplay_badge.set_visible(a.no_display and not a.hidden)
         if a.hidden:
             self.add_css_class("is-hidden")
