@@ -729,7 +729,14 @@ class MainWindow(Gtk.ApplicationWindow):
             if now:
                 self._update_split()
             else:
-                GLib.idle_add(lambda: (self._update_split(), False)[1])
+                # Changed while GTK was laying the window out, so it's done
+                # just after, and the window is laid out again at once
+                # (otherwise the old sizes stay until the pointer moves).
+                def relayout():
+                    self._update_split()
+                    self.get_child().queue_resize()
+                    return False
+                GLib.idle_add(relayout)
 
 
     def _apply_size(self, width):
@@ -750,7 +757,11 @@ class MainWindow(Gtk.ApplicationWindow):
             want = "compact" if compact else "default"
         f = SIZES[want]
         if f != self.style.factor:
-            GLib.idle_add(lambda: (self.style.set_size(f), False)[1])
+            def resize():
+                self.style.set_size(f)
+                self.get_child().queue_resize()
+                return False
+            GLib.idle_add(resize)
 
     # --------------------------------------------------------------- filters
 

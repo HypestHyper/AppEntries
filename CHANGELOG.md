@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- After resizing the window, everything takes its new size at once. Before, some parts (like Back to Apps) kept their old size until the pointer passed over them, then jumped.
+
 ## 1.2.3 — 2026-11-14
 
 - The pencil on an app's icon sits in the middle of its circle.
