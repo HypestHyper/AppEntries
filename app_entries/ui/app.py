@@ -184,6 +184,9 @@ class MainWindow(Gtk.ApplicationWindow):
             self.settings.set("filter", "all")
         elif f in ("settings", "updates", "autostart", "defaults"):
             self.settings.set("filter", "all")  # start on the apps, not where you left off
+        # The list keeps showing its own tab (Apps or Launchers) while another
+        # tab is open, so it doesn't change under the crossfade on the way out.
+        self._list_tab = "mine" if self.settings.get("filter") == "mine" else "all"
         self.rail = NavRail(RAIL, RAIL_BOTTOM, self.settings.get("filter"))
         self.rail.connect("changed", lambda _r, key: self.settings.set("filter", key))
         self.rail.connect("reselected", lambda _r, _key: self._narrow and self._current is not None
@@ -613,7 +616,9 @@ class MainWindow(Gtk.ApplicationWindow):
             if self._current is not None and (v == "mine") != self._current.app.created:
                 self.close_app()
             self._filter_action.set_state(GLib.Variant("s", v))
-            self.filter.changed(Gtk.FilterChange.DIFFERENT)
+            if v in ("all", "mine") and v != self._list_tab:
+                self._list_tab = v
+                self.filter.changed(Gtk.FilterChange.DIFFERENT)
             self._update_tab_controls()
             self._update_state()
         elif key == "sort":
@@ -791,7 +796,7 @@ class MainWindow(Gtk.ApplicationWindow):
             return False
         if "new" in self._only and "only" not in lift and not a.new:
             return False
-        if self.settings.get("filter") == "mine":
+        if self._list_tab == "mine":
             return a.created
         view = self.settings.get("view")
         return "hidden" in lift or view == "all" or a.hidden == (view == "hidden")
