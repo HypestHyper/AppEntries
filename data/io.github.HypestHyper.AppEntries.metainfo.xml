@@ -61,6 +61,13 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.2.2" date="2026-11-14">
+      <description>
+        <ul>
+          <li>Change an app's icon by clicking it at the top of its page</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.1" date="2026-11-14">
       <description>
         <ul>

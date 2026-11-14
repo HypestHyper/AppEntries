@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.2 — 2026-11-14
 
 - The big icon at the top of an app's page has a pencil and opens the icon picker when clicked, for any app or launcher. The new icon shows at once, ready to save.
 
