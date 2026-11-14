@@ -24,7 +24,7 @@ SHAPES = ("none", "circle", "rounded", "squircle")
 GRADIENTS = ("flat", "soft", "strong")
 # Fields that make up an icon's look, as opposed to which symbol it shows.
 STYLE_FIELDS = ("style", "shape", "color", "recolor", "border", "border_width", "border_inner", "border_color",
-                "gradient", "scale")
+                "gradient", "scale", "symbol_color")
 _CHOICE_MARK = "app-entries-choice "
 
 
@@ -64,13 +64,16 @@ class IconChoice:
     color: str = "#2e9e7e"
     source: str = "material"      # material, or file: an SVG or PNG in the icon library
     path: str = ""                # the library file (source "file")
-    recolor: bool = True          # file: paint it in `color` instead of its own colours
+    recolor: bool = True          # older icons: False meant the file's own colours (now symbol_color "original")
     border: bool = False
     border_width: int = 3         # 1 to 10
     border_inner: bool = False    # also outline the symbol's inner edges (holes)
     border_color: str = "auto"    # auto, white, black or a #hex colour
     gradient: str = "soft"        # tile shading: flat, soft or strong
     scale: int = 60               # the symbol's size on a tile, in % of the tile (40 to 80)
+    # auto (white or dark against the tile; the main colour without one),
+    # white, black, a #hex colour, or original (a file's own colours).
+    symbol_color: str = "auto"
 
     def key(self) -> str:
         return "|".join(str(getattr(self, f.name)) for f in fields(self))
@@ -124,6 +127,30 @@ def outer_edges(d: str) -> str:
     """Only the outer outlines of a glyph, without holes or what's in them."""
     from .icon_library import outer_only
     return outer_only(d)
+
+
+def symbol_paint(choice: IconChoice, tiled: bool) -> Optional[str]:
+    """The symbol's colour, or None to keep a file's own colours."""
+    sc = choice.symbol_color
+    if sc == "original" or (sc == "auto" and choice.source == "file" and not choice.recolor):
+        return None if choice.source == "file" else symbol_paint(IconChoice(**{
+            **dataclasses_asdict(choice), "symbol_color": "auto"}), tiled)
+    color = choice.color if choice.color.startswith("#") else "#" + choice.color
+    if sc.startswith("#"):
+        return sc
+    if sc == "white":
+        return "#ffffff"
+    if sc == "black":
+        return "#1b1b1f"
+    return glyph_color(color) if tiled else color
+
+
+def swapped(choice: IconChoice) -> IconChoice:
+    """Tile and symbol colours the other way round."""
+    out = IconChoice(**dataclasses_asdict(choice))
+    ink = symbol_paint(choice, True) or glyph_color(choice.color)
+    out.color, out.symbol_color = ink, (choice.color if choice.color.startswith("#") else "#" + choice.color)
+    return out
 
 
 def border_paint(choice: IconChoice, base: str) -> str:
@@ -220,32 +247,33 @@ def render(choice: IconChoice, size: int = 128, title: str = "") -> str:
             top, bottom = _tile_colors(color, choice.gradient)
             parts.append(_gradient(top, bottom))
             parts.append(_tile_shape(choice.shape, bw) + ' fill="url(#bg)"/>')
-        ink = glyph_color(color)
+        ink = symbol_paint(choice, True)
         # The symbol sits centred, at `scale` % of the tile.
         k = max(40, min(80, int(choice.scale))) / 100
         parts.append(f'<g transform="translate({480 * (1 - k):g} {480 * (1 - k):g}) scale({k:g})">')
         inner_bw = bw / k if (bw and choice.border_inner) else 0
-        parts.append(_symbol(choice, ink, inner_bw, border_paint(choice, ink), outer_only=False))
+        parts.append(_symbol(choice, ink, inner_bw, border_paint(choice, ink or color), outer_only=False))
         parts.append("</g>")
     else:
         if bw:
             # Keep the border inside the canvas.
             scale = (GRID - 2 * bw) / GRID
             parts.append(f'<g transform="translate({bw:g} {bw:g}) scale({scale:g})">')
-        parts.append(_symbol(choice, color, bw / (((GRID - 2 * bw) / GRID) or 1) if bw else 0,
-                             border_paint(choice, color), outer_only=not choice.border_inner))
+        ink = symbol_paint(choice, False)
+        parts.append(_symbol(choice, ink, bw / (((GRID - 2 * bw) / GRID) or 1) if bw else 0,
+                             border_paint(choice, ink or color), outer_only=not choice.border_inner))
         if bw:
             parts.append("</g>")
     parts.append("</svg>\n")
     return "".join(parts)
 
 
-def _symbol(choice: IconChoice, ink: str, bw: float, border: str, outer_only: bool) -> str:
-    """The symbol on the 960 grid in `ink`, with a `bw`-wide border behind it."""
+def _symbol(choice: IconChoice, ink: Optional[str], bw: float, border: str, outer_only: bool) -> str:
+    """The symbol on the 960 grid in `ink` (None: a file's own colours), with
+    a `bw`-wide border behind it."""
     if choice.source == "file":
         from . import icon_library
-        return icon_library.symbol_svg(choice.path, ink if choice.recolor else None, bw, border,
-                                       inner=not outer_only)
+        return icon_library.symbol_svg(choice.path, ink, bw, border, inner=not outer_only)
     paths = icons().get(choice.name)
     if paths is None:
         raise KeyError(choice.name)

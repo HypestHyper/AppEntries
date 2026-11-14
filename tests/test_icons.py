@@ -199,3 +199,46 @@ def test_outer_edges_by_enclosure_not_winding():
     assert len(lib.subpaths(symbols.outer_edges(d))) == 1
     ring = "M0 0h20v20h-20z M5 5h10v10h-10z M8 8h4v4h-4z"   # outline, hole, island
     assert lib.outer_only(ring) == "M0 0L20 0L20 20L0 20Z"
+
+
+def _fill_of_symbol(svg):
+    """The fill of the symbol's last path (the glyph itself)."""
+    paths = [el for el in ET.fromstring(svg).iter() if el.tag.split("}")[-1] == "path" and el.get("fill")]
+    return paths[-1].get("fill")
+
+
+def test_symbol_colour_choices():
+    light_tile = {"shape": "rounded", "color": "#f5f5f5"}
+    assert _fill_of_symbol(symbols.render(symbols.IconChoice("home", **light_tile))) == "#1b1b1f"   # auto
+    white = symbols.render(symbols.IconChoice("home", symbol_color="white", **light_tile))
+    assert _fill_of_symbol(white) == "#ffffff"
+    assert _fill_of_symbol(symbols.render(symbols.IconChoice("home", shape="rounded", color="#101010",
+                                                             symbol_color="black"))) == "#1b1b1f"
+    assert _fill_of_symbol(symbols.render(symbols.IconChoice("home", symbol_color="#f2c14e",
+                                                             **light_tile))) == "#f2c14e"
+    # Without a tile, Auto is the main colour, as before; a chosen one wins.
+    assert _fill_of_symbol(symbols.render(symbols.IconChoice("home", shape="none", color="#e5484d"))) == "#e5484d"
+    assert _fill_of_symbol(symbols.render(symbols.IconChoice("home", shape="none", color="#e5484d",
+                                                             symbol_color="#123456"))) == "#123456"
+    # Original only means something for a file; a Material symbol falls back to Auto.
+    assert _fill_of_symbol(symbols.render(symbols.IconChoice("home", symbol_color="original",
+                                                             **light_tile))) == "#1b1b1f"
+
+
+def test_original_colours_old_and_new(tmp_path):
+    multi = write(tmp_path, "m.svg", MULTI)
+    old = symbols.render(symbols.IconChoice(source="file", path=multi, shape="rounded", recolor=False))
+    new = symbols.render(symbols.IconChoice(source="file", path=multi, shape="rounded", symbol_color="original"))
+    assert "#ff5f6d" in old and "#ff5f6d" in new
+    white = symbols.render(symbols.IconChoice(source="file", path=multi, shape="rounded", symbol_color="white"))
+    shapes = [el for el in ET.fromstring(white).iter() if el.tag.split("}")[-1] in ("rect", "circle")]
+    assert shapes and all(el.get("fill") == "#ffffff" for el in shapes[-2:])
+
+
+def test_swap_tile_and_symbol():
+    c = symbols.IconChoice("home", shape="rounded", color="#2e9e7e")
+    s = symbols.swapped(c)
+    assert (s.color, s.symbol_color) == ("#ffffff", "#2e9e7e")
+    assert symbols.swapped(s).color == "#2e9e7e"
+    assert "symbol_color" in symbols.STYLE_FIELDS
+    assert symbols.choice_from_svg(symbols.render(s)).symbol_color == "#2e9e7e"

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Styled icons have a **Symbol colour**: Auto (white or dark, whichever stands out on the tile, as before), White, Black, any colour you pick, or, for your own multi-colour SVGs, Original. It replaces the Recolour switch, and icons you made before look the same.
+- The main colour is called Tile colour when there's a tile, and **Swap with the tile** flips the tile and symbol colours. Style icons for several apps at once carries the symbol colour too.
+
 ## 1.2.0 — 2026-11-14
 
 - New ▾ in Launchers adds what you downloaded, each filled in for you in the launcher form:

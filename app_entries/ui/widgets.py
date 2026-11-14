@@ -539,6 +539,12 @@ class Group(Gtk.Box):
                 return k
         return None
 
+    def set_shown(self, key, shown):
+        """Show or hide one option."""
+        b = self._buttons.get(key)
+        if b is not None:
+            b.set_visible(shown)
+
 
 class Chip(Gtk.Box):
     """Status pill with a leading icon."""

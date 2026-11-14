@@ -11,7 +11,7 @@ from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk
 from .. import icon_library, symbols, theme
 from .color_picker import ColorDot, ColorPicker
 from .dialogs import Dialog, choose_file, error_dialog, run_bg
-from .widgets import Group, Toggle, WrapBox, button, hbox, label, scroll_passes_through, vbox
+from .widgets import Group, Toggle, WrapBox, button, hbox, label, scroll_passes_through, set_text, vbox
 
 _textures: "OrderedDict[tuple, Gdk.Texture]" = OrderedDict()
 
@@ -140,9 +140,26 @@ class IconPicker(Gtk.Window):
                                  lambda v: self._set(style=v))
         self.style_box = self._option(_("Style"), _("Outlined icons are drawn with lines; filled ones are solid."),
                                       self.style_group)
-        self.recolor = Toggle(self.choice.recolor, lambda v: self._set(recolor=v))
-        self.recolor_box = self._switch(_("Recolour"), _("Paint the whole icon in the colour below. Turn off to "
-                                                         "keep the file's own colours."), self.recolor)
+        # The symbol's own colour. Older icons with Recolour off keep their colours.
+        if self.choice.source == "file" and not self.choice.recolor and self.choice.symbol_color == "auto":
+            self.choice.symbol_color = "original"
+        self.choice.recolor = True
+        sc = self.choice.symbol_color
+        self.symbol_group = Group([("auto", _("Auto")), ("white", _("White")), ("black", _("Black")),
+                                   ("custom", _("Custom")), ("original", _("Original"))],
+                                  "custom" if sc.startswith("#") else sc, self._on_symbol_kind)
+        self.symbol_custom = ColorPicker(sc if sc.startswith("#") else "#f2c14e", _("Symbol colour"))
+        self.symbol_custom.connect("changed", lambda _p, hexv: self.symbol_group.active() == "custom"
+                                   and self._set(symbol_color=hexv))
+        self.symbol_reveal = Gtk.Revealer(child=self.symbol_custom, reveal_child=sc.startswith("#"),
+                                          transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
+        self.swap = button(_("Swap with the tile"), "sync", "tonal", small=True,
+                           tooltip=_("Swap the tile and symbol colours, for a light or dark version"),
+                           cb=lambda *_a: self._swap())
+        self.swap.set_halign(Gtk.Align.START)
+        self.symbol_note = label("", ("small", "dim"), wrap=True, chars=34)
+        self.recolor_box = vbox(6, label(_("Symbol colour"), ("body", "option-title")), self.symbol_group,
+                                self.symbol_reveal, self.swap, self.symbol_note)
         self.shape_group = Group([("none", _("None")), ("circle", _("Circle")), ("rounded", _("Square")),
                                   ("squircle", _("Soft"))], self.choice.shape, lambda v: self._set(shape=v))
         self.gradient_group = Group([("flat", _("Flat")), ("soft", _("Soft")), ("strong", _("Strong"))],
@@ -223,13 +240,12 @@ class IconPicker(Gtk.Window):
                                           "Custom lets you pick any colour, and the preview follows as you drag."),
                                         ("small", "dim"), wrap=True, chars=34))
 
-        right = vbox(16, self.style_box, self.recolor_box,
+        right = vbox(16, self.style_box,
                      self._option(_("Background"), _("A coloured tile behind the icon, like most app icons. "
                                                      "None draws just the symbol in the colour."), self.shape_group),
                      self.tile_detail,
-                     self._option(_("Colour"), _("The tile colour, or the symbol's colour when there's no tile. "
-                                                 "The symbol turns dark or white to stay readable."),
-                                  vbox(8, swatches, custom)),
+                     self._colour_box(vbox(8, swatches, custom)),
+                     self.recolor_box,
                      vbox(10, self._switch(_("Border"), _("A thin outline around the icon, so it stays visible "
                                                           "when its colour is close to your panel's."), self.border),
                           self.border_detail))
@@ -325,6 +341,24 @@ class IconPicker(Gtk.Window):
         sw.update_property([Gtk.AccessibleProperty.LABEL], [title])
         return vbox(4, head, label(explanation, ("small", "dim"), wrap=True, chars=34))
 
+    def _colour_box(self, widget):
+        """The main colour: the tile's, or the symbol's when there's no tile."""
+        self.colour_title = label(_("Tile colour"), ("body", "option-title"))
+        self.colour_note = label("", ("small", "dim"), wrap=True, chars=34)
+        return vbox(6, self.colour_title, widget, self.colour_note)
+
+    def _on_symbol_kind(self, kind):
+        self.symbol_reveal.set_reveal_child(kind == "custom")
+        self._set(symbol_color=self.symbol_custom.hex() if kind == "custom" else kind)
+
+    def _swap(self):
+        s = symbols.swapped(self.choice)
+        self.symbol_custom.set_hex(s.symbol_color, emit=False)
+        self.symbol_group.set_active("custom")
+        self.symbol_reveal.set_reveal_child(True)
+        self.color_picker.set_hex(s.color, emit=False)
+        self._set(color=s.color, symbol_color=s.symbol_color)
+
     def _on_border_kind(self, kind):
         self.border_reveal.set_reveal_child(kind == "custom")
         self._set(border_color=self.border_custom.hex() if kind == "custom" else kind)
@@ -357,7 +391,20 @@ class IconPicker(Gtk.Window):
         c = self.choice
         is_file = c.source == "file"
         self.style_box.set_visible(not is_file)
-        self.recolor_box.set_visible(is_file)
+        tiled = c.shape != "none"
+        self.symbol_group.set_shown("original", is_file)
+        if c.symbol_color == "original" and not is_file:
+            c.symbol_color = "auto"
+            self.symbol_group.set_active("auto")
+        self.swap.set_visible(tiled and c.symbol_color != "original")
+        set_text(self.colour_title, _("Tile colour") if tiled else _("Colour"))
+        set_text(self.colour_note, _("The tile behind the symbol.") if tiled else
+                 _("The symbol's colour, when Symbol colour is Auto."))
+        notes = {"auto": _("White or dark, whichever stands out on the tile.") if tiled else
+                 _("The colour above."),
+                 "original": _("The file's own colours, as drawn.")}
+        own = _("Your colour, whatever the tile.") if tiled else _("Your colour, instead of the one above.")
+        set_text(self.symbol_note, own if c.symbol_color.startswith("#") else notes.get(c.symbol_color, ""))
         self.border_detail.set_visible(c.border)
         self.tile_detail.set_visible(c.shape != "none")
         self.remove.set_sensitive(bool(c.path) and is_file)
@@ -453,8 +500,12 @@ class IconPicker(Gtk.Window):
             if path != self.choice.path:
                 # Recolouring a full-colour icon turns it into a flat shape,
                 # so it starts on only for one-colour icons.
-                self.choice.recolor = icon_library.is_one_colour(path)
-                self.recolor.set_value(self.choice.recolor)
+                if not icon_library.is_one_colour(path):
+                    self.choice.symbol_color = "original"
+                    self.symbol_group.set_active("original")
+                elif self.choice.symbol_color == "original":
+                    self.choice.symbol_color = "auto"
+                    self.symbol_group.set_active("auto")
             self.choice.path = path
             self.choice.source = "file"
             self._update()
