@@ -3,6 +3,8 @@
 ## Unreleased
 
 - Going from Launchers to another tab no longer flashes the Apps list on the way out.
+- Window buttons press evenly into a rounded square, instead of collapsing towards one corner.
+- Window buttons follow your desktop's button layout as it changes: which buttons, and on which side. With no buttons in the layout, none are shown. Maximise turns into Restore while the window is maximised.
 
 ## 1.2.4 — 2026-11-14
 

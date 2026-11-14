@@ -120,3 +120,20 @@ def test_stylesheet_loads_in_gtk_without_errors():
         style.load_css(provider, style.stylesheet(theme.palette(theme.DEFAULT_SEED, dark, ""), 0.9))
         style.load_css(provider, style.STILL + style.REDUCE_MOTION)
     assert errors == []
+
+
+def test_buttons_morph_from_their_real_corner_radius():
+    """Buttons animate their corners when pressed. From a radius far bigger
+    than the button (999px) GTK shrinks the corners unevenly, so the shape
+    slides into one corner; a % radius must stay the same when pressed."""
+    css = re.sub(r"/\*.*?\*/", "", _filled(), flags=re.DOTALL)
+    rules = {}
+    for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
+        m = re.search(r"border-radius:\s*([^;]+);", body)
+        for one in sel.split(","):
+            one = one.strip()
+            if m and "button" in one:
+                rules[one] = m.group(1).strip()
+    bad = [s for s, r in rules.items() if "999px" in r]
+    bad += [s for s, r in rules.items() if "%" in r and ":active" not in s and rules.get(s + ":active") != r]
+    assert bad == []

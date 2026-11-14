@@ -73,3 +73,4 @@ settings_backup_restore
 sort
 auto_awesome
 edit
+filter_none

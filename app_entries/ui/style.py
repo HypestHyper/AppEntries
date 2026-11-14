@@ -346,10 +346,11 @@ tooltip label {{ font-family: {FONT}; font-size: 13px; }}
 
 /* Window controls */
 .winctl button {{
-  min-width: 32px; min-height: 32px; padding: 0; border-radius: 999px;
+  min-width: 32px; min-height: 32px; padding: 0; border-radius: 16px;
   background-color: transparent; color: {ON_SURFACE_VARIANT};
 }}
 .winctl button:hover {{ background-color: alpha({ON_SURFACE}, .10); }}
+.winctl button:active {{ border-radius: 10px; background-color: alpha({ON_SURFACE}, .16); }}
 .winctl button.close:hover {{ background-color: {ERROR_HOVER}; color: white; }}
 .winctl .icon {{ font-size: 18px; min-width: 18px; }}
 
@@ -429,6 +430,7 @@ button.palette-chip:checked {{ background-color: {SECONDARY_CONTAINER}; color: {
   box-shadow: inset 0 0 0 2px {PRIMARY}; border-radius: 12px; }}
 button.color-dot {{ padding: 2px; min-width: 0; min-height: 0; background: none; border-radius: 50%; box-shadow: none; }}
 button.color-dot:hover {{ background: alpha({ON_SURFACE}, .08); }}
+button.color-dot:active {{ border-radius: 50%; }}
 .swatch-f4f4f5, .swatch-1b1b1f {{ box-shadow: inset 0 0 0 1px {OUTLINE}; }}
 gridview.icon-grid > child {{ padding: 4px; border-radius: 12px; }}
 gridview.icon-grid > child:hover {{ background: alpha({ON_SURFACE}, .06); }}

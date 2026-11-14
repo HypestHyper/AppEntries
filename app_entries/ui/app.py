@@ -46,6 +46,7 @@ from .widgets import (
     WrapBox,
     button,
     enter,
+    glyph,
     hbox,
     icon,
     label,
@@ -153,9 +154,6 @@ class MainWindow(Gtk.ApplicationWindow):
 
         self.refresh_btn.set_valign(Gtk.Align.CENTER)
 
-        self.winctl = hbox(4)
-        self.winctl.add_css_class("winctl")
-        self.winctl.set_valign(Gtk.Align.CENTER)
         self.history_btn = button(icon_name="history", style="tonal", small=True,
                                   tooltip=_("History: undo any change you made (Ctrl+H)"),
                                   cb=self.show_history)
@@ -683,39 +681,65 @@ class MainWindow(Gtk.ApplicationWindow):
     # -------------------------------------------------------- window buttons
 
     def _apply_window_controls(self):
-        parent = self.winctl.get_parent()
-        if parent is not None:
-            parent.remove(self.winctl)
-        child = self.winctl.get_first_child()
-        while child is not None:
-            nxt = child.get_next_sibling()
-            self.winctl.remove(child)
-            child = nxt
+        """Minimise, maximise and close, drawn by App Entries since its title
+        bar is its own (GTK apps with their own title bar don't get one from
+        the desktop, so there are never two sets). Which buttons, and on
+        which side, follow the desktop's button layout, and change with it;
+        a layout with no buttons, or Show window buttons off, shows none."""
+        settings = Gtk.Settings.get_default()
+        if not getattr(self, "_layout_watch", 0) and settings is not None:
+            self._layout_watch = settings.connect("notify::gtk-decoration-layout",
+                                                  lambda *_: self._apply_window_controls())
+            self.connect("notify::maximized", lambda *_: self._update_maximize())
+        for box in getattr(self, "_winctls", ()):
+            if box.get_parent() is not None:
+                box.get_parent().remove(box)
+        self._winctls, self._max_btn = [], None
         if not self.settings.get("window-controls"):
             return
-        layout = Gtk.Settings.get_default().get_property("gtk-decoration-layout") or ":minimize,maximize,close"
+        layout = settings.get_property("gtk-decoration-layout") if settings is not None else None
+        if layout is None:
+            layout = "menu:minimize,maximize,close"
         left, _sep, right = layout.partition(":")
-        side, names = (self._start, left) if not right and left else (self._end, right)
-        made = 0
-        for name in names.split(","):
-            b = None
-            if name == "minimize":
-                b = button(icon_name="minimize", style="text", small=True, tooltip=_("Minimize"),
-                           cb=lambda *_: self.minimize())
-            elif name == "maximize":
-                b = button(icon_name="crop_square", style="text", small=True, tooltip=_("Maximize"),
-                           cb=lambda *_: self.unmaximize() if self.is_maximized() else self.maximize())
-            elif name == "close":
-                b = button(icon_name="close", style="text close", small=True, tooltip=_("Close"),
-                           cb=lambda *_: self.close())
-            if b is not None:
-                self.winctl.append(b)
-                made += 1
-        if made:
+        for names, side in ((left, self._start), (right, self._end)):
+            box = hbox(4)
+            box.add_css_class("winctl")
+            box.set_valign(Gtk.Align.CENTER)
+            for name in names.split(","):
+                b = self._window_button(name.strip())
+                if b is not None:
+                    box.append(b)
+            if box.get_first_child() is None:
+                continue
             if side is self._end:
-                side.append(self.winctl)
+                side.append(box)
             else:
-                side.prepend(self.winctl)
+                side.prepend(box)
+            self._winctls.append(box)
+        self._update_maximize()
+
+    def _window_button(self, name):
+        if name == "minimize":
+            return button(icon_name="minimize", style="text", small=True, tooltip=_("Minimise"),
+                          cb=lambda *_: self.minimize())
+        if name == "maximize":
+            self._max_btn = button(icon_name="crop_square", style="text", small=True,
+                                   cb=lambda *_: self.unmaximize() if self.is_maximized() else self.maximize())
+            return self._max_btn
+        if name == "close":
+            b = button(icon_name="close", style="text", small=True, tooltip=_("Close"), cb=lambda *_: self.close())
+            b.add_css_class("close")
+            return b
+        return None     # "icon", "menu" and unknown names: nothing to show
+
+    def _update_maximize(self):
+        b = getattr(self, "_max_btn", None)
+        if b is None:
+            return
+        on = self.is_maximized()
+        set_text(b.get_child(), glyph("filter_none" if on else "crop_square"))
+        b.set_tooltip_text(_("Restore") if on else _("Maximise"))
+        b.update_property([Gtk.AccessibleProperty.LABEL], [_("Restore") if on else _("Maximise")])
 
     # ------------------------------------------------------------ responsive
 
