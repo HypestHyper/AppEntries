@@ -73,9 +73,23 @@ class UpdateManager:
                               _("See"), lambda: self.app.activate_action("updates", None), seconds=8)
         if self.settings.get("update-notify"):
             n = Gio.Notification.new(_("{app} {version} is available").format(app=APP_NAME, version=r.version))
-            n.set_body(_("Open App Entries to see what's new and update."))
+            n.set_body(_("Update now, or open App Entries to see what's new."))
             n.set_default_action("app.updates")
+            if self.where.can_update:
+                n.add_button(_("Update"), "app.install-update")
+            n.add_button(_("What's new"), "app.updates")
+            # Normal priority: it goes away after your notification server's
+            # usual time, like any other. (Urgent ones stay until dismissed.)
+            n.set_priority(Gio.NotificationPriority.NORMAL)
             self.app.send_notification("update", n)
+
+    def install_from_notification(self):
+        """The notification's Update button: install, and show the Updates
+        page so the progress and Restart button are in view."""
+        self.app.withdraw_notification("update")
+        self.app.activate_action("updates", None)
+        if self.release and self.where.can_update:
+            self.install()
 
     def install(self):
         if not self.release or self.installing:
@@ -91,6 +105,7 @@ class UpdateManager:
             else:
                 self.installed = release.version
                 self.release = None
+                self.app.withdraw_notification("update")
             self._changed()
 
         run_bg(lambda: updater.install(release, self.where), done)

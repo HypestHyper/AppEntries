@@ -103,6 +103,7 @@ class Application(Gtk.Application):
             ("refresh", lambda *_: self.window and self.window.rescan(), ["<Control>r", "F5"]),
             ("preferences", self._on_preferences, ["<Control>comma"]),
             ("updates", self._on_updates, []),
+            ("install-update", lambda *_: self.updates.install_from_notification(), []),
             ("quit", lambda *_: self.quit(), ["<Control>q"]),
         ):
             act = Gio.SimpleAction.new(name, None)

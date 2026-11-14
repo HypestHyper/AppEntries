@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The update notification has an Update button, which installs it and shows the progress in Updates, and a What's new button. It goes away after your notification server's usual time, as before, and is taken down once the update is installed.
+
 ## 1.1.0 — 2026-11-14
 
 - A new layout. A slim rail on the left goes to Apps, Launchers, Issues, Autostart and Defaults, with Updates and Settings at the bottom.
