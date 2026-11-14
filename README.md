@@ -26,7 +26,7 @@
 </p>
 
 <p align="center">
-  <img alt="App Entries in dark mode: a grid of apps, each with a switch to hide it from launcher menus and a badge showing where it came from" src="docs/screenshots/main.png" width="860">
+  <img alt="App Entries in dark mode: a list of apps beside the selected app's page, which shows how it looks in a launcher, a switch to hide it and its settings" src="docs/screenshots/main.png" width="860">
 </p>
 
 ---
@@ -36,15 +36,16 @@
 ## Features
 
 **Apps**
-- Every installed app in one searchable grid: system packages, Flatpak, Snap, AppImage, Steam and your own launchers. Filter by source; badges show where each app comes from and why it's hidden.
-- Hide or show an app with one switch. Hidden apps still open links and files, and stay in "Open With".
+- Every installed app in one searchable list: system packages, Flatpak, Snap, AppImage, Steam and your own launchers. **Shown**, **Hidden** or **All**, so hundreds of hidden apps stay out of the way; a Filter menu narrows it to one source, customised or new apps.
+- Hide or show an app with the eye on its row, Space, or the switch on its page. Hidden apps still open links and files, and stay in "Open With".
+- **Each app has a page** beside the list: how it looks in your launcher, its name, icon and command (edited right there, with Save and Discard), the file types it opens, whether it starts at login, helper apps, the changes made to it with Undo, and Uninstall. Unsaved edits are kept while you look at other apps.
 - **Select several** to hide, show, restore, restyle or uninstall many apps at once.
 - **Edit** any entry (name, icon, command, environment, folders, desktops, quick actions) with a live view of the file. Editing a system app saves your own copy; *Restore original* puts it back.
-- **Open** any app from its card, hidden ones included. Sort A–Z or newest first; apps that appeared since App Entries last looked are marked New.
+- **Open** any app from its page or right-click menu, hidden ones included. Sort A–Z or newest first; apps that appeared since App Entries last looked are marked New.
 - **Issues** finds leftover files, missing programs and duplicates, and explains each with a button to fix it.<br>
-  <a href="docs/screenshots/issues.png"><img alt="The Issues tab listing an entry whose program isn't installed, with a button to hide it" src="docs/screenshots/issues.png" width="400"></a>
+  <a href="docs/screenshots/issues.png"><img alt="Issues listing an entry whose program isn't installed, with a button to hide it" src="docs/screenshots/issues.png" width="400"></a>
 - Apps you edited and then uninstalled some other way are hidden from menus with your edits kept, and the edits apply again if you reinstall. Both are options in Issues, each done once with Undo.
-- When a tab is empty because of the search, the source or the Hidden and Not in menus switches, it says how many apps they leave out, with a button to lift each.
+- When the list is empty because of the search or the filters, it says how many apps they leave out, with a button to lift each. While searching Shown, it also says when hidden apps match.
 - **Uninstall…** for Flatpak, Snap, AppImage, Steam, Distrobox and system packages (pacman, apt, dnf, zypper, rpm-ostree, xbps, apk, eopkg, Portage and Nix). Before anything runs it shows what goes, which other apps and packages need it or go with it, whether it's a default app or starts at login, and the exact command. Data folders and advanced options (like removing what depends on it) are off unless you turn them on, with warnings. Commands that need a password run in your terminal; packages the system or your desktop needs are never offered. History keeps a Reinstall button.
 - **Helper apps…** shortcuts to the apps that set up what App Entries doesn't, opened on that app where they allow it: Flatseal, Warehouse, Gear Lever, ProtonUp-Qt, Protontricks, BoxBuddy, DistroShelf, GNOME Settings' and KDE's app permissions, your software centre and Steam. Missing ones show what they do and the Flathub command, run in your terminal only if you ask.
 
@@ -61,14 +62,14 @@
 
 **More**
 - **Autostart**: turn login programs on and off, or add your own.
-- **Default apps**: choose which app opens links, email, folders, text, PDFs, pictures, videos, music and archives, for a whole kind or each type on its own. **By app** lists every file type one app opens (File types… on its card) and makes it the default for any of them. Uses the standard `mimeapps.list`, and also updates Xfce's and KDE's own browser settings.<br>
-  <a href="docs/screenshots/default-apps.png"><img alt="The Default apps tab: web browser, email, files, text, PDFs, pictures, videos and music, each with the app that opens them" src="docs/screenshots/default-apps.png" width="400"></a>
+- **Default apps**: choose which app opens links, email, folders, text, PDFs, pictures, videos, music and archives, for a whole kind or each type on its own. **By app** lists every file type one app opens (File types… on its page) and makes it the default for any of them. Uses the standard `mimeapps.list`, and also updates Xfce's and KDE's own browser settings.<br>
+  <a href="docs/screenshots/default-apps.png"><img alt="Default apps: web browser, email, files, text, PDFs, pictures, videos and music, each with the app that opens them" src="docs/screenshots/default-apps.png" width="400"></a>
 - **History** of every change, each with Undo, kept between sessions.
 - **Export / Import** your changes to set up another computer.
 - **Updates** from GitHub releases, installed with one button.
 - A **command line** for scripts, and full keyboard and screen reader support.
 - Light and dark themes and a responsive layout. The accent can follow your desktop's (GNOME and KDE settings, or the colours Noctalia, matugen, wallust and other theme tools write for GTK apps), and palettes like Catppuccin, Gruvbox, Nord, Rosé Pine, Tokyo Night, Everforest and Solarized restyle the whole app.<br>
-  <a href="docs/screenshots/settings.png"><img alt="The Settings tab: accent colours with a colour picker, palettes, light or dark, and size" src="docs/screenshots/settings.png" width="400"></a>
+  <a href="docs/screenshots/settings.png"><img alt="Settings: accent colours with a colour picker, palettes, light or dark, and size" src="docs/screenshots/settings.png" width="400"></a>
 
 Nothing happens by itself: every option is explained, nothing is written until you press a button, and every change can be undone. The one exception is hiding edited apps that were uninstalled (and showing them again on reinstall), which is on by default, shows a message with Undo, and can be turned off in Issues. App Entries never changes system files itself; only a package manager you run from it, in your terminal, does.
 
@@ -82,7 +83,7 @@ cd AppEntries
 
 Needs Python 3.9+, GTK 4.6+ and PyGObject. The installer shows the command for your distribution and asks before installing anything missing (`--yes` to skip the question). Use `sudo ./install.sh --system` for `/usr/local`, or `--prefix DIR`.
 
-Updates come from the **Updates** tab. To remove it, run `./uninstall.sh` (same options). Add `--restore-apps` to show the apps you hid and turn login programs back on, and `--purge` to delete settings.
+Updates come from **Updates**, at the bottom of the side rail. To remove it, run `./uninstall.sh` (same options). Add `--restore-apps` to show the apps you hid and turn login programs back on, and `--purge` to delete settings.
 
 ## How it works
 
@@ -110,9 +111,13 @@ Add `--yes` to skip questions in scripts. See `app-entries --help`.
 | `Ctrl+F`, or start typing | Search |
 | `Alt+1` … `Alt+7` | Go to Apps, Launchers, Issues, Autostart, Defaults, Updates or Settings |
 | `Ctrl+N` / `Ctrl+Shift+N` | New launcher / New web app |
-| `Enter` on a card | Hide or show it |
+| `Enter` or a click on an app | Open its page |
+| `Space` on an app | Hide or show it |
+| `Menu` or `Shift+F10` on an app | Its options |
+| `Ctrl+S` | Save the changes on an app's page |
+| `Esc` | Back to the list (narrow windows), or close History |
 | `Ctrl+Z` | Undo the last change |
-| `Ctrl+H` | History |
+| `Ctrl+H` | History, at the side |
 | `Ctrl+R` | Refresh |
 | `Ctrl+,` | Settings |
 

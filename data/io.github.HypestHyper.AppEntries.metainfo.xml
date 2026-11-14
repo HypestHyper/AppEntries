@@ -16,8 +16,9 @@
       itself; uninstalling a package runs your package manager in your own terminal.
     </p>
     <ul>
-      <li>Every installed app in one searchable grid, including Flatpak, Snap and AppImage apps</li>
-      <li>Hide or show apps with one switch, or several at once, with Undo</li>
+      <li>Every installed app in one searchable list, including Flatpak, Snap and AppImage apps, with hidden ones kept apart</li>
+      <li>Hide or show apps with one click, or several at once, with Undo</li>
+      <li>A page for each app: how it looks in your launcher, its settings and everything you can do with it</li>
       <li>Edit any app's entry, and find leftover files, missing programs and duplicates</li>
       <li>Make launchers for programs, scripts and commands (in one terminal or several), and web apps that open a site in its own window</li>
       <li>Styled icons from thousands of symbols or your own SVGs</li>
@@ -32,7 +33,7 @@
   </description>
   <screenshots>
     <screenshot type="default">
-      <caption>Every installed app, with a switch to hide it from launcher menus</caption>
+      <caption>Every installed app, with the page of the one you picked</caption>
       <image>https://raw.githubusercontent.com/HypestHyper/AppEntries/main/docs/screenshots/main.png</image>
     </screenshot>
     <screenshot>

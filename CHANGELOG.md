@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- A new layout. A slim rail on the left goes to Apps, Launchers, Issues, Autostart and Defaults, with Updates and Settings at the bottom.
+- Apps are a compact list. **Shown**, **Hidden** or **All** picks which, Shown by default, so hidden apps stay out of the way; source, customised, new and apps not in menus are in one Filter menu. An eye on each row hides or shows it (always there on hidden apps, on the others when you point at them); Space does the same, and right-click or the Menu key opens its options.
+- Each app has a page beside the list: how it looks in your launcher, the Hidden switch, Open, its name, icon and command, the file types it opens, starting at login, helper apps, the changes made to it with Undo, and Uninstall. In narrow windows the page takes the list's place, with a way back.
+- Editing is on the page: a Save / Discard bar appears once something changes, the launcher preview follows as you type, and unsaved edits are kept (marked with a dot) while you look at other apps. Closing with unsaved edits asks first.
+- New launchers and web apps, and editing them, open in the page; History slides in at the side. The Edit, launcher, web app and History windows are gone.
+- The window works from about 470 px wide, for tiling desktops: search gets its own line, the list never gets wider than 600 px, and the page sits beside it when there's room.
+
 ## 1.0.8 — 2026-11-13
 
 - Text in the app can be selected with the mouse and copied with Ctrl+C or the right-click menu: descriptions, paths, commands, explanations. It stays out of the Tab order, so keyboard use is unchanged.
