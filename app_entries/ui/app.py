@@ -95,6 +95,8 @@ COMPACT_BELOW = 900
 SPLIT_FROM = 860        # window width from which the list and the app page sit side by side
 LIST_WIDTH = 440
 LIST_MAX = 600          # the list is never wider, so each row's eye stays near its name
+HISTORY_WIDTH = 400     # the History panel, with its margins
+STACK_TOOLBAR_BELOW = 760
 HYSTERESIS = 60
 
 
@@ -246,6 +248,7 @@ class MainWindow(Gtk.ApplicationWindow):
         tools.set_valign(Gtk.Align.CENTER)
         self.search_entry.set_size_request(180, -1)
         self.toolbar = hbox(12, self.search_entry, tools)
+        self.toolbar.set_spacing(12)
         content.append(self.toolbar)
         # While searching Shown or Hidden, a line says when the other view
         # has matches too, with a button to see them.
@@ -327,7 +330,10 @@ class MainWindow(Gtk.ApplicationWindow):
         self.split.set_vexpand(True)
         self._update_tab_controls()
         content.append(self.split)
-        body = hbox(0, self.rail, content)
+        # History slides in at the side, so changes can be watched as they're made.
+        self.history_reveal = Gtk.Revealer(transition_type=Gtk.RevealerTransitionType.SLIDE_LEFT,
+                                           reveal_child=False, hexpand=False)
+        body = hbox(0, self.rail, content, self.history_reveal)
         self.set_child(body)
 
     def _ensure_page(self, name):
@@ -643,11 +649,25 @@ class MainWindow(Gtk.ApplicationWindow):
         self._apply_size(width)
         self._apply_split(width)
 
-    def _apply_split(self, width):
-        narrow = width < SPLIT_FROM
+    def _apply_split(self, width, now=False):
+        # With History open, the list and page share what's left of the width.
+        room = width - (HISTORY_WIDTH if getattr(self, "_history_open", False) else 0)
+        # Side by side only when the page gets at least the width it needs.
+        need = self.rail.measure(Gtk.Orientation.HORIZONTAL, -1)[0] + LIST_WIDTH + 16 + 40
+        if self.app_page.get_visible():
+            need += self.app_page.measure(Gtk.Orientation.HORIZONTAL, -1)[0]
+        narrow = room < max(SPLIT_FROM, need)
         if narrow != self._narrow:
             self._narrow = narrow
-            GLib.idle_add(lambda: (self._update_split(), False)[1])
+            if now:
+                self._update_split()
+            else:
+                GLib.idle_add(lambda: (self._update_split(), False)[1])
+        # In a narrow window, search gets a line of its own above the buttons.
+        stacked = room < STACK_TOOLBAR_BELOW
+        orient = Gtk.Orientation.VERTICAL if stacked else Gtk.Orientation.HORIZONTAL
+        if self.toolbar.get_orientation() != orient:
+            GLib.idle_add(lambda: (self.toolbar.set_orientation(orient), False)[1])
 
     def _apply_size(self, width):
         size = self.settings.get("size")
@@ -1261,10 +1281,27 @@ class MainWindow(Gtk.ApplicationWindow):
             self.history_window.reload()
 
     def show_history(self, *_a):
+        """Ctrl+H or the History button: open the panel, or close it."""
+        if self.history_reveal.get_reveal_child():
+            self._close_history()
+            return
         if self.history_window is None:
-            self.history_window = HistoryWindow(self, self.undo_entry, self.reinstall_entry)
-            self.history_window.connect("destroy", lambda *_x: setattr(self, "history_window", None))
-        self.history_window.present()
+            self.history_window = HistoryWindow(self, self.undo_entry, self.reinstall_entry,
+                                                on_close=self._close_history)
+            self.history_window.set_margin_bottom(14)
+            self.history_reveal.set_child(self.history_window)
+        else:
+            self.history_window.reload()
+        self._history_open = True
+        self._apply_split(self.get_width(), now=True)
+        self.history_reveal.set_reveal_child(True)
+        self.history_btn.add_css_class("panel-open")
+
+    def _close_history(self):
+        self.history_reveal.set_reveal_child(False)
+        self.history_btn.remove_css_class("panel-open")
+        self._history_open = False
+        self._apply_split(self.get_width(), now=True)
 
     def _handle_uninstalled(self, report):
         """Edited apps uninstalled elsewhere leave your copy of their entry

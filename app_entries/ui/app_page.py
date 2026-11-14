@@ -168,6 +168,7 @@ class AppPage(Gtk.Box):
         origin = (_("Made with App Entries") if a.created else
                   _("From {source}").format(source=label_for_source(src)))
         name = label(a.name, ("title", "page-title"), wrap=True)
+        name.set_width_chars(6)      # wraps rather than holding the page wide
         ident = label(a.id, ("mono", "faint"), ellipsize=True)
         ident.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
         ident.set_tooltip_text(a.source_path)

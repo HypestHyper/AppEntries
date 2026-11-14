@@ -147,6 +147,9 @@ button.row-eye.is-on {{ color: {ON_SURFACE_VARIANT}; }}
 .save-bar button.text {{ color: {INVERSE_PRIMARY}; }}
 .form-bar {{ padding: 4px 12px 12px 4px; }}
 .embedded-form textview.textarea {{ min-height: 64px; }}
+.history-panel {{ background: {SURFACE_CONTAINER_LOW}; border-radius: 28px; margin: 0 12px 0 4px;
+  padding-top: 8px; }}
+button.panel-open {{ background-color: {SECONDARY_CONTAINER}; color: {ON_SECONDARY_CONTAINER}; }}
 .draft-dot {{ background: {PRIMARY}; border-radius: 4px; min-width: 8px; min-height: 8px; }}
 expander.entry-expander > title {{ padding: 6px 4px; }}
 /* Navigation rail */

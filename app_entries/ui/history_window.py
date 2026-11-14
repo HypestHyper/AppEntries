@@ -26,47 +26,59 @@ def _short(p):
     return "~" + p[len(home):] if p.startswith(home + os.sep) else p
 
 
-class HistoryWindow(Gtk.Window):
-    """`undo(entry_id)` undoes an entry (the main window's undo_entry);
-    `reinstall(entry_id)` installs again what an entry uninstalled."""
+class HistoryWindow(Gtk.Box):
+    """The History panel at the side of the main window. `undo(entry_id)`
+    undoes an entry (the main window's undo_entry); `reinstall(entry_id)`
+    installs again what an entry uninstalled; `on_close()` hides the panel."""
 
-    def __init__(self, parent, undo, reinstall=None):
-        super().__init__(transient_for=parent, title=_("History"))
-        self.add_css_class("prefs")
-        self.set_default_size(620, 640)
+    def __init__(self, parent, undo, reinstall=None, on_close=lambda: None):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, vexpand=True)
+        self.add_css_class("history-panel")
+        self.set_size_request(380, -1)
         self._undo = undo
         self._reinstall = reinstall
+        self._on_close = on_close
 
-        hb = Gtk.HeaderBar()
-        hb.set_show_title_buttons(False)
-        hb.set_title_widget(label(_("History"), ("title",)))
-        close = button(icon_name="close", style="text close", small=True, tooltip=_("Close"),
+        title = label(_("History"), ("title",))
+        title.set_hexpand(True)
+        close = button(icon_name="close", style="text close", small=True, tooltip=_("Close (Esc)"),
                        cb=lambda *_a: self.close())
-        close.set_valign(Gtk.Align.CENTER)
         self.clear_btn = button(_("Clear"), "delete", "tonal", small=True, cb=self._clear,
                                 tooltip=_("Forget the history. Your files stay as they are."))
-        self.clear_btn.set_valign(Gtk.Align.CENTER)
-        hb.pack_start(self.clear_btn)
-        hb.pack_end(close)
-        self.set_titlebar(hb)
+        for b in (close, self.clear_btn):
+            b.set_valign(Gtk.Align.CENTER)
+        bar = hbox(8, title, self.clear_btn, close)
+        bar.add_css_class("form-bar")
+        bar.set_margin_start(16)
+        self.append(bar)
 
         page = vbox(10)
         for side in ("start", "end", "bottom"):
-            getattr(page, "set_margin_" + side)(20)
-        page.append(label(_("Every change App Entries made, newest first. Undo puts the files back as they were, "
-                            "and anything moved to the Trash comes back too. If a later change touched the same "
-                            "file, undo that one first. The last {n} changes are kept, on this computer only.")
-                          .format(n=history.KEEP), ("small", "dim"), wrap=True, chars=70))
+            getattr(page, "set_margin_" + side)(16)
+        info = button(icon_name="info", style="text", small=True,
+                      tooltip=_("Every change App Entries made, newest first. Undo puts the files back as they "
+                                "were, and anything moved to the Trash comes back too. If a later change touched "
+                                "the same file, undo that one first. The last {n} changes are kept, on this "
+                                "computer only.").format(n=history.KEEP))
+        info.set_valign(Gtk.Align.CENTER)
+        page.append(hbox(4, label(_("Newest first. Undo puts the files back."), ("small", "dim"), wrap=True,
+                                  chars=36), info))
         self.list = vbox(10)
         page.append(self.list)
         scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
         scroll.set_child(page)
-        self.set_child(scroll)
+        self.append(scroll)
 
         keys = Gtk.EventControllerKey()
         keys.connect("key-pressed", lambda _c, kv, *_a: kv == Gdk.KEY_Escape and (self.close() or True))
         self.add_controller(keys)
         self.reload()
+
+    def close(self):
+        self._on_close()
+
+    def present(self):
+        """Kept so callers written for the window still work."""
 
     def reload(self):
         run_bg(history.load, self._fill)
@@ -89,7 +101,7 @@ class HistoryWindow(Gtk.Window):
             self.list.append(self._row(e))
 
     def _row(self, e):
-        title = label(e.message, ("body", "app-name"), wrap=True, chars=40)
+        title = label(e.message, ("body", "app-name"), wrap=True, chars=28)
         when = label(_when(e.when), ("small", "dim"))
         files = e.paths
         detail = label("\n".join(_short(p) for p in files[:4]) + ("\n…" if len(files) > 4 else ""),
@@ -132,7 +144,7 @@ class HistoryWindow(Gtk.Window):
                 history.clear()
                 self.reload()
 
-        Dialog(self, _("Clear the history?"),
+        Dialog(self.get_root(), _("Clear the history?"),
                _("The list of changes is forgotten, so they can't be undone from here any more. Your files stay "
                  "exactly as they are now."),
                [("cancel", _("Cancel"), "tonal"), ("clear", _("Clear"), "danger")], on_response,
