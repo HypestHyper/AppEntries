@@ -61,6 +61,15 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.2.1" date="2026-11-14">
+      <description>
+        <ul>
+          <li>Choose a styled icon's symbol colour: auto, white, black, any colour, or an SVG's own colours</li>
+          <li>Swap an icon's tile and symbol colours</li>
+          <li>New apps stay marked until you open them</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.0" date="2026-11-14">
       <description>
         <ul>

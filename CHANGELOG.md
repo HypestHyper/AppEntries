@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.1 — 2026-11-14
 
 - New apps stay marked New until you open their page, instead of until you close App Entries, so you don't miss them. Filter has Mark all as seen.
 - Styled icons have a **Symbol colour**: Auto (white or dark, whichever stands out on the tile, as before), White, Black, any colour you pick, or, for your own multi-colour SVGs, Original. It replaces the Recolour switch, and icons you made before look the same.
