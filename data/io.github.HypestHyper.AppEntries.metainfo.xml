@@ -60,6 +60,16 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.1.0" date="2026-11-14">
+      <description>
+        <ul>
+          <li>A new layout: a side rail, a compact list with hidden apps kept apart, and a page for each app beside it</li>
+          <li>Edit apps, launchers and web apps on their page, with drafts kept while you look elsewhere</li>
+          <li>History at the side of the window</li>
+          <li>Works in narrow windows, down to about 470 pixels</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.0.8" date="2026-11-13">
       <description>
         <ul>

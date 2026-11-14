@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 — 2026-11-14
 
 - A new layout. A slim rail on the left goes to Apps, Launchers, Issues, Autostart and Defaults, with Updates and Settings at the bottom.
 - Apps are a compact list. **Shown**, **Hidden** or **All** picks which, Shown by default, so hidden apps stay out of the way; source, customised, new and apps not in menus are in one Filter menu. An eye on each row hides or shows it (always there on hidden apps, on the others when you point at them); Space does the same, and right-click or the Menu key opens its options.
