@@ -151,7 +151,8 @@ button.row-eye.is-on {{ color: {ON_SURFACE_VARIANT}; }}
   padding-top: 8px; }}
 button.panel-open {{ background-color: {SECONDARY_CONTAINER}; color: {ON_SECONDARY_CONTAINER}; }}
 menubutton.list-tool > button, button.list-tool {{ min-width: 40px; min-height: 36px; padding: 0 10px; }}
-menubutton.list-tool.filter-on > button {{ background-color: {SECONDARY_CONTAINER}; color: {ON_SECONDARY_CONTAINER}; }}
+menubutton.list-tool.filter-on > button {{ background-color: {PRIMARY_CONTAINER}; color: {ON_PRIMARY_CONTAINER}; }}
+button.filter-chip {{ min-height: 30px; padding: 0 10px 0 8px; border-radius: 15px; }}
 .status-bar {{ padding: 0 4px; }}
 button.status-chip {{ min-height: 32px; padding: 0 12px; border-radius: 16px; background: {SURFACE_CONTAINER_HIGH};
   color: {ON_SURFACE}; box-shadow: none; }}

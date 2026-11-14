@@ -206,9 +206,7 @@ class MainWindow(Gtk.ApplicationWindow):
         # from the icon theme, which holds up the first frame.
         self.filter_label = Gtk.Label(label=_("Filter"))
         self.filter_menu = Gtk.MenuButton(valign=Gtk.Align.CENTER)
-        self.filter_dot = Gtk.Box(valign=Gtk.Align.START, visible=False)
-        self.filter_dot.add_css_class("draft-dot")
-        self.filter_menu.set_child(hbox(4, icon("tune"), self.filter_dot))
+        self.filter_menu.set_child(icon("tune"))
         self.filter_menu.add_css_class("tonal")
         self.filter_menu.add_css_class("list-tool")
         self.filter_menu.add_css_class("source-menu")
@@ -248,7 +246,10 @@ class MainWindow(Gtk.ApplicationWindow):
         row.append(gap)
         for w in (self.filter_menu, self.sort_menu, self.select_btn):
             row.append(w)
-        self.toolbar = Clamp(vbox(10, self.search_entry, row), LIST_MAX, start=True)
+        # The filters that narrow the list, each with a way to lift it.
+        self.active_filters = WrapBox(8, 6)
+        self.active_filters.set_visible(False)
+        self.toolbar = Clamp(vbox(10, self.search_entry, row, self.active_filters), LIST_MAX, start=True)
         self.toolbar.set_margin_end(4)
         # While searching Shown or Hidden, a line says when the other view
         # has matches too, with a button to see them.
@@ -483,25 +484,34 @@ class MainWindow(Gtk.ApplicationWindow):
         self._update_filter_label()
 
     def _update_filter_label(self):
-        """"Filter", or what's filtering: "Flatpak", "Customised", "2 filters"."""
+        """Tint the Filter button and list what's narrowing the list as chips
+        you can lift. Whether apps not in menus are included is a
+        preference, so it's said in the tooltip only."""
         on = []
         source = self.settings.get("source")
         if source != "any":
-            on.append(dict(self._sources).get(source, label_for_source(source)))
+            on.append((dict(self._sources).get(source, label_for_source(source)),
+                       lambda: self.settings.set("source", "any")))
         names = {"customised": _("Customised"), "new": _("New")}
-        on += [names[k] for k in ("customised", "new") if k in self._only]
+        on += [(names[k], lambda k=k: self._toggle_only(k)) for k in ("customised", "new") if k in self._only]
+        words = [t for t, _do in on]
         if not self.settings.get("show-no-display"):
-            on.append(_("In menus only"))
-        text = _("Filter") if not on else _("Filter: {on}").format(on=", ".join(on))
-        set_text(self.filter_label, text)
-        self.filter_menu.set_tooltip_text(text if on else _(
+            words.append(_("in menus only"))
+        set_text(self.filter_label, _("Filter: {on}").format(on=", ".join(words)) if words else _("Filter"))
+        self.filter_menu.set_tooltip_text(self.filter_label.get_label() if words else _(
             "Only list apps from one source, customised ones or new ones, and whether to include apps that "
             "aren't in menus"))
-        self.filter_dot.set_visible(bool(on))
         if on:
             self.filter_menu.add_css_class("filter-on")
         else:
             self.filter_menu.remove_css_class("filter-on")
+        self.active_filters.remove_all()
+        for text, do in on:
+            b = button(text, "close", "tonal", small=True, tooltip=_("Stop filtering by {what}").format(what=text),
+                       cb=lambda *_a, do=do: do())
+            b.add_css_class("filter-chip")
+            self.active_filters.append(b)
+        self.active_filters.set_visible(bool(on))
 
     def _filter_popup(self, menu_button):
         current = self.settings.get("source")

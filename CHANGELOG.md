@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- No more dot on the Filter button. When the list is narrowed to a source, customised or new apps, the button is tinted and each filter shows under it as a chip that lifts it. Leaving out apps that aren't in menus is a preference, so it isn't marked.
+
 ## 1.1.1 — 2026-11-14
 
 - Status chips at the top right say what needs your attention, wherever you are: issues found, an update (or a restart to finish one), unsaved edits to an app, a slow scan, or apps that couldn't be read. Each one takes you there. With nothing to say there are none, and the header's apps count is gone (the counts are on Shown and Hidden).
