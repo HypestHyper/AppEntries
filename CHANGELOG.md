@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- New apps stay marked New until you open their page, instead of until you close App Entries, so you don't miss them. Filter has Mark all as seen.
 - Styled icons have a **Symbol colour**: Auto (white or dark, whichever stands out on the tile, as before), White, Black, any colour you pick, or, for your own multi-colour SVGs, Original. It replaces the Recolour switch, and icons you made before look the same.
 - The main colour is called Tile colour when there's a tile, and **Swap with the tile** flips the tile and symbol colours. Style icons for several apps at once carries the symbol colour too.
 
@@ -49,7 +50,7 @@
 - An Open button on each card starts the app, hidden ones included.
 - Default apps can be set per file type: Each type opens a category (Pictures, Videos…) so, say, PNG and TIFF can open in different apps, each with its own Reset.
 - By app, at the bottom of Default apps, lists every file type one app says it opens, including ones no category covers (like .xcf or .psd), what opens each now, and Make default, or the app for all of them. File types… in a card's ⋯ menu opens it for that app.
-- Sort the list newest first, by when each app appeared on this computer. Apps that appeared since App Entries last looked are marked New until you close it. (Package managers keep build dates on their files, so App Entries notes when it first sees each app instead; the first time, it starts from the file times and marks nothing.)
+- Sort the list newest first, by when each app appeared on this computer. Apps that appeared since App Entries last looked are marked New. (Package managers keep build dates on their files, so App Entries notes when it first sees each app instead; the first time, it starts from the file times and marks nothing.)
 
 ## 1.0.6 — 2026-11-10
 

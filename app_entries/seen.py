@@ -1,5 +1,6 @@
 """When each app first appeared on this computer, for sorting by newest and
-for the New badge.
+for the New badge. An app stays New until you open its page (or mark them
+all as seen); that list is kept in unseen.json beside it.
 
 Package managers keep the build date as an entry file's modification time and
 rewrite the file on every update, so neither file time says when an app was
@@ -53,10 +54,47 @@ def _file_time(app: de.App) -> float:
         return 0.0
 
 
+def unseen_path(env=None) -> str:
+    return os.path.join(os.path.dirname(path(env)), "unseen.json")
+
+
+def load_unseen(env=None) -> set:
+    """The apps marked New that you haven't looked at yet."""
+    try:
+        with open(unseen_path(env), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return set()
+    return {x for x in data if isinstance(x, str)} if isinstance(data, list) else set()
+
+
+def _save_unseen(ids, env=None) -> None:
+    p = unseen_path(env)
+    try:
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(p), prefix=".unseen-", suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(sorted(ids), f)
+        os.replace(tmp, p)
+    except OSError:
+        pass
+
+
+def mark_seen(ids, env=None) -> set:
+    """You looked at these (or at all of them): they're no longer New.
+    Returns what's still unseen."""
+    unseen = load_unseen(env)
+    left = unseen - set(ids)
+    if left != unseen:
+        _save_unseen(left, env)
+    return left
+
+
 def update(apps, env=None, now=None) -> set:
     """Note apps not seen before and set each app's `first_seen`. Returns the
-    IDs that are new since the last time. An app that's removed is forgotten,
-    so installing it again counts as new."""
+    IDs that are New: the ones that appeared now, and earlier ones you
+    haven't opened yet. An app that's removed is forgotten, so installing it
+    again counts as new."""
     now = time.time() if now is None else now
     known = load(env)
     first_run = known is None
@@ -73,4 +111,8 @@ def update(apps, env=None, now=None) -> set:
         a.first_seen = when
     if out != known:
         _save(out, env)
-    return new
+    unseen = load_unseen(env)
+    still = (unseen & set(out)) | new
+    if still != unseen:
+        _save_unseen(still, env)
+    return still

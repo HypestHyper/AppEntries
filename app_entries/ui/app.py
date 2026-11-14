@@ -317,7 +317,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.report = None
         self._auto_busy = False
         self._sort_newest = self.settings.get("sort") == "newest"
-        self._new_ids = set()   # apps that appeared this session: marked New until App Entries closes
+        self._new_ids = set()   # apps marked New: until you open their page
 
         self.snackbar = Snackbar()
         overlay = Gtk.Overlay(vexpand=True)
@@ -554,7 +554,16 @@ class MainWindow(Gtk.ApplicationWindow):
             box.append(row(text, key == current, lambda k=key: self.settings.set("source", k)))
         box.append(heading(_("Only")))
         box.append(row(_("Customised"), "customised" in self._only, lambda: self._toggle_only("customised")))
-        box.append(row(_("New since last time"), "new" in self._only, lambda: self._toggle_only("new")))
+        box.append(row(_("New, not opened yet"), "new" in self._only, lambda: self._toggle_only("new")))
+        if self._new_ids:
+            mark = Gtk.Button()
+            mark.add_css_class("flat")
+            mark.add_css_class("source-item")
+            mark.set_child(hbox(10, icon("check", ("accent",)),
+                                label(ngettext("Mark {n} new app as seen", "Mark {n} new apps as seen",
+                                               len(self._new_ids)).format(n=len(self._new_ids)), ("body",))))
+            mark.connect("clicked", lambda _b: (menu_button.popdown(), self._mark_all_seen()))
+            box.append(mark)
         box.append(heading(_("Include")))
         box.append(row(_("Apps not in menus"), self.settings.get("show-no-display"),
                        lambda: self.settings.set("show-no-display", not self.settings.get("show-no-display"))))
@@ -562,6 +571,20 @@ class MainWindow(Gtk.ApplicationWindow):
         pop.add_css_class("options")
         pop.set_child(box)
         menu_button.set_popover(pop)
+
+    def _mark_all_seen(self):
+        ids = set(self._new_ids)
+        self._new_ids.clear()
+        for did in ids:
+            item = self.apps.by_id.get(did)
+            if item is not None:
+                item.app.new = False
+                item.emit("changed")
+        run_bg(lambda: seen.mark_seen(ids))
+        if "new" in self._only:
+            self._toggle_only("new")
+        else:
+            self.filter.changed(Gtk.FilterChange.DIFFERENT)
 
     def _toggle_only(self, key):
         if key is not None:
@@ -794,8 +817,8 @@ class MainWindow(Gtk.ApplicationWindow):
             b.connect("clicked", lambda _b, k=key: (menu_button.popdown(),
                                                     GLib.idle_add(lambda: (self.settings.set("sort", k), False)[1])))
             box.append(b)
-        note = label(_("Newest first goes by when App Entries first saw each app; ones that appeared since it "
-                       "last looked are marked New."), ("small", "dim"), wrap=True, chars=26)
+        note = label(_("Newest first goes by when App Entries first saw each app. New ones are marked New until "
+                       "you open them."), ("small", "dim"), wrap=True, chars=26)
         note.set_margin_start(12)
         note.set_margin_end(12)
         note.set_margin_top(6)
@@ -1131,7 +1154,7 @@ class MainWindow(Gtk.ApplicationWindow):
             apps, report, new, found = result
             self.unlaunched = found
             self._update_found()
-            self._new_ids |= new
+            self._new_ids = set(new)
             for a in apps:
                 a.new = a.id in self._new_ids
             return scanned((apps, report))
@@ -1176,6 +1199,11 @@ class MainWindow(Gtk.ApplicationWindow):
         narrow window) instead of it."""
         if self.app_page.form_open():
             self.app_page.close_form()
+        if item.app.new:
+            # Looked at: no longer New.
+            item.app.new = False
+            self._new_ids.discard(item.app.id)
+            run_bg(lambda did=item.app.id: seen.mark_seen([did]))
         old, self._current = self._current, item
         self.app_page.show(item)
         self.status.update()

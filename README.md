@@ -41,7 +41,7 @@
 - **Each app has a page** beside the list: how it looks in your launcher, its name, icon and command (edited right there, with Save and Discard), the file types it opens, whether it starts at login, helper apps, the changes made to it with Undo, and Uninstall. Unsaved edits are kept while you look at other apps.
 - **Select several** to hide, show, restore, restyle or uninstall many apps at once.
 - **Edit** any entry (name, icon, command, environment, folders, desktops, quick actions) with a live view of the file. Editing a system app saves your own copy; *Restore original* puts it back.
-- **Open** any app from its page or right-click menu, hidden ones included. Sort A–Z or newest first; apps that appeared since App Entries last looked are marked New.
+- **Open** any app from its page or right-click menu, hidden ones included. Sort A–Z or newest first; apps that appeared since App Entries last looked are marked New until you open them.
 - **Issues** finds leftover files, missing programs and duplicates, and explains each with a button to fix it.<br>
   <a href="docs/screenshots/issues.png"><img alt="Issues listing an entry whose program isn't installed, with a button to hide it" src="docs/screenshots/issues.png" width="400"></a>
 - Apps you edited and then uninstalled some other way are hidden from menus with your edits kept, and the edits apply again if you reinstall. Both are options in Issues, each done once with Undo.
