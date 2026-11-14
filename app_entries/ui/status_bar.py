@@ -6,7 +6,7 @@ from gettext import ngettext
 
 from gi.repository import Gtk
 
-from .widgets import WrapBox, hbox, icon, label, spinner
+from .widgets import WrapBox, enter, hbox, icon, label, spinner
 
 
 def _chip(glyph, text, kind, tooltip, cb):
@@ -75,9 +75,12 @@ class StatusBar(Gtk.Box):
         sig = tuple((t, k) for _g, t, k, _tip, _cb in items)
         if sig == self._sig:
             return
-        self._sig = sig
+        before, self._sig = set(self._sig or ()), sig
         self.chips.remove_all()
         for glyph, text, kind, tip, cb in items:
-            self.chips.append(_chip(glyph, text, kind, tip, cb))
+            chip = _chip(glyph, text, kind, tip, cb)
+            self.chips.append(chip)
+            if (text, kind) not in before:
+                enter(chip)     # a new chip pops in; the others stay as they are
         self.has_items = bool(items)
         self.on_change()

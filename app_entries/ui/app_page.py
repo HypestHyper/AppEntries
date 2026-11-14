@@ -12,7 +12,7 @@ from gi.repository import Gio, GLib, Gtk, Pango
 from .. import APP_ID, autostart, defaults, history, uninstall
 from .app_card import UNINSTALL_HINTS, gicon_later, label_for_source
 from .dialogs import run_bg
-from .widgets import Toggle, WrapBox, button, card, clear, hbox, icon, label, section, vbox
+from .widgets import Floating, Toggle, WrapBox, button, card, clear, enter, hbox, icon, label, section, vbox
 
 SELF_ID = APP_ID + ".desktop"
 
@@ -81,6 +81,7 @@ class AppPage(Gtk.Box):
         self.page.set_margin_end(12)
         self.scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
         self.scroll.set_child(self.page)
+        self.scroll.add_css_class("m-page")
         self.form = None            # the edit form, kept while it has unsaved changes
         self._was_dirty = False
         # Save or discard: shown only once something has changed.
@@ -92,8 +93,7 @@ class AppPage(Gtk.Box):
                          cb=lambda *_: self.discard())
         bar = hbox(10, self.bar_text, discard, self.bar_save)
         bar.add_css_class("save-bar")
-        self.savebar = Gtk.Revealer(child=bar, transition_type=Gtk.RevealerTransitionType.SLIDE_UP,
-                                    valign=Gtk.Align.END, reveal_child=False)
+        self.savebar = Floating(bar, valign=Gtk.Align.END)
         self.savebar.set_margin_start(16)
         self.savebar.set_margin_end(28)
         self.savebar.set_margin_bottom(16)
@@ -135,10 +135,10 @@ class AppPage(Gtk.Box):
         if self.form is not None and (item is None or item.app.id != self.form.app.id):
             self._keep_draft()
             self.form = None
-            self.savebar.set_reveal_child(False)
+            self.savebar.set_revealed(False)
         if self.item is not None and self._handler:
             self.item.disconnect(self._handler)
-        self.item, self._handler = item, 0
+        before, self.item, self._handler = self.item, item, 0
         if item is None:
             self._empty()
             return
@@ -146,6 +146,9 @@ class AppPage(Gtk.Box):
         self.back_label.set_label(_("Back to Launchers") if self.win.settings.get("filter") == "mine"
                                   else _("Back to Apps"))
         self._build()
+        if not self._narrow and item is not before:
+            # Beside the list: the new app's page fades and rises into place.
+            enter(self.scroll, "m-below")
 
     def _empty(self):
         clear(self.page)
@@ -405,7 +408,7 @@ class AppPage(Gtk.Box):
                 self.head_image.set_from_gicon(gicon_for(f.icon))
         self.bar_text.set_label(_("Unsaved changes to {name}").format(name=self.item.app.name))
         self.bar_save.set_sensitive(form.is_valid())
-        self.savebar.set_reveal_child(dirty)
+        self.savebar.set_revealed(dirty)
         if dirty != self._was_dirty:
             self._was_dirty = dirty
             self._keep_draft()
@@ -470,7 +473,7 @@ class AppPage(Gtk.Box):
             if self.form is form:
                 self.form = None
                 self._was_dirty = False
-                self.savebar.set_reveal_child(False)
+                self.savebar.set_revealed(False)
                 self._build(keep_scroll=True)
 
         self.win._save_edit(app, fields, picked, after=saved)
@@ -484,7 +487,7 @@ class AppPage(Gtk.Box):
         self.win.status.update()
         self.form = None
         self._was_dirty = False
-        self.savebar.set_reveal_child(False)
+        self.savebar.set_revealed(False)
         item = self.win.apps.by_id.get(form.app.id)
         if item is not None:
             item.emit("changed")

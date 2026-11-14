@@ -5,6 +5,7 @@ from gettext import gettext as _
 from gi.repository import Gio, GLib, Gtk
 
 from .. import APP_NAME, VERSION, desktop_entries, theme
+from . import motion
 from .color_picker import ColorDot, ColorPicker
 from .widgets import (
     Clamp,
@@ -83,7 +84,7 @@ class SettingsPage(Gtk.ScrolledWindow):
         self._picker = ColorPicker("#" + theme.valid_seed(accent), _("Accent"))
         self._picker.connect("changed", lambda _p, hexv: self._custom_btn.get_active()
                              and self.settings.set("accent", hexv.lstrip("#")))
-        self._picker_reveal = Gtk.Revealer(child=self._picker,
+        self._picker_reveal = Gtk.Revealer(transition_duration=motion.SLIDE, child=self._picker,
                                            transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
         self._custom_btn.connect("toggled", self._on_custom)
         c.append(vbox(8, label(_("Accent"), ("body", "dim")), swatches, self._picker_reveal))

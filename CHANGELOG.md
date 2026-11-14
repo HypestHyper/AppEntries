@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Motion follows Material 3 Expressive throughout. Things that move or change shape (button presses, the rail's indicator, switches, panels) overshoot slightly and settle; colours and fades never bounce. Small parts move fast, panels a little slower.
+- The rail's indicator grows out from the middle of the place you pick.
+- Hiding an app: its icon turns round, steps back and dims, along with its name.
+- An app's page rises into place beside the list. In a narrow window it comes in from the side, and the list comes back from the other side when you go back.
+- The save bar, selection bar and confirmations slide up and fade in. New status chips pop in; the ones already there stay still.
+- Switch handles grow when turned on and when pressed.
+- Reduce motion in Settings now works alongside your desktop's own setting: if your desktop has animations off, turning Reduce motion off no longer turns them back on.
 - After resizing the window, everything takes its new size at once. Before, some parts (like Back to Apps) kept their old size until the pointer passed over them, then jumped.
 
 ## 1.2.3 — 2026-11-14

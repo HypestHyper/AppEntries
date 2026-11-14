@@ -12,7 +12,7 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q desktop-file-utils appstream libglib2.0-bin squashfs-tools
+          sudo apt-get install -y -q desktop-file-utils appstream libglib2.0-bin squashfs-tools python3-gi gir1.2-gtk-4.0
           python3 -m pip install --quiet pytest ruff==0.16.8  # same version as in release.yml
       - name: Ruff
         run: python3 -m ruff check app_entries tests tools

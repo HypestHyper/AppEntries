@@ -9,6 +9,7 @@ from gettext import ngettext
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk
 
 from .. import icon_library, symbols, theme
+from . import motion
 from .color_picker import ColorDot, ColorPicker
 from .dialogs import Dialog, choose_file, error_dialog, run_bg
 from .widgets import Group, Toggle, WrapBox, button, hbox, label, scroll_passes_through, set_text, vbox
@@ -102,7 +103,7 @@ class IconPicker(Gtk.Window):
         # Left: which collection, search, and the grid.
         self.source = Group([("material", _("Material Symbols")), ("file", _("Your icons"))],
                             self.choice.source, self._on_source)
-        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, transition_duration=150,
+        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, transition_duration=motion.FADE,
                                vexpand=True)
         self.stack.add_named(self._build_material(), "material")
         self.stack.add_named(self._build_library(), "file")
@@ -152,7 +153,8 @@ class IconPicker(Gtk.Window):
         self.symbol_custom.connect("changed", lambda _p, hexv: self.symbol_group.active() == "custom"
                                    and self._set(symbol_color=hexv))
         self.symbol_reveal = Gtk.Revealer(child=self.symbol_custom, reveal_child=sc.startswith("#"),
-                                          transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
+                                          transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN,
+                                          transition_duration=motion.SLIDE)
         self.swap = button(_("Swap with the tile"), "sync", "tonal", small=True,
                            tooltip=_("Swap the tile and symbol colours, for a light or dark version"),
                            cb=lambda *_a: self._swap())
@@ -198,7 +200,7 @@ class IconPicker(Gtk.Window):
         # Any other colour: picked right here, so the preview follows as you drag.
         self.color_picker = ColorPicker(self.choice.color, _("Icon colour"))
         self.color_picker.connect("changed", lambda _p, hexv: self._set(color=hexv))
-        self.color_reveal = Gtk.Revealer(child=self.color_picker,
+        self.color_reveal = Gtk.Revealer(transition_duration=motion.SLIDE, child=self.color_picker,
                                          transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
         self.color_more = Gtk.ToggleButton(label=_("Other colour…"), halign=Gtk.Align.START)
         self.color_more.add_css_class("tonal")
@@ -228,7 +230,8 @@ class IconPicker(Gtk.Window):
         self.border_custom.connect("changed", lambda _p, hexv: self.border_color.active() == "custom"
                                    and self._set(border_color=hexv))
         self.border_reveal = Gtk.Revealer(child=self.border_custom, reveal_child=bc.startswith("#"),
-                                          transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
+                                          transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN,
+                                          transition_duration=motion.SLIDE)
         self.inner_box = self._switch(_("Inner edges too"), _("Also outline the edges inside the icon, such as the "
                                                               "hole in a gear or the rings in a logo. On a tile, "
                                                               "this outlines the symbol itself."), self.border_inner)

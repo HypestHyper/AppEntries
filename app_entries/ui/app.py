@@ -31,18 +31,21 @@ from .. import (
     webapps,
 )
 from ..model import AppItem, AppStore
+from . import motion
 from .app_card import forget_icons, label_for_source
 from .app_row import AppRow
 from .dialogs import Dialog, choose_file, error_dialog, run_bg
 from .style import SIZES
 from .widgets import (
     Clamp,
+    Floating,
     NavRail,
     SearchField,
     Segmented,
     Snackbar,
     WrapBox,
     button,
+    enter,
     hbox,
     icon,
     label,
@@ -307,7 +310,7 @@ class MainWindow(Gtk.ApplicationWindow):
         loading.set_halign(Gtk.Align.CENTER)
 
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE,
-                               transition_duration=180, hhomogeneous=False, vexpand=True)
+                               transition_duration=motion.FADE, hhomogeneous=False, vexpand=True)
         self.stack.add_named(loading, "loading")
         self.stack.add_named(Clamp(grid_scroll, LIST_MAX, start=True), "grid")
         self.stack.add_named(empty, "empty")
@@ -339,6 +342,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.found_btn.set_create_popup_func(self._found_popup)
         self.found_btn.set_visible(False)
         self.list_area = vbox(10, self.toolbar, self.hint, self.found_btn, overlay)
+        self.list_area.add_css_class("m-page")
         self._current = None        # the AppItem whose page is open
         self.drafts = {}            # app ID -> (fields, picked icon): unsaved edits kept while elsewhere
         self._narrow = False
@@ -349,6 +353,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.status = StatusBar(self)
         self.status.set_size_request(-1, 56)   # level with the search box
         self.page_col = vbox(10, self.app_page)
+        self.page_col.add_css_class("m-page")
         self.page_col.set_hexpand(True)
         self.top_status = vbox(0)
         self.top_status.set_visible(False)
@@ -361,7 +366,7 @@ class MainWindow(Gtk.ApplicationWindow):
         updates.connect(self.status.update)
         # History slides in at the side, so changes can be watched as they're made.
         self.history_reveal = Gtk.Revealer(transition_type=Gtk.RevealerTransitionType.SLIDE_LEFT,
-                                           reveal_child=False, hexpand=False)
+                                           transition_duration=motion.SLIDE, reveal_child=False, hexpand=False)
         body = hbox(0, self.rail, content, self.history_reveal)
         self.set_child(body)
 
@@ -438,9 +443,7 @@ class MainWindow(Gtk.ApplicationWindow):
         bar = hbox(8, self.sel_count, all_btn, self.sel_hide, self.sel_show, self.sel_restore, self.sel_style,
                    self.sel_uninstall, done)
         bar.add_css_class("selection-bar")
-        self.sel_bar = Gtk.Revealer(child=bar, transition_type=Gtk.RevealerTransitionType.SLIDE_UP,
-                                    halign=Gtk.Align.CENTER, valign=Gtk.Align.END, reveal_child=False)
-        self.sel_bar.set_can_target(False)
+        self.sel_bar = Floating(bar, halign=Gtk.Align.CENTER, valign=Gtk.Align.END)
         keys = Gtk.EventControllerKey()
         keys.connect("key-pressed", self._on_key)
         self.add_controller(keys)
@@ -1282,6 +1285,13 @@ class MainWindow(Gtk.ApplicationWindow):
         busy = self._current is not None or self.app_page.form_open()
         page = lists and (not self._narrow or busy)
         listing = not lists or not self._narrow or not busy
+        if self._narrow and lists:
+            # One at a time: the page comes in from the side you read
+            # towards, the list from the other side when you go back.
+            if page and not self.page_col.get_visible():
+                enter(self.page_col, "m-end")
+            elif listing and not self.list_area.get_visible() and self.page_col.get_visible():
+                enter(self.list_area, "m-start")
         self.app_page.set_visible(page)
         self.page_col.set_visible(page)
         self.app_page.set_narrow(self._narrow)
@@ -1958,8 +1968,7 @@ class MainWindow(Gtk.ApplicationWindow):
         for item in self.apps.items():
             item.selected = False
             item.emit("changed")
-        self.sel_bar.set_reveal_child(on)
-        self.sel_bar.set_can_target(on)
+        self.sel_bar.set_revealed(on)
         self.snackbar.set_margin_bottom(72 if on else 0)
         self._update_tab_controls()
         self._update_selection()

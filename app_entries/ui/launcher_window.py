@@ -7,6 +7,7 @@ from gi.repository import Gdk, Gtk
 
 from .. import desktop_entries as de
 from .. import editing, launchers, symbols
+from . import motion
 from .app_card import gicon_for
 from .dialogs import choose_file, choose_icon_file
 from .entry_view import EntryView
@@ -81,7 +82,7 @@ class LauncherWindow(Gtk.Box):
         bar.add_css_class("form-bar")
         self.append(bar)
 
-        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, transition_duration=150,
+        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, transition_duration=motion.FADE,
                                vexpand=True)
         self.stack.add_named(self._build_form(), "form")
         self.stack.add_named(self._build_raw(), "raw")

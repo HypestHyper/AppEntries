@@ -55,7 +55,7 @@ jobs:
       - name: Ruff
         run: |
           # squashfs-tools: the AppImage tests build and read real AppImages.
-          sudo apt-get update -q && sudo apt-get install -y -q squashfs-tools
+          sudo apt-get update -q && sudo apt-get install -y -q squashfs-tools python3-gi gir1.2-gtk-4.0
           python3 -m pip install --quiet pytest ruff==0.16.8
           python3 -m ruff check app_entries tests tools
       - name: Run the tests

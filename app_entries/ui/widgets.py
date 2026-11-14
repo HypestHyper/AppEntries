@@ -695,11 +695,19 @@ class NavRail(Gtk.Box):
     def _item(self, key, text, icon_name):
         b = Gtk.ToggleButton()
         b.add_css_class("rail-item")
+        # The pill takes the hover colour; the indicator behind the icon
+        # grows out from its centre when this place is picked.
+        indicator = Gtk.Box(can_target=False)
+        indicator.add_css_class("rail-indicator")
+        glyph_ = icon(icon_name, ("rail-glyph",))
+        glyph_.set_halign(Gtk.Align.CENTER)
+        glyph_.set_valign(Gtk.Align.CENTER)
+        inner = Gtk.Overlay()
+        inner.set_child(indicator)
+        inner.add_overlay(glyph_)
         pill = Gtk.Box(halign=Gtk.Align.CENTER)
         pill.add_css_class("rail-pill")
-        glyph_ = icon(icon_name)
-        glyph_.set_hexpand(True)
-        pill.append(glyph_)
+        pill.append(inner)
         badge = Gtk.Label(visible=False, halign=Gtk.Align.END, valign=Gtk.Align.START)
         badge.add_css_class("rail-badge")
         badge.add_css_class("tnum")
@@ -794,24 +802,89 @@ class Segmented(Gtk.Box):
             b.set_label(text)
 
 
-class Snackbar(Gtk.Revealer):
+def after_frames(widget, n, fn):
+    """Run `fn` once the widget has drawn `n` more frames, or after a second
+    if it isn't on screen to draw them."""
+    state = {"left": n, "done": False}
+
+    def finish():
+        if not state["done"]:
+            state["done"] = True
+            fn()
+
+    def tick(_w, _clock):
+        state["left"] -= 1
+        if state["left"] > 0:
+            return GLib.SOURCE_CONTINUE
+        finish()
+        return GLib.SOURCE_REMOVE
+
+    widget.add_tick_callback(tick)
+    GLib.timeout_add(1000, lambda: (finish(), False)[1])
+
+
+MOTION_WAYS = ("m-below", "m-end", "m-start")
+
+
+def enter(widget, way=None):
+    """Bring a part in with motion. It's drawn once in its .m-from state
+    (faded, and for a page moved `way`: "m-below", "m-end" or "m-start"),
+    which has no transition, then moves to where it belongs. If frames
+    never come it simply appears."""
+    for w in MOTION_WAYS:
+        if w != way:
+            widget.remove_css_class(w)
+    if way:
+        widget.add_css_class(way)
+    widget.add_css_class("m-from")
+    after_frames(widget, 2, lambda: widget.remove_css_class("m-from"))
+
+
+class Floating(Gtk.Box):
+    """A bar floating over the content (save bar, selection bar,
+    confirmations) that slides up and fades in. Out of sight it stays where
+    it is, but can't be clicked, focused or read out, so nothing waits for
+    the animation to end."""
+
+    def __init__(self, child=None, **kw):
+        super().__init__(**kw)
+        self.add_css_class("m-float")
+        if child is not None:
+            self.append(child)
+        self._revealed = None
+        self.set_revealed(False)
+
+    def set_revealed(self, on):
+        on = bool(on)
+        if on == self._revealed:
+            return
+        self._revealed = on
+        if on:
+            self.remove_css_class("m-out")
+        else:
+            self.add_css_class("m-out")
+        self.set_can_target(on)
+        self.set_can_focus(on)
+        self.update_state([Gtk.AccessibleState.HIDDEN], [not on])
+
+    def get_revealed(self):
+        return self._revealed
+
+
+class Snackbar(Floating):
     """Bottom-centre confirmation with an optional action. Shows for 3.5 s."""
 
     def __init__(self):
-        super().__init__(transition_type=Gtk.RevealerTransitionType.SLIDE_UP,
-                         transition_duration=220, halign=Gtk.Align.CENTER,
-                         valign=Gtk.Align.END, reveal_child=False)
+        super().__init__(halign=Gtk.Align.CENTER, valign=Gtk.Align.END)
         self._label = Gtk.Label(xalign=0, wrap=True, max_width_chars=48)
         self._action = Gtk.Button()
         self._action.connect("clicked", self._on_action)
         box = hbox(16, self._label, self._action)
         box.add_css_class("snackbar")
         self._label.set_hexpand(True)
-        self.set_child(box)
+        self.append(box)
         self._timer = 0
         self._cb = None
-        self.set_can_target(False)
-        self.connect("notify::child-revealed", self._on_revealed)
 
     def show(self, text, action=None, cb=None, seconds=3.5):
         self._label.set_label(text)
@@ -819,8 +892,7 @@ class Snackbar(Gtk.Revealer):
         self._action.set_visible(bool(action))
         if action:
             self._action.set_label(action)
-        self.set_can_target(True)
-        self.set_reveal_child(True)
+        self.set_revealed(True)
         self._label.update_property([Gtk.AccessibleProperty.LABEL], [text])
         if hasattr(self._label, "announce"):  # GTK 4.14+
             self._label.announce(text, Gtk.AccessibleAnnouncementPriority.MEDIUM)
@@ -830,12 +902,8 @@ class Snackbar(Gtk.Revealer):
 
     def _hide(self):
         self._timer = 0
-        self.set_reveal_child(False)
+        self.set_revealed(False)
         return False
-
-    def _on_revealed(self, *_):
-        if not self.get_child_revealed():
-            self.set_can_target(False)
 
     def _on_action(self, *_):
         cb, self._cb = self._cb, None

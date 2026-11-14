@@ -5,9 +5,8 @@ from typing import Optional
 from gi.repository import Gdk, GLib, Gtk
 
 from .. import theme
+from . import motion
 
-EASE = "cubic-bezier(0.2, 0, 0, 1)"
-SPRING = "cubic-bezier(0.34, 1.36, 0.64, 1)"
 FONT = '"Google Sans Flex", "Google Sans", sans-serif'
 ICON = '"Material Symbols Rounded"'
 
@@ -63,7 +62,8 @@ button {{
   border-radius: 20px; min-height: 40px; padding: 0 20px;
   font-weight: 600; font-size: 14px;
   background-color: {SECONDARY_CONTAINER}; color: {ON_SECONDARY_CONTAINER};
-  transition: border-radius 200ms {EASE}, background-color 200ms {EASE}, color 200ms {EASE};
+  transition: border-radius {SP_FAST}, background-color {FX_FAST}, color {FX_FAST}, transform {SP_FAST},
+              opacity {FX_DEFAULT};
 }}
 button:hover {{ background-color: {SECONDARY_CONTAINER_HOVER}; }}
 button:active {{ border-radius: 10px; }}
@@ -111,7 +111,7 @@ button.filter:active {{ border-radius: 8px; }}
 .tabbar > button {{
   background-color: transparent; color: {ON_SURFACE_VARIANT};
   border-radius: 20px; min-height: 40px; padding: 0 14px; font-weight: 600;
-  transition: border-radius 220ms {EASE}, background-color 220ms {EASE}, color 220ms {EASE};
+  transition: border-radius {SP_FAST}, background-color {FX_FAST}, color {FX_FAST};
 }}
 .tabbar > button:hover {{ background-color: {SURFACE_CONTAINER_HIGH}; }}
 .tabbar > button.icon-tab {{ padding: 0 12px; }}
@@ -122,14 +122,17 @@ button.filter:active {{ border-radius: 8px; }}
 listview.app-list {{ background: none; }}
 listview.app-list > row {{ padding: 0; border-radius: 16px; background: none; }}
 listview.app-list > row:focus-visible {{ outline: 2px solid {PRIMARY}; outline-offset: -2px; }}
-.app-row {{ padding: 8px 12px; border-radius: 16px; min-height: 48px; }}
+.app-row {{ padding: 8px 12px; border-radius: 16px; min-height: 48px; transition: background-color {FX_FAST}; }}
+.app-row .app-name, .app-row .small, .app-row .icon-tile image {{ transition: opacity {FX_DEFAULT}; }}
 .app-row:hover {{ background-color: alpha({ON_SURFACE}, .05); }}
 .app-row.is-selected {{ background-color: {SECONDARY_CONTAINER}; }}
 .app-row.is-hidden .app-name, .app-row.is-hidden .small {{ opacity: .55; }}
 .app-row.is-hidden .icon-tile image {{ opacity: .45; }}
+/* Hiding an app: its icon tile turns round and steps back. */
+.app-row.is-hidden .icon-tile.small-tile {{ border-radius: 20px; transform: scale(.86); }}
 .app-row .row-badge {{ padding: 0 8px; min-height: 20px; font-size: 11.5px; }}
 button.row-eye {{ min-width: 36px; min-height: 36px; padding: 0; color: {ON_SURFACE_VARIANT};
-  transition: opacity 120ms {EASE}; }}
+  transition: opacity {FX_FAST}, background-color {FX_FAST}, color {FX_FAST}; }}
 button.row-eye.is-on {{ color: {ON_SURFACE_VARIANT}; }}
 .app-row.is-current {{ background-color: {SECONDARY_CONTAINER}; }}
 .app-row.is-current .app-name {{ color: {ON_SECONDARY_CONTAINER}; }}
@@ -157,6 +160,7 @@ button.filter-chip {{ min-height: 30px; padding: 0 10px 0 8px; border-radius: 15
 button.status-chip {{ min-height: 32px; padding: 0 12px; border-radius: 16px; background: {SURFACE_CONTAINER_HIGH};
   color: {ON_SURFACE}; box-shadow: none; }}
 button.status-chip:hover {{ background: {SURFACE_CONTAINER_HIGHEST}; }}
+button.status-chip.m-from {{ opacity: 0; transform: scale(.6); }}
 button.status-chip.warn {{ background: {TERTIARY_CONTAINER}; color: {ON_TERTIARY_CONTAINER}; }}
 button.status-chip.error {{ background: {ERROR_CONTAINER}; color: {ON_ERROR_CONTAINER}; }}
 button.status-chip.accent {{ background: {PRIMARY_CONTAINER}; color: {ON_PRIMARY_CONTAINER}; }}
@@ -178,9 +182,15 @@ expander.entry-expander > title {{ padding: 6px 4px; }}
 .navrail {{ padding: 4px 0 8px 0; min-width: 64px; }}
 .navrail > button.rail-item {{ background: none; box-shadow: none; padding: 4px 0 6px 0; min-height: 0;
   border-radius: 16px; color: {ON_SURFACE_VARIANT}; }}
-.rail-pill {{ min-width: 48px; min-height: 30px; border-radius: 15px; transition: background-color 150ms {EASE}; }}
+.rail-pill {{ min-width: 48px; min-height: 30px; border-radius: 15px; transition: background-color {FX_FAST}; }}
+.rail-indicator {{ min-width: 48px; min-height: 30px; border-radius: 15px; background-color: {SECONDARY_CONTAINER};
+  opacity: 0; transform: scale(.35, 1); transition: transform {SP_FAST}, opacity {FX_FAST}; }}
+.rail-glyph {{ transition: color {FX_FAST}; }}
 .navrail > button.rail-item:hover .rail-pill {{ background-color: alpha({ON_SURFACE}, .08); }}
-.navrail > button.rail-item:checked .rail-pill {{ background-color: {SECONDARY_CONTAINER}; color: {ON_SECONDARY_CONTAINER}; }}
+.navrail > button.rail-item:checked .rail-pill {{ background-color: transparent; }}
+.navrail > button.rail-item:checked .rail-indicator {{ opacity: 1; transform: none; }}
+.navrail > button.rail-item:checked:hover .rail-indicator {{ background-color: mix({SECONDARY_CONTAINER}, {ON_SECONDARY_CONTAINER}, .08); }}
+.navrail > button.rail-item:checked .rail-glyph {{ color: {ON_SECONDARY_CONTAINER}; }}
 .navrail > button.rail-item:checked .icon {{ font-variation-settings: "FILL" 1, "wght" 500, "opsz" 24; }}
 .navrail > button.rail-item:checked {{ color: {ON_SURFACE}; }}
 .rail-label {{ font-size: 11px; font-weight: 600; }}
@@ -233,8 +243,8 @@ gridview > child:hover, gridview > child:selected {{ background: none; }}
 .app-card {{
   background: {SURFACE_CONTAINER}; border-radius: 28px; padding: 16px 18px 12px 18px;
   border: 2px solid transparent;
-  transition: background-color 220ms {EASE}, border-radius 260ms {SPRING}, box-shadow 220ms {EASE},
-              border-color 220ms {EASE};
+  transition: background-color {FX_DEFAULT}, border-radius {SP_DEFAULT}, box-shadow {FX_DEFAULT},
+              border-color {FX_DEFAULT};
   box-shadow: 0 1px 2px {SHADOW_S};
 }}
 .app-card:hover {{ background: {SURFACE_CONTAINER_HIGH}; box-shadow: 0 4px 14px {SHADOW_M}; }}
@@ -242,7 +252,7 @@ gridview > child:hover, gridview > child:selected {{ background: none; }}
 .app-card.is-hidden:hover {{ background: {SURFACE_CONTAINER}; }}
 .icon-tile {{
   background: {SURFACE_CONTAINER_HIGHEST}; border-radius: 18px; padding: 8px;
-  transition: border-radius 300ms {SPRING}, background-color 220ms {EASE}, opacity 220ms {EASE};
+  transition: border-radius {SP_FAST}, transform {SP_FAST}, background-color {FX_DEFAULT}, opacity {FX_DEFAULT};
 }}
 .app-card:hover .icon-tile {{ border-radius: 24px; }}
 .app-card.is-custom {{ border-color: alpha({PRIMARY}, .55); }}
@@ -258,17 +268,18 @@ gridview > child:hover, gridview > child:selected {{ background: none; }}
 switch {{
   min-width: 44px; min-height: 24px; border-radius: 16px; padding: 0;
   border: 2px solid {OUTLINE}; background: {SURFACE_CONTAINER_HIGHEST}; box-shadow: none;
-  transition: background-color 250ms {EASE}, border-color 250ms {EASE};
+  transition: background-color {FX_FAST}, border-color {FX_FAST};
 }}
 switch:checked {{ background: {PRIMARY}; border-color: {PRIMARY}; }}
 switch:focus-visible {{ box-shadow: 0 0 0 2px {SURFACE_CONTAINER}, 0 0 0 4px {PRIMARY}; }}
 switch image {{ color: transparent; }}
 switch slider {{
-  min-width: 16px; min-height: 16px; margin: 4px; border-radius: 999px;
-  background: {OUTLINE}; border: none; box-shadow: none; outline: none;
-  transition: min-width 250ms {SPRING}, min-height 250ms {SPRING}, margin 250ms {SPRING}, background-color 250ms {EASE};
+  min-width: 20px; min-height: 20px; margin: 2px; border-radius: 999px;
+  background: {OUTLINE}; border: none; box-shadow: none; outline: none; transform: scale(.8);
+  transition: transform {SP_FAST}, background-color {FX_FAST};
 }}
-switch:checked slider {{ min-width: 20px; min-height: 20px; margin: 2px; background: {ON_PRIMARY}; }}
+switch:checked slider {{ transform: none; background: {ON_PRIMARY}; }}
+switch:active slider {{ transform: scale(1.2); }}
 switch:hover slider {{ background: {ON_SURFACE_VARIANT}; }}
 switch:checked:hover slider {{ background: {PRIMARY_CONTAINER}; }}
 switch:disabled {{ opacity: .45; }}
@@ -360,7 +371,7 @@ button.fab {{
   background-color: {PRIMARY_CONTAINER}; color: {ON_PRIMARY_CONTAINER};
   min-height: 56px; padding: 0 22px; border-radius: 18px; font-size: 15px;
   box-shadow: 0 3px 10px {SHADOW_M};
-  transition: border-radius 260ms {SPRING}, background-color 200ms {EASE}, box-shadow 200ms {EASE};
+  transition: border-radius {SP_FAST}, background-color {FX_FAST}, box-shadow {FX_FAST};
 }}
 button.fab:hover {{ background-color: mix({PRIMARY_CONTAINER}, {ON_PRIMARY_CONTAINER}, .08);
   box-shadow: 0 6px 16px {SHADOW_M}; }}
@@ -435,9 +446,21 @@ scale trough {{ min-height: 6px; border-radius: 999px; background: {SECONDARY_CO
 scale highlight {{ border-radius: 999px; background: {PRIMARY}; }}
 scale slider {{ min-width: 18px; min-height: 18px; border-radius: 999px; background: {PRIMARY}; margin: -7px; }}
 scale value {{ color: {ON_SURFACE_VARIANT}; font-size: 13px; }}
+
+/* Motion. Parts coming in start from an .m-from state, which is applied
+   without a transition and then taken off. */
+.m-float {{ transition: opacity {FX_DEFAULT}, transform {SP_DEFAULT}; }}
+.m-float.m-out {{ opacity: 0; transform: translateY(24px); }}
+.m-page {{ transition: opacity {FX_DEFAULT}, transform {SP_DEFAULT}; }}
+.m-page.m-from.m-below {{ opacity: 0; transform: translateY(20px); }}
+.m-page.m-from.m-end {{ opacity: 0; transform: translateX(36px); }}
+.m-page.m-from.m-end:dir(rtl) {{ transform: translateX(-36px); }}
+.m-page.m-from.m-start {{ opacity: 0; transform: translateX(-36px); }}
+.m-page.m-from.m-start:dir(rtl) {{ transform: translateX(36px); }}
 """
 
 REDUCE_MOTION = "* { transition: none; }"
+STILL = motion.STILL
 # Without a compositor, shadows around popups show as black frames. Shadows
 # inside the window are fine.
 NO_COMPOSITOR = "popover > contents, tooltip { box-shadow: none; }"
@@ -464,6 +487,14 @@ def scale_px(css: str, f: float) -> str:
         is_font = decl.strip().startswith("font-size")
         out.append(re.sub(r"(-?\d+(?:\.\d+)?)px", repl(is_font), decl))
     return "".join(out)
+
+
+def stylesheet(palette: dict, factor: float = 1.0) -> str:
+    """The whole stylesheet for a palette and size."""
+    css = CSS.format(FONT=FONT, ICON=ICON, **motion.tokens(), **palette)
+    css += "".join(f".swatch-{s} {{ background-color: #{s}; }}\n"
+                   for s, _n in theme.SEEDS + theme.EXTRA_COLORS)
+    return scale_px(css, factor)
 
 
 def load_css(provider: Gtk.CssProvider, css: str) -> None:
@@ -497,13 +528,12 @@ class Style:
             load_css(self.flat, NO_COMPOSITOR)
         self._anim = 0
         self.reduced = False
+        self._desktop_anims = None
+        load_css(self.motion, STILL)
         self._reload()
 
     def _reload(self, pal=None):
-        css = CSS.format(FONT=FONT, ICON=ICON, EASE=EASE, SPRING=SPRING, **(pal or self.palette))
-        css += "".join(f".swatch-{s} {{ background-color: #{s}; }}\n"
-                       for s, _n in theme.SEEDS + theme.EXTRA_COLORS)
-        load_css(self.main, scale_px(css, self.factor))
+        load_css(self.main, stylesheet(pal or self.palette, self.factor))
 
     def rgb(self, role: str):
         h = self.palette[role].lstrip("#")
@@ -515,11 +545,16 @@ class Style:
             self._reload()
 
     def set_reduce_motion(self, on: bool):
-        load_css(self.motion, REDUCE_MOTION if on else "")
+        """Reduce motion in Settings, on top of the desktop's own setting:
+        animations play only if neither turns them off."""
         settings = Gtk.Settings.get_default()
+        if self._desktop_anims is None:
+            self._desktop_anims = settings.get_property("gtk-enable-animations") if settings else True
+        off = on or not self._desktop_anims
+        load_css(self.motion, STILL + (REDUCE_MOTION if off else ""))
         if settings is not None:
-            settings.set_property("gtk-enable-animations", not on)
-        self.reduced = on
+            settings.set_property("gtk-enable-animations", not off)
+        self.reduced = off
 
     def _set_gtk_dark(self, dark):
         # So the few stock GTK windows (About) match the app.

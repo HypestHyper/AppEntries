@@ -30,6 +30,7 @@ class AppRow(Gtk.Box):
         self._handler = 0
         self._icon_name = None
         self._pointer = False
+        self._still = 0     # frames left without transitions
 
         self.check = Gtk.CheckButton(valign=Gtk.Align.CENTER, visible=False)
         self.check.set_can_target(False)  # the whole row takes the click
@@ -98,10 +99,27 @@ class AppRow(Gtk.Box):
     # -- binding ------------------------------------------------------------
 
     def bind(self, item):
+        if item is not self.item:
+            self._hold_still()
         self.unbind()
         self.item = item
         self._handler = item.connect("changed", lambda *_: self.refresh())
         self.refresh()
+
+    def _hold_still(self):
+        """Reused for another app as the list scrolls: take on its look at
+        once, without animating, until it has been drawn."""
+        if not self._still:
+            self.add_css_class("m-still")
+            self.add_tick_callback(self._still_tick)
+        self._still = 2
+
+    def _still_tick(self, *_):
+        self._still -= 1
+        if self._still > 0:
+            return True
+        self.remove_css_class("m-still")
+        return False
 
     def unbind(self):
         if self.item is not None and self._handler:

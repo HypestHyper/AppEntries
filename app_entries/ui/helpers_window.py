@@ -8,6 +8,7 @@ from gettext import gettext as _
 from gi.repository import Gdk, Gio, GLib, Gtk
 
 from .. import helpers, pkgmanagers, terminal, uninstall
+from . import motion
 from .app_card import gicon_for
 from .dialogs import Dialog, error_dialog, run_bg
 from .widgets import button, card, hbox, icon, label, vbox
@@ -82,7 +83,7 @@ class HelpersWindow(Gtk.Window):
             more = vbox(10)
             for x in missing:
                 more.append(self._row(x))
-            reveal = Gtk.Revealer(child=more, reveal_child=False,
+            reveal = Gtk.Revealer(transition_duration=motion.SLIDE, child=more, reveal_child=False,
                                   transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
             add = Gtk.ToggleButton(halign=Gtk.Align.START)
             add.set_child(hbox(6, icon("add"), Gtk.Label(label=_("Helper apps you don't have ({n})")
