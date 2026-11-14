@@ -261,9 +261,10 @@ class WrapBox(Gtk.Widget):
 
 
 class _ClampLayout(Gtk.LayoutManager):
-    def __init__(self, maximum):
+    def __init__(self, maximum, start=False):
         super().__init__()
         self.maximum = maximum
+        self.start = start
 
     def do_get_request_mode(self, widget):
         return Gtk.SizeRequestMode.HEIGHT_FOR_WIDTH
@@ -284,16 +285,20 @@ class _ClampLayout(Gtk.LayoutManager):
         if child is None:
             return
         w = max(min(width, self.maximum), child.measure(Gtk.Orientation.HORIZONTAL, -1)[0])
-        x = max(0, (width - w) // 2)
+        if self.start:
+            x = max(0, width - w) if widget.get_direction() == Gtk.TextDirection.RTL else 0
+        else:
+            x = max(0, (width - w) // 2)
         child.allocate(w, height, -1, Gsk.Transform().translate(Graphene.Point().init(x, 0)))
 
 
 class Clamp(Gtk.Widget):
-    """Centres one child and keeps it at most `maximum` pixels wide."""
+    """Centres one child (or with `start`, keeps it at the leading edge) and
+    keeps it at most `maximum` pixels wide."""
 
-    def __init__(self, child, maximum=760):
+    def __init__(self, child, maximum=760, start=False):
         super().__init__(hexpand=True)
-        self.set_layout_manager(_ClampLayout(maximum))
+        self.set_layout_manager(_ClampLayout(maximum, start))
         child.set_parent(self)
 
     def do_dispose(self):
@@ -677,7 +682,7 @@ class NavRail(Gtk.Box):
         over = Gtk.Overlay(halign=Gtk.Align.CENTER)
         over.set_child(pill)
         over.add_overlay(badge)
-        name = Gtk.Label(label=text, ellipsize=Pango.EllipsizeMode.END, max_width_chars=9)
+        name = Gtk.Label(label=text)
         name.add_css_class("rail-label")
         b.set_child(vbox(4, over, name))
         b.set_tooltip_text(text)

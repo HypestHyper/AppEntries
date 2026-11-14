@@ -93,8 +93,9 @@ LEGACY_FILTERS = {"hidden": ("view", "hidden"), "customised": ("only", "customis
 PAGES = ("issues", "autostart", "defaults", "settings", "updates")  # tabs that aren't app lists
 SELF_ID = APP_ID + ".desktop"
 COMPACT_BELOW = 900
-SPLIT_FROM = 980        # window width from which the list and the app page sit side by side
+SPLIT_FROM = 860        # window width from which the list and the app page sit side by side
 LIST_WIDTH = 440
+LIST_MAX = 600          # the list is never wider, so each row's eye stays near its name
 HYSTERESIS = 60
 
 
@@ -238,8 +239,13 @@ class MainWindow(Gtk.ApplicationWindow):
                                               "(Ctrl+Shift+N)"),
                                     cb=lambda *_: self.new_web_app()))
         self.new_btns.set_valign(Gtk.Align.CENTER)
-        self.toolbar = hbox(12, self.search_entry, self.view_seg, self.new_btns, self.filter_menu, self.sort_menu,
-                            self.select_btn)
+        # The buttons wrap onto a second line when the window is narrow.
+        tools = WrapBox(12, 8)
+        for w in (self.view_seg, self.new_btns, self.filter_menu, self.sort_menu, self.select_btn):
+            tools.append(w)
+        tools.set_valign(Gtk.Align.CENTER)
+        self.search_entry.set_size_request(180, -1)
+        self.toolbar = hbox(12, self.search_entry, tools)
         content.append(self.toolbar)
         # While searching Shown or Hidden, a line says when the other view
         # has matches too, with a button to see them.
@@ -295,7 +301,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE,
                                transition_duration=180, hhomogeneous=False, vexpand=True)
         self.stack.add_named(loading, "loading")
-        self.stack.add_named(grid_scroll, "grid")
+        self.stack.add_named(Clamp(grid_scroll, LIST_MAX, start=True), "grid")
         self.stack.add_named(empty, "empty")
         # The other tabs' pages are built the first time they're opened
         # (_ensure_page), so they don't slow down start-up.
