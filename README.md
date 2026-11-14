@@ -108,7 +108,7 @@ Add `--yes` to skip questions in scripts. See `app-entries --help`.
 | Keys | Action |
 | --- | --- |
 | `Ctrl+F`, or start typing | Search |
-| `Alt+1` … `Alt+9` | Switch tabs |
+| `Alt+1` … `Alt+7` | Go to Apps, Launchers, Issues, Autostart, Defaults, Updates or Settings |
 | `Ctrl+N` / `Ctrl+Shift+N` | New launcher / New web app |
 | `Enter` on a card | Hide or show it |
 | `Ctrl+Z` | Undo the last change |

@@ -641,6 +641,117 @@ class TabBar(Gtk.Box):
             lb.set_visible(str(n) != "")
 
 
+class NavRail(Gtk.Box):
+    """The navigation rail down the left of the window: an icon with a short
+    label for each place, and a badge for counts like issues. `items` are
+    (key, text, icon) at the top, `bottom` the same at the bottom. Emits
+    "changed" with the key when the user picks one."""
+
+    __gsignals__: ClassVar[dict] = {"changed": (GObject.SignalFlags.RUN_FIRST, None, (str,))}
+
+    def __init__(self, items, bottom, active):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        self.add_css_class("navrail")
+        self._buttons = {}
+        self._badges = {}
+        self._quiet = False
+        self._group = None
+        for item in items:
+            self.append(self._item(*item))
+        self.append(Gtk.Box(vexpand=True))
+        for item in bottom:
+            self.append(self._item(*item))
+        self.set_active(active)
+
+    def _item(self, key, text, icon_name):
+        b = Gtk.ToggleButton()
+        b.add_css_class("rail-item")
+        pill = Gtk.Box(halign=Gtk.Align.CENTER)
+        pill.add_css_class("rail-pill")
+        glyph_ = icon(icon_name)
+        glyph_.set_hexpand(True)
+        pill.append(glyph_)
+        badge = Gtk.Label(visible=False, halign=Gtk.Align.END, valign=Gtk.Align.START)
+        badge.add_css_class("rail-badge")
+        badge.add_css_class("tnum")
+        over = Gtk.Overlay(halign=Gtk.Align.CENTER)
+        over.set_child(pill)
+        over.add_overlay(badge)
+        name = Gtk.Label(label=text, ellipsize=Pango.EllipsizeMode.END, max_width_chars=9)
+        name.add_css_class("rail-label")
+        b.set_child(vbox(4, over, name))
+        b.set_tooltip_text(text)
+        b.update_property([Gtk.AccessibleProperty.LABEL], [text])
+        if self._group is None:
+            self._group = b
+        else:
+            b.set_group(self._group)
+        b.connect("toggled", self._toggled, key)
+        self._buttons[key] = b
+        self._badges[key] = badge
+        return b
+
+    def _toggled(self, b, key):
+        if b.get_active() and not self._quiet:
+            self.emit("changed", key)
+
+    def set_active(self, key):
+        b = self._buttons.get(key)
+        if b and not b.get_active():
+            self._quiet = True
+            b.set_active(True)
+            self._quiet = False
+
+    def set_count(self, key, n):
+        """A badge on the item; "" or 0 hides it."""
+        lb = self._badges.get(key)
+        if lb is not None:
+            text = str(n) if n else ""
+            set_text(lb, text)
+            lb.set_visible(bool(text))
+
+
+class Segmented(Gtk.Box):
+    """A row of joined buttons, one of them chosen (M3's segmented button).
+    `items` are (key, text). Emits "changed" with the key."""
+
+    __gsignals__: ClassVar[dict] = {"changed": (GObject.SignalFlags.RUN_FIRST, None, (str,))}
+
+    def __init__(self, items, active):
+        super().__init__(spacing=0, valign=Gtk.Align.CENTER)
+        self.add_css_class("segmented")
+        self._buttons = {}
+        self._texts = dict(items)
+        self._quiet = False
+        first = None
+        for key, text in items:
+            b = Gtk.ToggleButton(label=text)
+            if first is None:
+                first = b
+            else:
+                b.set_group(first)
+            b.connect("toggled", self._toggled, key)
+            self._buttons[key] = b
+            self.append(b)
+        self.set_active(active)
+
+    def _toggled(self, b, key):
+        if b.get_active() and not self._quiet:
+            self.emit("changed", key)
+
+    def set_active(self, key):
+        b = self._buttons.get(key)
+        if b and not b.get_active():
+            self._quiet = True
+            b.set_active(True)
+            self._quiet = False
+
+    def set_text(self, key, text):
+        b = self._buttons.get(key)
+        if b is not None and b.get_label() != text:
+            b.set_label(text)
+
+
 class Snackbar(Gtk.Revealer):
     """Bottom-centre confirmation with an optional action. Shows for 3.5 s."""
 

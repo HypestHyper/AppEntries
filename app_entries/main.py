@@ -116,8 +116,7 @@ class Application(Gtk.Application):
         self.set_accels_for_action("win.new-web-app", ["<Control><Shift>n"])
         self.set_accels_for_action("win.history", ["<Control>h"])
         self.set_accels_for_action("win.undo-last", ["<Control>z"])
-        for i, key in enumerate(("all", "hidden", "customised", "issues", "mine", "autostart", "defaults",
-                                 "settings", "updates"), 1):
+        for i, key in enumerate(("all", "mine", "issues", "autostart", "defaults", "updates", "settings"), 1):
             self.set_accels_for_action("win.filter::" + key, [f"<Alt>{i}"])
 
     def do_activate(self):

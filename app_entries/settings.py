@@ -14,7 +14,8 @@ from . import APP_ID
 DEFAULTS = {
     "filter": "all",            # all | hidden | system
     "show-no-display": True,
-    "show-hidden": True,
+    "show-hidden": True,        # no longer used: see "view"
+    "view": "shown",            # shown | hidden | all
     "source": "any",
     "sort": "name",             # name | newest            # any, system, flatpak, snap, appimage, steam or user
     "theme": "system",          # system | light | dark

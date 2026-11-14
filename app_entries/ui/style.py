@@ -118,6 +118,24 @@ button.filter:active {{ border-radius: 8px; }}
 .tabbar > button:checked {{ background-color: {SECONDARY_CONTAINER}; color: {ON_SECONDARY_CONTAINER}; border-radius: 12px; }}
 .tabbar > button:checked .icon {{ font-variation-settings: "FILL" 1, "wght" 500, "opsz" 24; }}
 .tabcount {{ font-size: 12px; font-weight: 600; color: {OUTLINE}; }}
+/* Navigation rail */
+.navrail {{ padding: 4px 0 8px 0; min-width: 64px; }}
+.navrail > button.rail-item {{ background: none; box-shadow: none; padding: 4px 0 6px 0; min-height: 0;
+  border-radius: 16px; color: {ON_SURFACE_VARIANT}; }}
+.rail-pill {{ min-width: 48px; min-height: 30px; border-radius: 15px; transition: background-color 150ms {EASE}; }}
+.navrail > button.rail-item:hover .rail-pill {{ background-color: alpha({ON_SURFACE}, .08); }}
+.navrail > button.rail-item:checked .rail-pill {{ background-color: {SECONDARY_CONTAINER}; color: {ON_SECONDARY_CONTAINER}; }}
+.navrail > button.rail-item:checked .icon {{ font-variation-settings: "FILL" 1, "wght" 500, "opsz" 24; }}
+.navrail > button.rail-item:checked {{ color: {ON_SURFACE}; }}
+.rail-label {{ font-size: 11px; font-weight: 600; }}
+.rail-badge {{ background: {ERROR}; color: {ON_PRIMARY}; border-radius: 8px; font-size: 10px; font-weight: 700;
+  min-width: 16px; min-height: 16px; padding: 0 4px; margin: -2px -2px 0 0; }}
+/* Segmented button */
+.segmented {{ border: 1px solid {OUTLINE_VARIANT}; border-radius: 20px; padding: 0; }}
+.segmented > button {{ background: none; box-shadow: none; border-radius: 20px; min-height: 36px; padding: 0 14px;
+  color: {ON_SURFACE}; }}
+.segmented > button:hover {{ background-color: alpha({ON_SURFACE}, .08); }}
+.segmented > button:checked {{ background-color: {SECONDARY_CONTAINER}; color: {ON_SECONDARY_CONTAINER}; }}
 .tabbar > button:checked .tabcount {{ color: {ON_SECONDARY_CONTAINER}; }}
 
 /* Surfaces */

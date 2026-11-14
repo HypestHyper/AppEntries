@@ -36,10 +36,10 @@ from .style import SIZES
 from .widgets import (
     Chip,
     Clamp,
+    NavRail,
     SearchField,
+    Segmented,
     Snackbar,
-    TabBar,
-    Toggle,
     WrapBox,
     button,
     hbox,
@@ -74,17 +74,20 @@ DefaultsPage = _lazy(".defaults_page", "DefaultsPage")
 SettingsPage = _lazy(".settings_page", "SettingsPage")
 UpdatesPage = _lazy(".updates", "UpdatesPage")
 
-FILTERS = [
-    ("all", _("All apps"), "apps"),
-    ("hidden", _("Hidden"), "visibility_off"),
-    ("customised", _("Customised"), "edit_note"),
+# The places in the navigation rail: (setting value, label, icon).
+RAIL = [
+    ("all", _("Apps"), "apps"),
+    ("mine", _("Launchers"), "rocket_launch"),
     ("issues", _("Issues"), "healing"),
-    ("mine", _("My launchers"), "rocket_launch"),
     ("autostart", _("Autostart"), "power_settings_new"),
-    ("defaults", _("Default apps"), "star"),
-    ("settings", _("Settings"), "tune", True),
-    ("updates", _("Updates"), "system_update_alt", True),
+    ("defaults", _("Defaults"), "star"),
 ]
+RAIL_BOTTOM = [
+    ("updates", _("Updates"), "system_update_alt"),
+    ("settings", _("Settings"), "tune"),
+]
+# Older versions had Hidden and Customised as tabs; they're views of Apps now.
+LEGACY_FILTERS = {"hidden": ("view", "hidden"), "customised": ("only", "customised"), "system": None}
 PAGES = ("issues", "autostart", "defaults", "settings", "updates")  # tabs that aren't app lists
 SELF_ID = APP_ID + ".desktop"
 COMPACT_BELOW = 900
@@ -155,16 +158,29 @@ class MainWindow(Gtk.ApplicationWindow):
         self.set_titlebar(hb)
 
     def _build_body(self):
-        root = vbox(14)
-        root.set_margin_top(4)
-        root.set_margin_bottom(14)
-        root.set_margin_start(20)
-        root.set_margin_end(20)
+        content = vbox(14)
+        content.set_margin_top(4)
+        content.set_margin_bottom(14)
+        content.set_margin_end(20)
+        content.set_hexpand(True)
 
-        if self.settings.get("filter") in ("settings", "updates", "autostart", "defaults"):
+        self._only = set()      # extra filters from the Filter menu: customised, new
+        f = self.settings.get("filter")
+        if f in LEGACY_FILTERS:
+            what = LEGACY_FILTERS[f]
+            if what and what[0] == "view":
+                self.settings.set("view", what[1])
+            elif what:
+                self._only.add(what[1])
+            self.settings.set("filter", "all")
+        elif f in ("settings", "updates", "autostart", "defaults"):
             self.settings.set("filter", "all")  # start on the apps, not where you left off
-        self.tabs = TabBar(FILTERS, self.settings.get("filter"))
-        self.tabs.connect("changed", lambda _t, key: self.settings.set("filter", key))
+        self.rail = NavRail(RAIL, RAIL_BOTTOM, self.settings.get("filter"))
+        self.rail.connect("changed", lambda _r, key: self.settings.set("filter", key))
+        self.rail.set_margin_start(8)
+        self.rail.set_margin_end(8)
+        self.rail.set_margin_bottom(10)
+
         # Always-visible search; typing anywhere in the window starts it.
         self.search_entry = SearchField(_("Search apps"), 14, _("Search apps"))
         self.search_entry.set_tooltip_text(_("Search by name, description, command or file ID (Ctrl+F)"))
@@ -172,41 +188,27 @@ class MainWindow(Gtk.ApplicationWindow):
         self.search_entry.connect("search-changed", self._on_search)
         self.search_entry.connect("search-activate", self._on_search_activate)
 
-        self.nodisplay_switch = Toggle(self.settings.get("show-no-display"),
-                                       lambda v: self.settings.set("show-no-display", v))
-        nd_label = label(_("Not in menus"), ("body", "dim"))
-        nodisplay = hbox(10, nd_label, self.nodisplay_switch)
-        nodisplay.set_valign(Gtk.Align.CENTER)
-        nodisplay.set_tooltip_text(_("Also list apps that ask not to appear in menus (NoDisplay), "
-                                     "such as helpers and settings panels"))
-        self.nodisplay_switch.update_property([Gtk.AccessibleProperty.LABEL], [_("Show apps not in menus")])
-        self.tabs.set_hexpand(False)
-        self.tabs.scroller.set_hexpand(False)
-        self.hidden_switch = Toggle(self.settings.get("show-hidden"),
-                                    lambda v: self.settings.set("show-hidden", v))
-        showhidden = hbox(10, label(_("Hidden"), ("body", "dim")), self.hidden_switch)
-        showhidden.set_valign(Gtk.Align.CENTER)
-        showhidden.set_tooltip_text(_("Also list hidden apps. The Hidden tab always shows them."))
-        self.showhidden = showhidden
-        self.hidden_switch.update_property([Gtk.AccessibleProperty.LABEL], [_("Show hidden apps")])
-        root.append(self.tabs)
-        # Where apps come from: a package manager, Flatpak, Snap, AppImage, …
-        # Only the sources you have apps from are listed (see _update_sources).
+        # Shown, Hidden or All: hidden apps stay out of the way unless asked for.
+        self.view_seg = Segmented([("shown", _("Shown")), ("hidden", _("Hidden")), ("all", _("All"))],
+                                  self.settings.get("view"))
+        self.view_seg.connect("changed", lambda _s, key: self.settings.set("view", key))
+        self.view_seg.set_tooltip_text(_("Apps shown in launcher menus, the ones hidden from them, or both"))
+
+        # Where apps come from, and the other filters, in one menu.
         current = self.settings.get("source")
         self._sources = [("any", _("All sources"))] + ([(current, label_for_source(current))]
                                                          if current in health.SOURCES else [])
         # A menu button with the app's own arrow: GTK's DropDown draws its arrow
         # from the icon theme, which holds up the first frame.
-        self.source_label = Gtk.Label(label=self._sources[-1][1])
-        self.source_menu = Gtk.MenuButton(valign=Gtk.Align.CENTER)
-        self.source_menu.set_child(hbox(4, self.source_label, icon("expand_more")))
-        self.source_menu.add_css_class("tonal")
-        self.source_menu.add_css_class("source-menu")
-        self.source_menu.set_tooltip_text(_("Only list apps from one source, like your package manager, Flatpak "
-                                            "or Snap. Only sources you have apps from are listed. Search looks "
-                                            "within it."))
-        self.source_menu.update_property([Gtk.AccessibleProperty.LABEL], [_("Source")])
-        self.source_menu.set_create_popup_func(self._source_popup)
+        self.filter_label = Gtk.Label(label=_("Filter"))
+        self.filter_menu = Gtk.MenuButton(valign=Gtk.Align.CENTER)
+        self.filter_menu.set_child(hbox(6, icon("tune"), self.filter_label, icon("expand_more")))
+        self.filter_menu.add_css_class("tonal")
+        self.filter_menu.add_css_class("source-menu")
+        self.filter_menu.set_tooltip_text(_("Only list apps from one source, customised ones or new ones, and "
+                                            "whether to include apps that aren't in menus"))
+        self.filter_menu.update_property([Gtk.AccessibleProperty.LABEL], [_("Filter")])
+        self.filter_menu.set_create_popup_func(self._filter_popup)
         self.sort_label = Gtk.Label(label=self._sort_text())
         self.sort_menu = Gtk.MenuButton(valign=Gtk.Align.CENTER)
         self.sort_menu.set_child(hbox(6, icon("sort"), self.sort_label, icon("expand_more")))
@@ -222,9 +224,19 @@ class MainWindow(Gtk.ApplicationWindow):
         self.select_btn.set_tooltip_text(_("Pick several apps, then hide, show or restore them together"))
         self.select_btn.update_property([Gtk.AccessibleProperty.LABEL], [_("Select several apps")])
         self.select_btn.connect("toggled", lambda b: self.set_selecting(b.get_active()))
-        self.toolbar = hbox(16, self.search_entry, self.source_menu, self.sort_menu, showhidden, nodisplay,
+        # On Launchers, making a new one takes the place of Shown/Hidden/All.
+        self.new_btns = hbox(8,
+                             button(_("New launcher"), "add", "filled", small=True,
+                                    tooltip=_("Make a launcher for a program, a script or commands (Ctrl+N)"),
+                                    cb=lambda *_: self.new_launcher()),
+                             button(_("New web app"), "language", "tonal", small=True,
+                                    tooltip=_("Open a site in its own window, without the address bar "
+                                              "(Ctrl+Shift+N)"),
+                                    cb=lambda *_: self.new_web_app()))
+        self.new_btns.set_valign(Gtk.Align.CENTER)
+        self.toolbar = hbox(12, self.search_entry, self.view_seg, self.new_btns, self.filter_menu, self.sort_menu,
                             self.select_btn)
-        root.append(self.toolbar)
+        content.append(self.toolbar)
 
         # Model: store -> filter -> sort -> grid
         self.filter = Gtk.CustomFilter.new(self._match)
@@ -271,7 +283,7 @@ class MainWindow(Gtk.ApplicationWindow):
         # (_ensure_page), so they don't slow down start-up.
         self.issues = self.autostart = self.defaults = None
         updates = self.get_application().updates
-        updates.connect(lambda: self.tabs.set_count("updates", "1" if updates.release else ""))
+        updates.connect(lambda: self.rail.set_count("updates", "1" if updates.release else ""))
         self.report = None
         self._auto_busy = False
         self._sort_newest = self.settings.get("sort") == "newest"
@@ -281,23 +293,11 @@ class MainWindow(Gtk.ApplicationWindow):
         overlay = Gtk.Overlay(vexpand=True)
         overlay.set_child(self.stack)
         overlay.add_overlay(self.snackbar)
-        # Floating action button, bottom right, over the app grid.
-        self.fab = button(_("New launcher"), "add", "fab",
-                          tooltip=_("Make a launcher for a script or program (Ctrl+N)"),
-                          cb=lambda *_: self.new_launcher())
-        web = button(_("New web app"), "language", "fab tonal",
-                     tooltip=_("Open a site in its own window, without the address bar (Ctrl+Shift+N)"),
-                     cb=lambda *_: self.new_web_app())
-        self.fabs = hbox(12, web, self.fab)
-        self.fabs.set_halign(Gtk.Align.END)
-        self.fabs.set_valign(Gtk.Align.END)
-        self.fabs.set_margin_end(8)
-        self.fabs.set_margin_bottom(8)
-        overlay.add_overlay(self.fabs)
         overlay.add_overlay(self._build_selection_bar())
         self._update_tab_controls()
-        root.append(overlay)
-        self.set_child(root)
+        content.append(overlay)
+        body = hbox(0, self.rail, content)
+        self.set_child(body)
 
     def _ensure_page(self, name):
         """Build a tab's page the first time it's shown."""
@@ -412,25 +412,68 @@ class MainWindow(Gtk.ApplicationWindow):
         have = {i.app.source for i in self.apps.items()} | {current}
         self._sources = [("any", _("All sources"))] + [(k, label_for_source(k)) for k in health.SOURCES
                                                          if k in have]
-        set_text(self.source_label, dict(self._sources).get(current, self._sources[0][1]))
+        self._update_filter_label()
 
-    def _source_popup(self, menu_button):
+    def _update_filter_label(self):
+        """"Filter", or what's filtering: "Flatpak", "Customised", "2 filters"."""
+        on = []
+        source = self.settings.get("source")
+        if source != "any":
+            on.append(dict(self._sources).get(source, label_for_source(source)))
+        names = {"customised": _("Customised"), "new": _("New")}
+        on += [names[k] for k in ("customised", "new") if k in self._only]
+        if not self.settings.get("show-no-display"):
+            on.append(_("In menus only"))
+        text = (_("Filter") if not on else on[0] if len(on) == 1
+                else ngettext("{n} filter", "{n} filters", len(on)).format(n=len(on)))
+        set_text(self.filter_label, text)
+        if on:
+            self.filter_menu.add_css_class("filter-on")
+        else:
+            self.filter_menu.remove_css_class("filter-on")
+
+    def _filter_popup(self, menu_button):
         current = self.settings.get("source")
         box = vbox(2)
-        box.set_size_request(200, -1)
-        for key, text in self._sources:
+        box.set_size_request(240, -1)
+
+        def heading(text):
+            h = label(text, ("small", "dim"))
+            h.set_margin_start(12)
+            h.set_margin_top(6)
+            h.set_margin_bottom(2)
+            return h
+
+        def row(text, on, cb):
             b = Gtk.Button()
             b.add_css_class("flat")
             b.add_css_class("source-item")
             mark = icon("check", ("accent",))
-            mark.set_opacity(1 if key == current else 0)
+            mark.set_opacity(1 if on else 0)
             b.set_child(hbox(10, mark, label(text, ("body",))))
-            b.connect("clicked", lambda _b, k=key: (menu_button.popdown(), self._choose_source(k)))
-            box.append(b)
+            b.connect("clicked", lambda _b: (menu_button.popdown(), GLib.idle_add(lambda: (cb(), False)[1])))
+            return b
+
+        box.append(heading(_("Source")))
+        for key, text in self._sources:
+            box.append(row(text, key == current, lambda k=key: self.settings.set("source", k)))
+        box.append(heading(_("Only")))
+        box.append(row(_("Customised"), "customised" in self._only, lambda: self._toggle_only("customised")))
+        box.append(row(_("New since last time"), "new" in self._only, lambda: self._toggle_only("new")))
+        box.append(heading(_("Include")))
+        box.append(row(_("Apps not in menus"), self.settings.get("show-no-display"),
+                       lambda: self.settings.set("show-no-display", not self.settings.get("show-no-display"))))
         pop = Gtk.Popover()
         pop.add_css_class("options")
         pop.set_child(box)
         menu_button.set_popover(pop)
+
+    def _toggle_only(self, key):
+        if key is not None:
+            self._only ^= {key}
+        self._update_filter_label()
+        self.filter.changed(Gtk.FilterChange.DIFFERENT)
+        self._update_counts()
 
     def _choose_source(self, key):
         GLib.idle_add(lambda: (self.settings.set("source", key), False)[1])
@@ -438,7 +481,10 @@ class MainWindow(Gtk.ApplicationWindow):
     def _on_setting(self, key):
         if key == "filter":
             v = self.settings.get("filter")
-            self.tabs.set_active(v)
+            if v in LEGACY_FILTERS:
+                self.settings.set("filter", "all")
+                return
+            self.rail.set_active(v)
             self._filter_action.set_state(GLib.Variant("s", v))
             self.filter.changed(Gtk.FilterChange.DIFFERENT)
             self._update_tab_controls()
@@ -450,16 +496,17 @@ class MainWindow(Gtk.ApplicationWindow):
         elif key == "source":
             if self._loaded:
                 self._update_sources()
+            self._update_filter_label()
             self.filter.changed(Gtk.FilterChange.DIFFERENT)
             self._update_counts()
-        elif key == "show-hidden":
-            self.hidden_switch.set_value(self.settings.get("show-hidden"))
+        elif key == "view":
+            self.view_seg.set_active(self.settings.get("view"))
             self.filter.changed(Gtk.FilterChange.DIFFERENT)
             self._update_counts()
         elif key == "show-no-display":
             v = self.settings.get("show-no-display")
-            self.nodisplay_switch.set_value(v)
             self._nd_action.set_state(GLib.Variant("b", v))
+            self._update_filter_label()
             self.filter.changed(Gtk.FilterChange.DIFFERENT)
             self._update_counts()
         elif key in ("hide-uninstalled-edits", "restore-reinstalled-edits"):
@@ -555,8 +602,8 @@ class MainWindow(Gtk.ApplicationWindow):
         return all(t in item.search for t in self._query.split())
 
     def _match(self, item, lift=()):
-        """Whether the app is listed on this tab. `lift` names filters to
-        ignore: query, source, hidden, nodisplay."""
+        """Whether the app is listed on this page. `lift` names filters to
+        ignore: query, source, only, hidden (the Shown/Hidden view), nodisplay."""
         a = item.app
         if "nodisplay" not in lift and not self._visible_base(a):
             return False
@@ -565,23 +612,21 @@ class MainWindow(Gtk.ApplicationWindow):
         source = self.settings.get("source")
         if "source" not in lift and source != "any" and a.source != source:
             return False
-        f = self.settings.get("filter")
-        if f == "hidden":
-            return a.hidden
-        if a.hidden and not self.settings.get("show-hidden") and "hidden" not in lift:
+        if "customised" in self._only and "only" not in lift and not a.customised:
             return False
-        if f == "customised":
-            return a.customised
-        if f == "mine":
+        if "new" in self._only and "only" not in lift and not a.new:
+            return False
+        if self.settings.get("filter") == "mine":
             return a.created
-        return True
+        view = self.settings.get("view")
+        return "hidden" in lift or view == "all" or a.hidden == (view == "hidden")
 
     def _update_tab_controls(self):
         f = self.settings.get("filter")
-        # The Hidden tab always lists hidden apps; Issues isn't a list.
-        self.toolbar.set_visible(f not in ("autostart", "defaults", "settings", "updates"))
-        self.showhidden.set_visible(f not in ("hidden", "issues"))
-        self.fabs.set_visible(f == "mine" and not self._selecting)
+        # Issues, Autostart, Defaults, Settings and Updates aren't app lists.
+        self.toolbar.set_visible(f in ("all", "mine"))
+        self.view_seg.set_visible(f == "all")
+        self.new_btns.set_visible(f == "mine")
 
     def _compare(self, a, b, *_):
         ka = (a.app.name.casefold(), a.app.id)
@@ -647,13 +692,11 @@ class MainWindow(Gtk.ApplicationWindow):
         # Each tab's total, whatever the search, source and switches.
         total = self.apps.items()
         hidden = sum(1 for i in total if i.app.hidden)
-        self.tabs.set_count("all", len(total))
-        self.tabs.set_count("hidden", hidden)
-        self.tabs.set_count("customised", sum(1 for i in total if i.app.customised))
-        self.tabs.set_count("mine", sum(1 for i in total if i.app.created))
+        self.view_seg.set_text("shown", _("Shown {n}").format(n=len(total) - hidden))
+        self.view_seg.set_text("hidden", _("Hidden {n}").format(n=hidden))
         if self._loaded:
-            text = _("{n} apps · {h} hidden").format(n=len(total), h=hidden)
-            self.chip.set(text, "ok")
+            # The counts are on Shown and Hidden; the chip is only for news.
+            self.chip.set_visible(False)
             # A list that stays empty doesn't say it changed, so the empty
             # page's filter buttons are brought up to date here.
             if self.stack.get_visible_child_name() == "empty":
@@ -697,18 +740,19 @@ class MainWindow(Gtk.ApplicationWindow):
             elif self._query:
                 set_text(self.empty_title, _("No apps match “{q}”").format(q=self.search_entry.get_text().strip()))
                 set_text(self.empty_body, _("Try a different name, command or file ID."))
-            elif f == "customised":
+            elif "customised" in self._only:
                 set_text(self.empty_title, _("Nothing is customised"))
                 set_text(self.empty_body, _("Apps you change with Edit, or that have your own copy of their entry, "
                                             "are listed here. Restore original puts the system version back."))
             elif self.settings.get("source") != "any" and not self._query:
                 set_text(self.empty_title, _("No apps from this source"))
-                set_text(self.empty_body, _("Choose All sources next to the search box to see everything."))
+                set_text(self.empty_body, _("Choose All sources in the Filter menu to see everything."))
             elif f == "mine":
                 set_text(self.empty_title, _("No launchers yet"))
-                set_text(self.empty_body, _("Use New launcher to make one for a script or program, or New web app "
-                                            "to open a site in its own window. What you make is listed here."))
-            elif f == "hidden":
+                set_text(self.empty_body, _("Use New launcher to make one for a program, a script or commands, or "
+                                            "New web app to open a site in its own window. What you make is "
+                                            "listed here."))
+            elif self.settings.get("view") == "hidden":
                 set_text(self.empty_title, _("Nothing is hidden"))
                 set_text(self.empty_body,
                          _("Turn on “Hidden from launcher” on any app to hide it from your app menus."))
@@ -735,8 +779,10 @@ class MainWindow(Gtk.ApplicationWindow):
         others = [(key, text, do) for key, on, text, do in (
             ("source", self.settings.get("source") != "any", _("Show all sources"),
              lambda: self.settings.set("source", "any")),
-            ("hidden", not self.settings.get("show-hidden") and self.settings.get("filter") != "hidden",
-             _("Show hidden apps"), lambda: self.settings.set("show-hidden", True)),
+            ("hidden", self.settings.get("filter") == "all" and self.settings.get("view") != "all",
+             _("Show shown and hidden apps"), lambda: self.settings.set("view", "all")),
+            ("only", bool(self._only), _("Show all, not only customised or new"),
+             lambda: (self._only.clear(), self._toggle_only(None))),
             ("nodisplay", not self.settings.get("show-no-display"), _("Show apps not in menus"),
              lambda: self.settings.set("show-no-display", True)),
         ) if on]
@@ -849,6 +895,7 @@ class MainWindow(Gtk.ApplicationWindow):
                 return
             if isinstance(result, Exception):
                 self.chip.set(_("Couldn't read apps"), "error")
+                self.chip.set_visible(True)
                 return
             apps, report = result
             if not self._loaded:
@@ -860,7 +907,7 @@ class MainWindow(Gtk.ApplicationWindow):
             self.report = report
             if self.issues is not None:
                 self.issues.update(report)
-            self.tabs.set_count("issues", report.count)
+            self.rail.set_count("issues", report.count)
             self._handle_uninstalled(report)
             first = not self._loaded
             self._loaded = True

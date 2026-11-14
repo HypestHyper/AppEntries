@@ -34,7 +34,18 @@
     </key>
     <key name="show-hidden" type="b">
       <default>true</default>
-      <summary>List hidden apps in All apps and System</summary>
+      <summary>No longer used</summary>
+      <description>Replaced by "view".</description>
+    </key>
+    <key name="view" type="s">
+      <choices>
+        <choice value="shown"/>
+        <choice value="hidden"/>
+        <choice value="all"/>
+      </choices>
+      <default>"shown"</default>
+      <summary>Which apps the Apps list shows</summary>
+      <description>Apps shown in launcher menus, the ones hidden from them, or all.</description>
     </key>
     <key name="show-no-display" type="b">
       <default>true</default>
