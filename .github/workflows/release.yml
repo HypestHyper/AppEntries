@@ -41,7 +41,7 @@ jobs:
     if: github.event_name != 'workflow_dispatch' || inputs.remove == ''
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Work out the version
         run: |
           v=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' app_entries/__init__.py)
