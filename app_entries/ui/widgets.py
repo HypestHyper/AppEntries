@@ -178,6 +178,14 @@ def option_button(icon_name, title, explanation, cb=None, danger=False):
     return b
 
 
+def _unparent_children(widget, *_a):
+    c = widget.get_first_child()
+    while c is not None:
+        nxt = c.get_next_sibling()
+        c.unparent()
+        c = nxt
+
+
 class _WrapLayout(Gtk.LayoutManager):
     """Lays children out left to right, starting a new line when one doesn't
     fit, each at its natural width (unlike FlowBox, which uses columns)."""
@@ -240,6 +248,10 @@ class WrapBox(Gtk.Widget):
     def __init__(self, spacing=6, row_spacing=4):
         super().__init__()
         self.set_layout_manager(_WrapLayout(spacing, row_spacing))
+        # PyGObject doesn't always call do_dispose for widgets made in
+        # Python; "destroy" comes from GTK's own dispose, so the children are
+        # let go either way.
+        self.connect("destroy", _unparent_children)
 
     def append(self, child):
         child.set_parent(self)
@@ -252,11 +264,7 @@ class WrapBox(Gtk.Widget):
             c = nxt
 
     def do_dispose(self):
-        c = self.get_first_child()
-        while c is not None:
-            nxt = c.get_next_sibling()
-            c.unparent()
-            c = nxt
+        _unparent_children(self)
         Gtk.Widget.do_dispose(self)
 
 
@@ -300,11 +308,10 @@ class Clamp(Gtk.Widget):
         super().__init__(hexpand=True)
         self.set_layout_manager(_ClampLayout(maximum, start))
         child.set_parent(self)
+        self.connect("destroy", _unparent_children)
 
     def do_dispose(self):
-        c = self.get_first_child()
-        if c is not None:
-            c.unparent()
+        _unparent_children(self)
         Gtk.Widget.do_dispose(self)
 
 

@@ -1093,6 +1093,8 @@ class MainWindow(Gtk.ApplicationWindow):
     def _open_app(self, item):
         """A click or Enter on a row: its page, beside the list or (in a
         narrow window) instead of it."""
+        if self.app_page.form_open():
+            self.app_page.close_form()
         old, self._current = self._current, item
         self.app_page.show(item)
         for it in (old, item):
@@ -1114,8 +1116,9 @@ class MainWindow(Gtk.ApplicationWindow):
     def _update_split(self):
         """List and page side by side, or one of them in a narrow window."""
         lists = self.settings.get("filter") in ("all", "mine")
-        page = lists and (not self._narrow or self._current is not None)
-        listing = not lists or not self._narrow or self._current is None
+        busy = self._current is not None or self.app_page.form_open()
+        page = lists and (not self._narrow or busy)
+        listing = not lists or not self._narrow or not busy
         self.app_page.set_visible(page)
         self.app_page.set_narrow(self._narrow)
         self.list_area.set_visible(listing)
@@ -1353,13 +1356,34 @@ class MainWindow(Gtk.ApplicationWindow):
                           after=(lambda _r: (after(), [])[1]) if after is not None else None)
 
     def new_launcher(self):
-        LauncherWindow(self, self._save_launcher, self._save_raw,
-                       glyph_color=self.style.palette["ON_SURFACE"], highlight=self._highlight()).present()
+        self._show_form(LauncherWindow(self, self._save_launcher, self._save_raw,
+                                       glyph_color=self.style.palette["ON_SURFACE"], highlight=self._highlight(),
+                                       on_close=self._close_form))
 
     def new_web_app(self):
-        WebAppWindow(self, self._save_launcher, glyph_color=self.style.palette["ON_SURFACE"]).present()
+        self._show_form(WebAppWindow(self, self._save_launcher, glyph_color=self.style.palette["ON_SURFACE"],
+                                     on_close=self._close_form))
+
+    def _show_form(self, form, back_to=None):
+        """A launcher or web app form, in the page beside the list. When it
+        closes, `back_to` (the launcher being edited) shows again."""
+        self._form_back_to = back_to
         if self.settings.get("filter") != "mine":
             self.settings.set("filter", "mine")
+        old, self._current = self._current, None
+        if old is not None:
+            old.emit("changed")
+        self.app_page.show_form(form)
+        self._update_split()
+        GLib.idle_add(lambda: (form.child_focus(Gtk.DirectionType.TAB_FORWARD), False)[1])
+
+    def _close_form(self):
+        self.app_page.close_form()
+        back = getattr(self, "_form_back_to", None)
+        self._form_back_to = None
+        if back is not None and self.apps.by_id.get(back.app.id) is not None:
+            self._open_app(self.apps.by_id[back.app.id])
+        self._update_split()
 
     def _highlight(self):
         rgba = Gdk.RGBA()
@@ -1532,16 +1556,20 @@ class MainWindow(Gtk.ApplicationWindow):
         elif action == "delete":
             self._confirm_delete_launcher(app)
         elif action == "edit" and app.created and self._web_spec(app):
-            WebAppWindow(self, self._save_launcher, did=app.id, text=overrides.read_text(app.override_path),
-                         glyph_color=self.style.palette["ON_SURFACE"]).present()
+            self._show_form(WebAppWindow(self, self._save_launcher, did=app.id,
+                                         text=overrides.read_text(app.override_path),
+                                         glyph_color=self.style.palette["ON_SURFACE"], on_close=self._close_form),
+                            back_to=item)
         elif action == "uninstall":
             self.uninstall(app)
         elif action == "helpers":
             HelpersWindow(self, app, self._all_apps()).present()
         elif action == "edit" and app.created:
             text = overrides.read_text(app.override_path)
-            LauncherWindow(self, self._save_launcher, self._save_raw, did=app.id, text=text,
-                           glyph_color=self.style.palette["ON_SURFACE"], highlight=self._highlight()).present()
+            self._show_form(LauncherWindow(self, self._save_launcher, self._save_raw, did=app.id, text=text,
+                                           glyph_color=self.style.palette["ON_SURFACE"],
+                                           highlight=self._highlight(), on_close=self._close_form),
+                            back_to=item)
         elif action == "duplicate":
             spec = launchers.duplicate(overrides.read_text(app.override_path) or "")
             if spec is None:

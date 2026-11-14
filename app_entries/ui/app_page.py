@@ -79,11 +79,30 @@ class AppPage(Gtk.Box):
         overlay = Gtk.Overlay(vexpand=True)
         overlay.set_child(self.scroll)
         overlay.add_overlay(self.savebar)
-        self.append(self.back)
-        self.append(overlay)
+        # The page, or a form (a new launcher or web app, or editing one) in its place.
+        self.view = Gtk.Stack(vexpand=True, hhomogeneous=False)
+        self.view.add_named(vbox(0, self.back, overlay), "page")
+        self.form_holder = vbox(0)
+        self.form_holder.set_vexpand(True)
+        self.view.add_named(self.form_holder, "form")
+        self.append(self.view)
         self._empty()
 
     # -- showing ------------------------------------------------------------
+
+    def show_form(self, widget):
+        """Show a launcher or web app form instead of the page."""
+        self.show(None)
+        clear(self.form_holder)
+        self.form_holder.append(widget)
+        self.view.set_visible_child_name("form")
+
+    def form_open(self):
+        return self.view.get_visible_child_name() == "form"
+
+    def close_form(self):
+        clear(self.form_holder)
+        self.view.set_visible_child_name("page")
 
     def set_narrow(self, narrow):
         self._narrow = narrow

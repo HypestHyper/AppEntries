@@ -142,9 +142,11 @@ button.row-eye.is-on {{ color: {ON_SURFACE_VARIANT}; }}
 .preview-row.is-faded {{ opacity: .38; }}
 .page-switch {{ padding: 0 2px; }}
 .page-note {{ background: alpha({ERROR}, .10); border-radius: 16px; padding: 12px 14px; margin-top: 12px; }}
-.save-bar {{ background: {INVERSE_SURFACE}; border-radius: 28px; padding: 8px 10px 8px 22px; box-shadow: {SHADOW_M}; }}
+.save-bar {{ background: {INVERSE_SURFACE}; border-radius: 28px; padding: 8px 10px 8px 22px; box-shadow: 0 4px 16px {SHADOW_M}; }}
 .save-bar label {{ color: {INVERSE_ON_SURFACE}; }}
 .save-bar button.text {{ color: {INVERSE_PRIMARY}; }}
+.form-bar {{ padding: 4px 12px 12px 4px; }}
+.embedded-form textview.textarea {{ min-height: 64px; }}
 .draft-dot {{ background: {PRIMARY}; border-radius: 4px; min-width: 8px; min-height: 8px; }}
 expander.entry-expander > title {{ padding: 6px 4px; }}
 /* Navigation rail */

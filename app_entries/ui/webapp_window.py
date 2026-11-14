@@ -28,14 +28,15 @@ def _png(data: bytes) -> bytes:
     return bytes(out)
 
 
-class WebAppWindow(Gtk.Window):
-    """on_save(did_or_None, spec, False), the same as the launcher window's."""
+class WebAppWindow(Gtk.Box):
+    """The web app form, shown in the app page. on_save(did_or_None, spec,
+    False), the same as the launcher form's; on_close() when it's done."""
 
-    def __init__(self, parent, on_save, did=None, text=None, glyph_color="#888888"):
+    def __init__(self, parent, on_save, did=None, text=None, glyph_color="#888888", on_close=lambda: None):
         editing = did is not None
-        super().__init__(transient_for=parent, modal=True, title=_("Edit web app") if editing else _("New web app"))
-        self.add_css_class("prefs")
-        self.set_default_size(620, 720)
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, vexpand=True, hexpand=True)
+        self.add_css_class("embedded-form")
+        self._on_close = on_close
         self.did = did
         self._on_save = on_save
         self._glyph = glyph_color
@@ -46,16 +47,15 @@ class WebAppWindow(Gtk.Window):
         self._name_touched = bool(spec)
         self.browsers = webapps.installed()
 
-        hb = Gtk.HeaderBar()
-        hb.set_show_title_buttons(False)
-        hb.set_title_widget(label(self.get_title(), ("title",)))
+        title = label(_("Edit web app") if editing else _("New web app"), ("title",), ellipsize=True)
+        title.set_hexpand(True)
         cancel = button(_("Cancel"), style="tonal", small=True, cb=lambda *_a: self.close())
         self.save = button(_("Save") if editing else _("Create"), style="filled", small=True, cb=self._save)
         for b in (cancel, self.save):
             b.set_valign(Gtk.Align.CENTER)
-        hb.pack_start(cancel)
-        hb.pack_end(self.save)
-        self.set_titlebar(hb)
+        bar = hbox(10, title, cancel, self.save)
+        bar.add_css_class("form-bar")
+        self.append(bar)
 
         page = vbox(0)
         for side in ("start", "end"):
@@ -158,7 +158,7 @@ class WebAppWindow(Gtk.Window):
 
         scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
         scroll.set_child(page)
-        self.set_child(scroll)
+        self.append(scroll)
 
         keys = Gtk.EventControllerKey()
         keys.connect("key-pressed", self._on_key)
@@ -248,14 +248,14 @@ class WebAppWindow(Gtk.Window):
             self.spec.icon = choice
             self._changed()
 
-        IconPicker(self, self.spec.icon, picked, self._glyph).present()
+        IconPicker(self.get_root(), self.spec.icon, picked, self._glyph).present()
 
     def _fetch_icon(self, *_a):
         url = self.url.get_text()
         try:
             webapps.normalize(url)
         except ValueError as e:
-            error_dialog(self, _("Couldn't get the icon"), str(e))
+            error_dialog(self.get_root(), _("Couldn't get the icon"), str(e))
             return
         self.site_icon_btn.set_sensitive(False)
         self.spinner.set_visible(True)
@@ -270,7 +270,7 @@ class WebAppWindow(Gtk.Window):
             self.spinner.stop()
             self.spinner.set_visible(False)
             if isinstance(result, Exception):
-                error_dialog(self, _("Couldn't get the icon"), str(result) if isinstance(result, ValueError)
+                error_dialog(self.get_root(), _("Couldn't get the icon"), str(result) if isinstance(result, ValueError)
                              else _("The site couldn't be reached."))
                 return
             data, kind = result
@@ -280,7 +280,7 @@ class WebAppWindow(Gtk.Window):
                 host = (webapps.name_for(url) or "site").lower().replace(" ", "-")
                 path = icon_library.add_data(data, host + "." + ("svg" if kind == "svg" else "png"))
             except (GLib.Error, ValueError, OSError, icon_library.IconError) as e:
-                error_dialog(self, _("Couldn't use the icon"), str(e))
+                error_dialog(self.get_root(), _("Couldn't use the icon"), str(e))
                 return
             self.spec.icon = symbols.IconChoice(source="file", path=path, shape="none", recolor=False)
             self._changed()
@@ -305,3 +305,9 @@ class WebAppWindow(Gtk.Window):
         spec = self.form_spec()
         self._on_save(self.did, spec, False)
         self.close()
+
+    def close(self):
+        self._on_close()
+
+    def present(self):
+        """Kept so callers written for the window still work."""

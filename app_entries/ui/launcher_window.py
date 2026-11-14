@@ -35,16 +35,18 @@ def _entry(text="", placeholder="", mono=False):
     return e
 
 
-class LauncherWindow(Gtk.Window):
-    """on_save(did_or_None, spec, make_executable) for the form, or
-    on_save_raw(did, name, text) for Advanced mode."""
+class LauncherWindow(Gtk.Box):
+    """The launcher form, shown in the app page. on_save(did_or_None, spec,
+    make_executable) for the form, or on_save_raw(did, name, text) for
+    Advanced mode; on_close() when it's done or cancelled."""
 
-    def __init__(self, parent, on_save, on_save_raw, did=None, text=None, glyph_color="#888888", highlight=None):
+    def __init__(self, parent, on_save, on_save_raw, did=None, text=None, glyph_color="#888888", highlight=None,
+                 on_close=lambda: None):
         editing_existing = did is not None
-        super().__init__(transient_for=parent, modal=True,
-                         title=_("Edit launcher") if editing_existing else _("New launcher"))
-        self.add_css_class("prefs")
-        self.set_default_size(760, 860)
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, vexpand=True, hexpand=True)
+        self.add_css_class("embedded-form")
+        self._title_text = _("Edit launcher") if editing_existing else _("New launcher")
+        self._on_close = on_close
         self.did = did
         self._on_save = on_save
         self._on_save_raw = on_save_raw
@@ -61,10 +63,8 @@ class LauncherWindow(Gtk.Window):
             self.spec.args = ""
         self._frames = []   # (frame, text view, header label, remove button) for each set of commands
 
-        hb = Gtk.HeaderBar()
-        hb.set_show_title_buttons(False)
-        self.title = label(self.get_title(), ("title",))
-        hb.set_title_widget(self.title)
+        self.title = label(self._title_text, ("title",), ellipsize=True)
+        self.title.set_hexpand(True)
         cancel = button(_("Cancel"), style="tonal", small=True, cb=lambda *_: self.close())
         self.save = button(_("Save") if editing_existing else _("Create"), style="filled", small=True,
                            cb=self._save)
@@ -74,15 +74,15 @@ class LauncherWindow(Gtk.Window):
         self.advanced.connect("toggled", self._on_mode)
         for b in (cancel, self.save, self.advanced):
             b.set_valign(Gtk.Align.CENTER)
-        hb.pack_start(cancel)
-        hb.pack_end(self.save)
-        hb.pack_end(self.advanced)
-        self.set_titlebar(hb)
+        bar = hbox(10, self.title, cancel, self.advanced, self.save)
+        bar.add_css_class("form-bar")
+        self.append(bar)
 
-        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, transition_duration=150)
+        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, transition_duration=150,
+                               vexpand=True)
         self.stack.add_named(self._build_form(), "form")
         self.stack.add_named(self._build_raw(), "raw")
-        self.set_child(self.stack)
+        self.append(self.stack)
 
         keys = Gtk.EventControllerKey()
         keys.connect("key-pressed", self._on_key)
@@ -478,10 +478,10 @@ class LauncherWindow(Gtk.Window):
         def picked(choice):
             self.spec.icon = choice
             self._changed()
-        IconPicker(self, self.spec.icon, picked, self._glyph).present()
+        IconPicker(self.get_root(), self.spec.icon, picked, self._glyph).present()
 
     def _open_file(self, title, cb, folder=False, patterns=None, start=None):
-        choose_file(self, title, cb, folder=folder, patterns=patterns, start=start)
+        choose_file(self.get_root(), title, cb, folder=folder, patterns=patterns, start=start)
 
     def _choose_program(self, *_args):
         def chosen(path):
@@ -497,7 +497,7 @@ class LauncherWindow(Gtk.Window):
         self._open_file(_("Choose the working folder"), self.workdir.set_text, folder=True)
 
     def _choose_icon_file(self, *_args):
-        choose_icon_file(self, self.icon_value.set_text)
+        choose_icon_file(self.get_root(), self.icon_value.set_text)
 
     # -- save ---------------------------------------------------------------
 
@@ -514,3 +514,9 @@ class LauncherWindow(Gtk.Window):
             make_exec = (self.exec_box.get_visible() and self.make_exec.get_active())
             self._on_save(self.did, spec, make_exec)
         self.close()
+
+    def close(self):
+        self._on_close()
+
+    def present(self):
+        """Kept so callers written for the window still work."""
