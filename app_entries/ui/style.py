@@ -152,6 +152,13 @@ button.row-eye.is-on {{ color: {ON_SURFACE_VARIANT}; }}
 button.panel-open {{ background-color: {SECONDARY_CONTAINER}; color: {ON_SECONDARY_CONTAINER}; }}
 menubutton.list-tool > button, button.list-tool {{ min-width: 40px; min-height: 36px; padding: 0 10px; }}
 menubutton.list-tool.filter-on > button {{ background-color: {SECONDARY_CONTAINER}; color: {ON_SECONDARY_CONTAINER}; }}
+.status-bar {{ padding: 0 4px; }}
+button.status-chip {{ min-height: 32px; padding: 0 12px; border-radius: 16px; background: {SURFACE_CONTAINER_HIGH};
+  color: {ON_SURFACE}; box-shadow: none; }}
+button.status-chip:hover {{ background: {SURFACE_CONTAINER_HIGHEST}; }}
+button.status-chip.warn {{ background: {TERTIARY_CONTAINER}; color: {ON_TERTIARY_CONTAINER}; }}
+button.status-chip.error {{ background: {ERROR_CONTAINER}; color: {ON_ERROR_CONTAINER}; }}
+button.status-chip.accent {{ background: {PRIMARY_CONTAINER}; color: {ON_PRIMARY_CONTAINER}; }}
 .draft-dot {{ background: {PRIMARY}; border-radius: 4px; min-width: 8px; min-height: 8px; }}
 expander.entry-expander > title {{ padding: 6px 4px; }}
 /* Navigation rail */

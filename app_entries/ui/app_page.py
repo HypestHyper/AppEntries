@@ -365,6 +365,7 @@ class AppPage(Gtk.Box):
         else:
             self.win.drafts.pop(did, None)
         if had != (did in self.win.drafts):
+            self.win.status.update()
             item = self.win.apps.by_id.get(did)
             if item is not None:
                 self._quiet = True
@@ -391,6 +392,7 @@ class AppPage(Gtk.Box):
 
         def saved():
             self.win.drafts.pop(app.id, None)
+            self.win.status.update()
             if self.form is form:
                 self.form = None
                 self._was_dirty = False
@@ -405,6 +407,7 @@ class AppPage(Gtk.Box):
         if form is None:
             return
         self.win.drafts.pop(form.app.id, None)
+        self.win.status.update()
         self.form = None
         self._was_dirty = False
         self.savebar.set_reveal_child(False)

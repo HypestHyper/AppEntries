@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Status chips at the top right say what needs your attention, wherever you are: issues found, an update (or a restart to finish one), unsaved edits to an app, a slow scan, or apps that couldn't be read. Each one takes you there. With nothing to say there are none, and the header's apps count is gone (the counts are on Shown and Hidden).
 - Search, Shown/Hidden/All, Filter, Sort and Select sit at the top of the app list instead of across the window, so the app page starts at the top. Filter, Sort and Select are compact buttons; a dot on Filter means a filter is on, and pointing at it says which.
 - The update notification has an Update button, which installs it and shows the progress in Updates, and a What's new button. It goes away after your notification server's usual time, as before, and is taken down once the update is installed.
 

@@ -35,7 +35,6 @@ from .app_row import AppRow
 from .dialogs import Dialog, choose_file, error_dialog, run_bg
 from .style import SIZES
 from .widgets import (
-    Chip,
     Clamp,
     NavRail,
     SearchField,
@@ -74,6 +73,7 @@ DefaultsPage = _lazy(".defaults_page", "DefaultsPage")
 SettingsPage = _lazy(".settings_page", "SettingsPage")
 UpdatesPage = _lazy(".updates", "UpdatesPage")
 from .app_page import AppPage  # noqa: E402 - shown with the list, so not lazy
+from .status_bar import StatusBar  # noqa: E402
 
 # The places in the navigation rail: (setting value, label, icon).
 RAIL = [
@@ -142,8 +142,6 @@ class MainWindow(Gtk.ApplicationWindow):
         self._start.set_margin_start(4)
         hb.pack_start(self._start)
 
-        self.chip = Chip(_("Loading…"), "warn")
-        self.chip.set_valign(Gtk.Align.CENTER)
         self.refresh_btn = button(icon_name="refresh", style="tonal", small=True,
                                   tooltip=_("Refresh applications (Ctrl+R)"))
         self.refresh_btn.set_action_name("app.refresh")
@@ -157,7 +155,7 @@ class MainWindow(Gtk.ApplicationWindow):
                                   tooltip=_("History: undo any change you made (Ctrl+H)"),
                                   cb=self.show_history)
         self.history_btn.set_valign(Gtk.Align.CENTER)
-        self._end = hbox(8, self.chip, self.history_btn, self.refresh_btn)
+        self._end = hbox(8, self.history_btn, self.refresh_btn)
         self._end.set_margin_end(4)
         hb.pack_end(self._end)
         self.header = hb
@@ -328,10 +326,22 @@ class MainWindow(Gtk.ApplicationWindow):
         self.drafts = {}            # app ID -> (fields, picked icon): unsaved edits kept while elsewhere
         self._narrow = False
         self.app_page = AppPage(self)
-        self.split = hbox(16, self.list_area, self.app_page)
+        # Status chips: above the app page when it's beside the list, else at
+        # the top of the window's main area.
+        self._scanning = self._scan_failed = self._scan_done = False
+        self.status = StatusBar(self)
+        self.status.set_size_request(-1, 56)   # level with the search box
+        self.page_col = vbox(10, self.app_page)
+        self.page_col.set_hexpand(True)
+        self.top_status = vbox(0)
+        self.top_status.set_visible(False)
+        self.status.on_change = self._place_status
+        self.split = hbox(16, self.list_area, self.page_col)
         self.split.set_vexpand(True)
         self._update_tab_controls()
+        content.append(self.top_status)
         content.append(self.split)
+        updates.connect(self.status.update)
         # History slides in at the side, so changes can be watched as they're made.
         self.history_reveal = Gtk.Revealer(transition_type=Gtk.RevealerTransitionType.SLIDE_LEFT,
                                            reveal_child=False, hexpand=False)
@@ -546,6 +556,7 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.settings.set("filter", "all")
                 return
             self.rail.set_active(v)
+            self.status.update()
             if self._current is not None and (v == "mine") != self._current.app.created:
                 self.close_app()
             self._filter_action.set_state(GLib.Variant("s", v))
@@ -796,13 +807,10 @@ class MainWindow(Gtk.ApplicationWindow):
         hidden = sum(1 for i in total if i.app.hidden)
         self.view_seg.set_text("shown", _("Shown {n}").format(n=len(total) - hidden))
         self.view_seg.set_text("hidden", _("Hidden {n}").format(n=hidden))
-        if self._loaded:
-            # The counts are on Shown and Hidden; the chip is only for news.
-            self.chip.set_visible(False)
-            # A list that stays empty doesn't say it changed, so the empty
-            # page's filter buttons are brought up to date here.
-            if self.stack.get_visible_child_name() == "empty":
-                self._update_state()
+        # A list that stays empty doesn't say it changed, so the empty page's
+        # filter buttons are brought up to date here.
+        if self._loaded and self.stack.get_visible_child_name() == "empty":
+            self._update_state()
 
     def _update_hint(self):
         view = self.settings.get("view")
@@ -1008,13 +1016,27 @@ class MainWindow(Gtk.ApplicationWindow):
     def rescan(self, *_args):
         self._scan_gen += 1
         gen = self._scan_gen
+        self._scanning = False
+
+        def slow():
+            # Only a scan that takes a while says so, or the chip would
+            # flash after every change.
+            if gen == self._scan_gen and not self._scan_done:
+                self._scanning = True
+                self.status.update()
+            return False
+
+        self._scan_done = False
+        GLib.timeout_add(600, slow)
 
         def done(result):
             if gen != self._scan_gen:
                 return
+            self._scanning = False
+            self._scan_done = True
+            self._scan_failed = isinstance(result, Exception)
+            self.status.update()
             if isinstance(result, Exception):
-                self.chip.set(_("Couldn't read apps"), "error")
-                self.chip.set_visible(True)
                 return
             apps, report = result
             if not self._loaded:
@@ -1033,6 +1055,7 @@ class MainWindow(Gtk.ApplicationWindow):
             if self.issues is not None:
                 self.issues.update(report)
             self.rail.set_count("issues", report.count)
+            self.status.update()
             self._handle_uninstalled(report)
             first = not self._loaded
             self._loaded = True
@@ -1119,10 +1142,18 @@ class MainWindow(Gtk.ApplicationWindow):
             self.app_page.close_form()
         old, self._current = self._current, item
         self.app_page.show(item)
+        self.status.update()
         for it in (old, item):
             if it is not None:
                 it.emit("changed")
         self._update_split()
+
+    def open_draft(self, item):
+        """A status chip for unsaved edits: back to that app's page."""
+        want = "mine" if item.app.created else "all"
+        if self.settings.get("filter") != want:
+            self.settings.set("filter", want)
+        self._open_app(item)
 
     def close_app(self):
         old, self._current = self._current, None
@@ -1142,12 +1173,26 @@ class MainWindow(Gtk.ApplicationWindow):
         page = lists and (not self._narrow or busy)
         listing = not lists or not self._narrow or not busy
         self.app_page.set_visible(page)
+        self.page_col.set_visible(page)
         self.app_page.set_narrow(self._narrow)
         self.list_area.set_visible(listing)
         self.toolbar.set_visible(lists)
         side = lists and not self._narrow
         self.list_area.set_hexpand(not side)
         self.list_area.set_size_request(LIST_WIDTH if side else -1, -1)
+        self._place_status()
+
+    def _place_status(self):
+        """Above the page, always taking its room so the page doesn't move
+        as chips come and go; or at the top, only while there's a chip."""
+        beside = self.page_col.get_visible() and not self._narrow
+        want = self.page_col if beside else self.top_status
+        if self.status.get_parent() is not want:
+            if self.status.get_parent() is not None:
+                self.status.get_parent().remove(self.status)
+            want.prepend(self.status)
+        self.status.set_size_request(-1, 56 if beside else -1)
+        self.top_status.set_visible(not beside and self.status.has_items)
 
     def _on_toggle(self, item: AppItem, hidden: bool, allow_delete=False):
         if item.busy or (hidden and item.app.id == SELF_ID):
