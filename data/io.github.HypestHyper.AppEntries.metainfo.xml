@@ -60,6 +60,15 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.1.1" date="2026-11-14">
+      <description>
+        <ul>
+          <li>Status chips for what needs your attention: issues, updates and unsaved edits</li>
+          <li>The list's search and filters sit at the top of the list</li>
+          <li>An Update button on the update notification</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.1.0" date="2026-11-14">
       <description>
         <ul>
