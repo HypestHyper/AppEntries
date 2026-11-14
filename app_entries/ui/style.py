@@ -118,6 +118,19 @@ button.filter:active {{ border-radius: 8px; }}
 .tabbar > button:checked {{ background-color: {SECONDARY_CONTAINER}; color: {ON_SECONDARY_CONTAINER}; border-radius: 12px; }}
 .tabbar > button:checked .icon {{ font-variation-settings: "FILL" 1, "wght" 500, "opsz" 24; }}
 .tabcount {{ font-size: 12px; font-weight: 600; color: {OUTLINE}; }}
+/* App list rows */
+listview.app-list {{ background: none; }}
+listview.app-list > row {{ padding: 0; border-radius: 16px; background: none; }}
+listview.app-list > row:focus-visible {{ outline: 2px solid {PRIMARY}; outline-offset: -2px; }}
+.app-row {{ padding: 8px 12px; border-radius: 16px; min-height: 48px; }}
+.app-row:hover {{ background-color: alpha({ON_SURFACE}, .05); }}
+.app-row.is-selected {{ background-color: {SECONDARY_CONTAINER}; }}
+.app-row.is-hidden .app-name, .app-row.is-hidden .small {{ opacity: .55; }}
+.app-row.is-hidden .icon-tile image {{ opacity: .45; }}
+.app-row .row-badge {{ padding: 0 8px; min-height: 20px; font-size: 11.5px; }}
+button.row-eye {{ min-width: 36px; min-height: 36px; padding: 0; color: {ON_SURFACE_VARIANT};
+  transition: opacity 120ms {EASE}; }}
+button.row-eye.is-on {{ color: {ON_SURFACE_VARIANT}; }}
 /* Navigation rail */
 .navrail {{ padding: 4px 0 8px 0; min-width: 64px; }}
 .navrail > button.rail-item {{ background: none; box-shadow: none; padding: 4px 0 6px 0; min-height: 0;

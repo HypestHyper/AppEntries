@@ -154,6 +154,67 @@ def _source_tip(key):
     return tip.format(manager=packages.system_manager() or _("unknown")) if key == "system" else tip
 
 
+def menu_box(a, act, hide_item=False):
+    """The options for one app, for its ⋯ menu or right-click menu. `act(name)`
+    returns the callback for an action name; `hide_item` adds Hide or Show and
+    Open at the top."""
+    box = vbox(2)
+    box.set_size_request(300, -1)
+    if hide_item:
+        is_self = a.id == APP_ID + ".desktop" and not a.hidden
+        if not is_self:
+            box.append(option_button(
+                "visibility" if a.hidden else "visibility_off", _("Show") if a.hidden else _("Hide"),
+                (_("Shows it in launcher menus again.") if a.hidden else
+                 _("Keeps it out of launcher menus. It still opens files and links.")), act("toggle-hidden")))
+        if not (a.missing or a.uninstalled):
+            box.append(option_button("play_arrow", _("Open"), _("Starts the app."), act("launch")))
+    box.append(option_button(
+        "edit_note", _("Edit…"),
+        (_("Change what it runs, its name, icon and folders. Nothing is saved until you press Save.")
+         if a.created else
+         _("Change the name, icon, command and where it appears. Nothing is saved until you press Save.")),
+        act("edit")))
+    if a.created:
+        box.append(option_button(
+            "content_copy", _("Duplicate"),
+            _("Makes a new launcher with the same settings, named “(copy)”, to change from there."),
+            act("duplicate")))
+    if a.has_override and a.system:
+        box.append(option_button(
+            "restart_alt", _("Restore original"),
+            _("Deletes your file for this app, so the version installed by the system is used again. "
+              "You can undo this."), act("restore")))
+    if a.source == "webapp":
+        box.append(option_button(
+            "delete", _("Delete this web app"),
+            _("Deletes this web app from your menus. Your browser and its sign-ins aren't touched. "
+              "You can undo this."), act("delete"), danger=True))
+    elif (a.source == "user" or a.created) and a.override_path and not a.override_managed:
+        box.append(option_button(
+            "delete", _("Delete this launcher"),
+            _("Deletes this launcher file from your applications folder. "
+              "The program itself isn't touched. You can undo this."), act("delete"), danger=True))
+    if a.mime_types:
+        box.append(option_button(
+            "star", _("File types…"),
+            _("The file types it opens, and which of them open with it by default. Opens Default apps."),
+            act("file-types")))
+    box.append(option_button(
+        "open_in_new", _("Helper apps…"),
+        _("Shortcuts to apps that change its permissions, versions or setup, like Flatseal. Each opens that "
+          "app."), act("helpers")))
+    kind = uninstall.kind_of(a)
+    if kind:
+        box.append(option_button(
+            "delete_forever", _("Uninstall {name}…").format(name=a.name),
+            _(UNINSTALL_HINTS[kind]), act("uninstall"), danger=True))
+    box.append(option_button(
+        "folder_open", _("Open file location"),
+        _("Opens the folder that holds this app's entry file in your file manager."), act("open-folder")))
+    return box
+
+
 class AppCard(Gtk.Box):
     """Shows one AppItem. `on_toggle(item, hidden)` is called on user changes.
     While `selecting()` is true, a click selects the card instead."""
@@ -408,8 +469,6 @@ class AppCard(Gtk.Box):
         a = self.item.app if self.item else None
         if a is None:
             return
-        box = vbox(2)
-        box.set_size_request(300, -1)
 
         def act(name):
             def cb(*_):
@@ -417,52 +476,9 @@ class AppCard(Gtk.Box):
                 self._on_action(self.item, name)
             return cb
 
-        box.append(option_button(
-            "edit_note", _("Edit…"),
-            (_("Change what it runs, its name, icon and folders. Nothing is saved until you press Save.")
-             if a.created else
-             _("Change the name, icon, command and where it appears. Nothing is saved until you press Save.")),
-            act("edit")))
-        if a.created:
-            box.append(option_button(
-                "content_copy", _("Duplicate"),
-                _("Makes a new launcher with the same settings, named “(copy)”, to change from there."),
-                act("duplicate")))
-        if a.has_override and a.system:
-            box.append(option_button(
-                "restart_alt", _("Restore original"),
-                _("Deletes your file for this app, so the version installed by the system is used again. "
-                  "You can undo this."), act("restore")))
-        if a.source == "webapp":
-            box.append(option_button(
-                "delete", _("Delete this web app"),
-                _("Deletes this web app from your menus. Your browser and its sign-ins aren't touched. "
-                  "You can undo this."), act("delete"), danger=True))
-        elif (a.source == "user" or a.created) and a.override_path and not a.override_managed:
-            box.append(option_button(
-                "delete", _("Delete this launcher"),
-                _("Deletes this launcher file from your applications folder. "
-                  "The program itself isn't touched. You can undo this."), act("delete"), danger=True))
-        if a.mime_types:
-            box.append(option_button(
-                "star", _("File types…"),
-                _("The file types it opens, and which of them open with it by default. Opens Default apps."),
-                act("file-types")))
-        box.append(option_button(
-            "open_in_new", _("Helper apps…"),
-            _("Shortcuts to apps that change its permissions, versions or setup, like Flatseal. Each opens that "
-              "app."), act("helpers")))
-        kind = uninstall.kind_of(a)
-        if kind:
-            box.append(option_button(
-                "delete_forever", _("Uninstall {name}…").format(name=a.name),
-                _(UNINSTALL_HINTS[kind]), act("uninstall"), danger=True))
-        box.append(option_button(
-            "folder_open", _("Open file location"),
-            _("Opens the folder that holds this app's entry file in your file manager."), act("open-folder")))
         pop = Gtk.Popover()
         pop.add_css_class("options")
-        pop.set_child(box)
+        pop.set_child(menu_box(a, act))
         menu_button.set_popover(pop)
 
     # -- input --------------------------------------------------------------

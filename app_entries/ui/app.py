@@ -30,7 +30,8 @@ from .. import (
     webapps,
 )
 from ..model import AppItem, AppStore
-from .app_card import AppCard, forget_icons, label_for_source
+from .app_card import forget_icons, label_for_source
+from .app_row import AppRow
 from .dialogs import Dialog, choose_file, error_dialog, run_bg
 from .style import SIZES
 from .widgets import (
@@ -237,6 +238,14 @@ class MainWindow(Gtk.ApplicationWindow):
         self.toolbar = hbox(12, self.search_entry, self.view_seg, self.new_btns, self.filter_menu, self.sort_menu,
                             self.select_btn)
         content.append(self.toolbar)
+        # While searching Shown or Hidden, a line says when the other view
+        # has matches too, with a button to see them.
+        self.hint_text = label("", ("small", "dim"))
+        self.hint_btn = button("", style="text", small=True, cb=lambda *_: self.settings.set("view", "all"))
+        self.hint = hbox(8, icon("info", ("dim",)), self.hint_text, self.hint_btn)
+        self.hint.set_margin_start(8)
+        self.hint.set_visible(False)
+        content.append(self.hint)
 
         # Model: store -> filter -> sort -> grid
         self.filter = Gtk.CustomFilter.new(self._match)
@@ -249,9 +258,15 @@ class MainWindow(Gtk.ApplicationWindow):
         factory.connect("setup", self._setup_card)
         factory.connect("bind", lambda _f, li: li.get_child().bind(li.get_item()))
         factory.connect("unbind", lambda _f, li: li.get_child().unbind())
-        self.grid = Gtk.GridView(model=Gtk.NoSelection(model=self.sorted), factory=factory,
-                                 min_columns=1, max_columns=6, single_click_activate=False)
+        self.grid = Gtk.ListView(model=Gtk.NoSelection(model=self.sorted), factory=factory,
+                                 single_click_activate=False)
+        self.grid.add_css_class("app-list")
         self.grid.connect("activate", self._on_activate)
+        # Space hides or shows the app whose row has focus; Menu or
+        # Shift+F10 opens its options.
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self._on_list_key)
+        self.grid.add_controller(keys)
         self.grid.update_property([Gtk.AccessibleProperty.LABEL], [_("Applications")])
         grid_scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
         grid_scroll.set_child(self.grid)
@@ -325,7 +340,24 @@ class MainWindow(Gtk.ApplicationWindow):
         self.stack.add_named(page, name)
 
     def _setup_card(self, _f, list_item):
-        list_item.set_child(AppCard(self._on_toggle, self._on_card_action, lambda: self._selecting))
+        list_item.set_child(AppRow(self._on_toggle, self._on_card_action, lambda: self._selecting))
+
+    def _focused_row(self):
+        w = self.grid.get_focus_child()
+        row = w.get_first_child() if w is not None else None
+        return row if isinstance(row, AppRow) and row.item is not None else None
+
+    def _on_list_key(self, _c, keyval, _code, state):
+        row = self._focused_row()
+        if row is None or self._selecting:
+            return False
+        if keyval == Gdk.KEY_space:
+            row.toggle()
+            return True
+        if keyval == Gdk.KEY_Menu or (keyval == Gdk.KEY_F10 and state & Gdk.ModifierType.SHIFT_MASK):
+            row.open_menu()
+            return True
+        return False
 
     def _build_selection_bar(self):
         self.sel_count = label("", ("body", "sel-count"))
@@ -702,7 +734,24 @@ class MainWindow(Gtk.ApplicationWindow):
             if self.stack.get_visible_child_name() == "empty":
                 self._update_state()
 
+    def _update_hint(self):
+        view = self.settings.get("view")
+        n = 0
+        if self._query and view != "all" and self.settings.get("filter") == "all":
+            n = sum(1 for i in self.apps.items()
+                    if i.app.hidden == (view == "shown") and self._match(i, ("hidden",)))
+        if n and self.sorted.get_n_items():
+            set_text(self.hint_text, (ngettext("{n} hidden app also matches.", "{n} hidden apps also match.", n)
+                                      if view == "shown" else
+                                      ngettext("{n} shown app also matches.", "{n} shown apps also match.", n))
+                     .format(n=n))
+            self.hint_btn.set_label(_("Show all"))
+            self.hint.set_visible(True)
+        else:
+            self.hint.set_visible(False)
+
     def _update_state(self):
+        self._update_hint()
         if not self._loaded:
             if self.settings.get("filter") in ("autostart", "defaults", "settings", "updates"):
                 self._ensure_page(self.settings.get("filter"))
@@ -816,7 +865,7 @@ class MainWindow(Gtk.ApplicationWindow):
         height = self.grid_scroll.get_height()
 
         def walk(w):
-            if isinstance(w, AppCard):
+            if isinstance(w, AppRow):
                 if w.item is not None and w.get_mapped():
                     ok, r = w.compute_bounds(self.grid_scroll)
                     if ok and r.get_y() + r.get_height() > 0 and r.get_y() < height:
@@ -984,8 +1033,12 @@ class MainWindow(Gtk.ApplicationWindow):
         if item is not None and self._selecting:
             item.set_selected(not item.selected)
             self._update_selection()
-        elif item is not None and not item.busy:
-            self._on_toggle(item, not item.app.hidden)
+        elif item is not None:
+            self._open_app(item)
+
+    def _open_app(self, item):
+        """Enter or double-click on a row."""
+        self._on_card_action(item, "edit")
 
     def _on_toggle(self, item: AppItem, hidden: bool, allow_delete=False):
         if item.busy or (hidden and item.app.id == SELF_ID):
@@ -1422,6 +1475,8 @@ class MainWindow(Gtk.ApplicationWindow):
         elif action.startswith("find:"):
             self.settings.set("filter", "all")
             self.search_entry.set_text(action[len("find:"):])
+        elif action == "toggle-hidden":
+            self._on_toggle(item, not app.hidden)
         elif action == "hide-uninstalled":
             self._fix("hide-uninstalled", [health.Leftover(app.id, app.name, app.override_path)])
         elif action == "issues":
