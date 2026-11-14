@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Search, Shown/Hidden/All, Filter, Sort and Select sit at the top of the app list instead of across the window, so the app page starts at the top. Filter, Sort and Select are compact buttons; a dot on Filter means a filter is on, and pointing at it says which.
 - The update notification has an Update button, which installs it and shows the progress in Updates, and a What's new button. It goes away after your notification server's usual time, as before, and is taken down once the update is installed.
 
 ## 1.1.0 — 2026-11-14

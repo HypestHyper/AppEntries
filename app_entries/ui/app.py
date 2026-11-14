@@ -96,7 +96,6 @@ SPLIT_FROM = 860        # window width from which the list and the app page sit 
 LIST_WIDTH = 440
 LIST_MAX = 600          # the list is never wider, so each row's eye stays near its name
 HISTORY_WIDTH = 400     # the History panel, with its margins
-STACK_TOOLBAR_BELOW = 760
 HYSTERESIS = 60
 
 
@@ -209,8 +208,11 @@ class MainWindow(Gtk.ApplicationWindow):
         # from the icon theme, which holds up the first frame.
         self.filter_label = Gtk.Label(label=_("Filter"))
         self.filter_menu = Gtk.MenuButton(valign=Gtk.Align.CENTER)
-        self.filter_menu.set_child(hbox(6, icon("tune"), self.filter_label, icon("expand_more")))
+        self.filter_dot = Gtk.Box(valign=Gtk.Align.START, visible=False)
+        self.filter_dot.add_css_class("draft-dot")
+        self.filter_menu.set_child(hbox(4, icon("tune"), self.filter_dot))
         self.filter_menu.add_css_class("tonal")
+        self.filter_menu.add_css_class("list-tool")
         self.filter_menu.add_css_class("source-menu")
         self.filter_menu.set_tooltip_text(_("Only list apps from one source, customised ones or new ones, and "
                                             "whether to include apps that aren't in menus"))
@@ -218,16 +220,17 @@ class MainWindow(Gtk.ApplicationWindow):
         self.filter_menu.set_create_popup_func(self._filter_popup)
         self.sort_label = Gtk.Label(label=self._sort_text())
         self.sort_menu = Gtk.MenuButton(valign=Gtk.Align.CENTER)
-        self.sort_menu.set_child(hbox(6, icon("sort"), self.sort_label, icon("expand_more")))
+        self.sort_menu.set_child(icon("sort"))
         self.sort_menu.add_css_class("tonal")
+        self.sort_menu.add_css_class("list-tool")
         self.sort_menu.add_css_class("source-menu")
-        self.sort_menu.set_tooltip_text(_("Sort by name, or newest first: by when each app appeared on this "
-                                          "computer"))
+        self.sort_menu.set_tooltip_text(_("Sort: {how}").format(how=self._sort_text()))
         self.sort_menu.update_property([Gtk.AccessibleProperty.LABEL], [_("Sort")])
         self.sort_menu.set_create_popup_func(self._sort_popup)
         self.select_btn = Gtk.ToggleButton(valign=Gtk.Align.CENTER)
-        self.select_btn.set_child(hbox(6, icon("checklist"), label(_("Select"))))
+        self.select_btn.set_child(icon("checklist"))
         self.select_btn.add_css_class("tonal")
+        self.select_btn.add_css_class("list-tool")
         self.select_btn.set_tooltip_text(_("Pick several apps, then hide, show or restore them together"))
         self.select_btn.update_property([Gtk.AccessibleProperty.LABEL], [_("Select several apps")])
         self.select_btn.connect("toggled", lambda b: self.set_selecting(b.get_active()))
@@ -241,15 +244,14 @@ class MainWindow(Gtk.ApplicationWindow):
                                               "(Ctrl+Shift+N)"),
                                     cb=lambda *_: self.new_web_app()))
         self.new_btns.set_valign(Gtk.Align.CENTER)
-        # The buttons wrap onto a second line when the window is narrow.
-        tools = WrapBox(12, 8)
-        for w in (self.view_seg, self.new_btns, self.filter_menu, self.sort_menu, self.select_btn):
-            tools.append(w)
-        tools.set_valign(Gtk.Align.CENTER)
-        self.search_entry.set_size_request(180, -1)
-        self.toolbar = hbox(12, self.search_entry, tools)
-        self.toolbar.set_spacing(12)
-        content.append(self.toolbar)
+        # The list's own controls, at its top: search, then which apps and how.
+        row = hbox(8, self.view_seg, self.new_btns)
+        gap = Gtk.Box(hexpand=True)
+        row.append(gap)
+        for w in (self.filter_menu, self.sort_menu, self.select_btn):
+            row.append(w)
+        self.toolbar = Clamp(vbox(10, self.search_entry, row), LIST_MAX, start=True)
+        self.toolbar.set_margin_end(4)
         # While searching Shown or Hidden, a line says when the other view
         # has matches too, with a button to see them.
         self.hint_text = label("", ("small", "dim"))
@@ -257,7 +259,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.hint = hbox(8, icon("info", ("dim",)), self.hint_text, self.hint_btn)
         self.hint.set_margin_start(8)
         self.hint.set_visible(False)
-        content.append(self.hint)
+
 
         # Model: store -> filter -> sort -> grid
         self.filter = Gtk.CustomFilter.new(self._match)
@@ -321,12 +323,12 @@ class MainWindow(Gtk.ApplicationWindow):
         overlay.set_child(self.stack)
         overlay.add_overlay(self.snackbar)
         overlay.add_overlay(self._build_selection_bar())
-        self.list_area = overlay
+        self.list_area = vbox(10, self.toolbar, self.hint, overlay)
         self._current = None        # the AppItem whose page is open
         self.drafts = {}            # app ID -> (fields, picked icon): unsaved edits kept while elsewhere
         self._narrow = False
         self.app_page = AppPage(self)
-        self.split = hbox(16, overlay, self.app_page)
+        self.split = hbox(16, self.list_area, self.app_page)
         self.split.set_vexpand(True)
         self._update_tab_controls()
         content.append(self.split)
@@ -480,9 +482,12 @@ class MainWindow(Gtk.ApplicationWindow):
         on += [names[k] for k in ("customised", "new") if k in self._only]
         if not self.settings.get("show-no-display"):
             on.append(_("In menus only"))
-        text = (_("Filter") if not on else on[0] if len(on) == 1
-                else ngettext("{n} filter", "{n} filters", len(on)).format(n=len(on)))
+        text = _("Filter") if not on else _("Filter: {on}").format(on=", ".join(on))
         set_text(self.filter_label, text)
+        self.filter_menu.set_tooltip_text(text if on else _(
+            "Only list apps from one source, customised ones or new ones, and whether to include apps that "
+            "aren't in menus"))
+        self.filter_dot.set_visible(bool(on))
         if on:
             self.filter_menu.add_css_class("filter-on")
         else:
@@ -550,6 +555,7 @@ class MainWindow(Gtk.ApplicationWindow):
         elif key == "sort":
             self._sort_newest = self.settings.get("sort") == "newest"
             self.sort_label.set_label(self._sort_text())
+            self.sort_menu.set_tooltip_text(_("Sort: {how}").format(how=self._sort_text()))
             self.sorter.changed(Gtk.SorterChange.DIFFERENT)
         elif key == "source":
             if self._loaded:
@@ -663,11 +669,7 @@ class MainWindow(Gtk.ApplicationWindow):
                 self._update_split()
             else:
                 GLib.idle_add(lambda: (self._update_split(), False)[1])
-        # In a narrow window, search gets a line of its own above the buttons.
-        stacked = room < STACK_TOOLBAR_BELOW
-        orient = Gtk.Orientation.VERTICAL if stacked else Gtk.Orientation.HORIZONTAL
-        if self.toolbar.get_orientation() != orient:
-            GLib.idle_add(lambda: (self.toolbar.set_orientation(orient), False)[1])
+
 
     def _apply_size(self, width):
         size = self.settings.get("size")
@@ -1142,7 +1144,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.app_page.set_visible(page)
         self.app_page.set_narrow(self._narrow)
         self.list_area.set_visible(listing)
-        self.toolbar.set_visible(lists and listing)
+        self.toolbar.set_visible(lists)
         side = lists and not self._narrow
         self.list_area.set_hexpand(not side)
         self.list_area.set_size_request(LIST_WIDTH if side else -1, -1)

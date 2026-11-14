@@ -150,6 +150,8 @@ button.row-eye.is-on {{ color: {ON_SURFACE_VARIANT}; }}
 .history-panel {{ background: {SURFACE_CONTAINER_LOW}; border-radius: 28px; margin: 0 12px 0 4px;
   padding-top: 8px; }}
 button.panel-open {{ background-color: {SECONDARY_CONTAINER}; color: {ON_SECONDARY_CONTAINER}; }}
+menubutton.list-tool > button, button.list-tool {{ min-width: 40px; min-height: 36px; padding: 0 10px; }}
+menubutton.list-tool.filter-on > button {{ background-color: {SECONDARY_CONTAINER}; color: {ON_SECONDARY_CONTAINER}; }}
 .draft-dot {{ background: {PRIMARY}; border-radius: 4px; min-width: 8px; min-height: 8px; }}
 expander.entry-expander > title {{ padding: 6px 4px; }}
 /* Navigation rail */
