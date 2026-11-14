@@ -54,10 +54,12 @@ jobs:
       # a release stops here if either fails.
       - name: Ruff
         run: |
+          # squashfs-tools: the AppImage tests build and read real AppImages.
+          sudo apt-get update -q && sudo apt-get install -y -q squashfs-tools
           python3 -m pip install --quiet pytest ruff==0.16.8
           python3 -m ruff check app_entries tests tools
       - name: Run the tests
-        run: python3 -m pytest -q tests
+        run: python3 -m pytest -q -rs tests
       - name: Build the archive
         run: |
           git archive --format=tar.gz --prefix="app-entries-$VERSION/" -o "app-entries-$VERSION.tar.gz" HEAD \

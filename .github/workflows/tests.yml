@@ -12,11 +12,11 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q desktop-file-utils appstream libglib2.0-bin
+          sudo apt-get install -y -q desktop-file-utils appstream libglib2.0-bin squashfs-tools
           python3 -m pip install --quiet pytest ruff==0.16.8  # same version as in release.yml
       - name: Ruff
         run: python3 -m ruff check app_entries tests tools
       - name: Unit tests
-        run: python3 -m pytest -q tests
+        run: python3 -m pytest -q -rs tests   # -rs lists anything skipped
       - name: Validate data files
         run: tests/validate-desktop.sh
