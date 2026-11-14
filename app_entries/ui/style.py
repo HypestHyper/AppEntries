@@ -171,6 +171,7 @@ button.icon-edit {{ background: none; box-shadow: none; padding: 0; border-radiu
 button.icon-edit:hover .icon-edit-badge, button.icon-edit:focus-visible .icon-edit-badge {{ opacity: 1; }}
 button.icon-edit:hover .icon-tile {{ outline: 2px solid alpha({PRIMARY}, .6); outline-offset: 2px; }}
 button.icon-edit:focus-visible {{ outline: 2px solid {PRIMARY}; outline-offset: 2px; }}
+button.back-button {{ min-height: 36px; padding: 0 16px 0 10px; border-radius: 18px; }}
 .draft-dot {{ background: {PRIMARY}; border-radius: 4px; min-width: 8px; min-height: 8px; }}
 expander.entry-expander > title {{ padding: 6px 4px; }}
 /* Navigation rail */

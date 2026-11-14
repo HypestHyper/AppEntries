@@ -183,6 +183,8 @@ class MainWindow(Gtk.ApplicationWindow):
             self.settings.set("filter", "all")  # start on the apps, not where you left off
         self.rail = NavRail(RAIL, RAIL_BOTTOM, self.settings.get("filter"))
         self.rail.connect("changed", lambda _r, key: self.settings.set("filter", key))
+        self.rail.connect("reselected", lambda _r, _key: self._narrow and self._current is not None
+                          and self.close_app())
         self.rail.set_margin_start(8)
         self.rail.set_margin_end(8)
         self.rail.set_margin_bottom(10)
@@ -1874,6 +1876,23 @@ class MainWindow(Gtk.ApplicationWindow):
         if info is None:
             error_dialog(self, _("Couldn't open {name}").format(name=app.name),
                          _("Its entry file couldn't be read."), path)
+            return
+        if info.get_boolean("Terminal"):
+            # GLib only knows a few terminals; App Entries finds yours.
+            argv = [w for w in launchers.parse_exec(info.get_string("Exec") or app.exec)
+                    if not (len(w) == 2 and w.startswith("%"))]
+            try:
+                terminal.run(argv)
+            except terminal.NoTerminal:
+                error_dialog(self, _("No terminal app was found"),
+                             _("{name} runs in a terminal. Run this in one:").format(name=app.name),
+                             terminal.shown([argv]))
+                return
+            except OSError as e:
+                error_dialog(self, _("The terminal couldn't be started"), str(e.strerror or e),
+                             terminal.shown([argv]))
+                return
+            self.snackbar.show(_("Opening {name}…").format(name=app.name))
             return
         ctx = self.get_display().get_app_launch_context()
         try:

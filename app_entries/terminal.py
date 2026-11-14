@@ -76,6 +76,14 @@ def start(commands: list[list[str]], env=None, which: Callable = shutil.which,
                  stderr=subprocess.DEVNULL, start_new_session=True)
 
 
+def run(argv: list[str], env=None, which: Callable = shutil.which,
+        popen: Callable = subprocess.Popen) -> subprocess.Popen:
+    """Open the terminal running one program, as a launcher would for an
+    entry with Terminal=true. Raises NoTerminal or OSError like start()."""
+    return popen(find(env, which) + list(argv), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                 stderr=subprocess.DEVNULL, start_new_session=True)
+
+
 def shown(commands: list[list[str]]) -> str:
     """The commands as they'd be typed, one per line."""
     return "\n".join(" ".join(c) if c and c[0].startswith("#") else shlex.join(c) for c in commands)

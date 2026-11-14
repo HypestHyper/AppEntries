@@ -3,6 +3,9 @@
 ## Unreleased
 
 - The pencil on an app's icon sits in the middle of its circle.
+- Open works for launchers that run in a terminal (commands launchers among them): App Entries starts them in your terminal itself, instead of relying on GLib, which only knows a few terminals and failed with "Unable to find terminal required for application".
+- In a narrow window, an app's page has a clear **Back to Apps** (or Launchers) button, and clicking Apps or Launchers in the rail goes back to the list too.
+- A commands launcher's page shows your commands under Runs, not the script that runs them.
 
 ## 1.2.2 — 2026-11-14
 

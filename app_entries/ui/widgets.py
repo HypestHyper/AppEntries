@@ -642,8 +642,16 @@ class TabBar(Gtk.Box):
             self._right.set_visible(right)
 
     def _toggled(self, b, key):
+        if b.get_active():
+            self._just = key
         if b.get_active() and not self._quiet:
             self.emit("changed", key)
+
+    def _clicked(self, b, key):
+        if self._just == key:
+            self._just = None
+        elif b.get_active():
+            self.emit("reselected", key)
 
     def set_active(self, key):
         b = self._buttons.get(key)
@@ -651,6 +659,7 @@ class TabBar(Gtk.Box):
             self._quiet = True
             b.set_active(True)
             self._quiet = False
+        self._just = None
 
     def set_count(self, key, n):
         lb = self._counts.get(key)
@@ -665,11 +674,13 @@ class NavRail(Gtk.Box):
     (key, text, icon) at the top, `bottom` the same at the bottom. Emits
     "changed" with the key when the user picks one."""
 
-    __gsignals__: ClassVar[dict] = {"changed": (GObject.SignalFlags.RUN_FIRST, None, (str,))}
+    __gsignals__: ClassVar[dict] = {"changed": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
+                                    "reselected": (GObject.SignalFlags.RUN_FIRST, None, (str,))}
 
     def __init__(self, items, bottom, active):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=False)
         self.add_css_class("navrail")
+        self._just = None
         self._buttons = {}
         self._badges = {}
         self._quiet = False
@@ -705,13 +716,25 @@ class NavRail(Gtk.Box):
         else:
             b.set_group(self._group)
         b.connect("toggled", self._toggled, key)
+        # Clicking where you already are: "reselected" (back to the list).
+        # "clicked" comes after the button's own toggling, so a click that
+        # just made it active is told apart by the flag _toggled sets.
+        b.connect("clicked", self._clicked, key)
         self._buttons[key] = b
         self._badges[key] = badge
         return b
 
     def _toggled(self, b, key):
+        if b.get_active():
+            self._just = key
         if b.get_active() and not self._quiet:
             self.emit("changed", key)
+
+    def _clicked(self, b, key):
+        if self._just == key:
+            self._just = None
+        elif b.get_active():
+            self.emit("reselected", key)
 
     def set_active(self, key):
         b = self._buttons.get(key)
@@ -719,6 +742,7 @@ class NavRail(Gtk.Box):
             self._quiet = True
             b.set_active(True)
             self._quiet = False
+        self._just = None
 
     def set_count(self, key, n):
         """A badge on the item; "" or 0 hides it."""

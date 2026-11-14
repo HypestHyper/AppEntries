@@ -65,9 +65,15 @@ class AppPage(Gtk.Box):
         self._narrow = False
         self._quiet = False
 
-        self.back = button(_("Apps"), "chevron_left", "text", small=True, tooltip=_("Back to the list (Esc)"),
-                           cb=lambda *_: win.close_app())
-        self.back.set_halign(Gtk.Align.START)
+        # In a narrow window the page takes the list's place: a clear way back.
+        self.back_label = Gtk.Label(label=_("Back to Apps"))
+        self.back = Gtk.Button(halign=Gtk.Align.START)
+        self.back.set_child(hbox(6, icon("chevron_left"), self.back_label))
+        self.back.add_css_class("tonal")
+        self.back.add_css_class("back-button")
+        self.back.set_tooltip_text(_("Back to the list (Esc)"))
+        self.back.connect("clicked", lambda *_: win.close_app())
+        self.back.set_margin_bottom(10)
         self.back.set_visible(False)
         self.page = vbox(0)
         self.page.set_margin_bottom(96)   # room for the save bar
@@ -137,7 +143,8 @@ class AppPage(Gtk.Box):
             self._empty()
             return
         self._handler = item.connect("changed", lambda *_: None if self._quiet else self._build(keep_scroll=True))
-        self.back.set_label(_("Launchers") if self.win.settings.get("filter") == "mine" else _("Apps"))
+        self.back_label.set_label(_("Back to Launchers") if self.win.settings.get("filter") == "mine"
+                                  else _("Back to Apps"))
         self._build()
 
     def _empty(self):
@@ -338,7 +345,15 @@ class AppPage(Gtk.Box):
         if a.generic_name:
             c.append(line(_("Kind of app"), a.generic_name))
         c.append(line(_("Description"), a.comment))
-        c.append(line(_("Runs"), a.exec, mono=True))
+        runs = a.exec
+        if a.created and a.override_path:
+            # A commands launcher: what you wrote, not the script that runs it.
+            from .. import launchers
+            from ..overrides import read_text
+            spec = launchers.read_spec(read_text(a.override_path) or "")
+            if spec is not None and spec.kind == "commands":
+                runs = "\n\n".join(c.strip() for c in spec.commands if c.strip()) or runs
+        c.append(line(_("Runs"), runs, mono=True))
         if a.customised:
             c.append(label(_("Customised: launchers use your copy of this entry. Restore original, below, puts "
                              "the version its package installed back."), ("small", "dim"), wrap=True, chars=50))
