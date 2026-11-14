@@ -164,6 +164,13 @@ menubutton.new-menu > button {{ background-color: {PRIMARY}; color: {ON_PRIMARY}
   padding: 0 12px 0 14px; border-radius: 18px; }}
 menubutton.found-line > button {{ min-height: 34px; padding: 0 12px; border-radius: 17px;
   background-color: {PRIMARY_CONTAINER}; color: {ON_PRIMARY_CONTAINER}; }}
+button.icon-edit {{ background: none; box-shadow: none; padding: 0; border-radius: 22px; min-width: 0; min-height: 0; }}
+.icon-edit-badge {{ background: {PRIMARY}; color: {ON_PRIMARY}; border-radius: 14px; min-width: 28px; min-height: 28px;
+  margin: -6px; box-shadow: 0 0 0 3px {SURFACE_CONTAINER_HIGH}; opacity: .85; }}
+.icon-edit-badge .icon {{ font-size: 16px; }}
+button.icon-edit:hover .icon-edit-badge, button.icon-edit:focus-visible .icon-edit-badge {{ opacity: 1; }}
+button.icon-edit:hover .icon-tile {{ outline: 2px solid alpha({PRIMARY}, .6); outline-offset: 2px; }}
+button.icon-edit:focus-visible {{ outline: 2px solid {PRIMARY}; outline-offset: 2px; }}
 .draft-dot {{ background: {PRIMARY}; border-radius: 4px; min-width: 8px; min-height: 8px; }}
 expander.entry-expander > title {{ padding: 6px 4px; }}
 /* Navigation rail */

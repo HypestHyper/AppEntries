@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The big icon at the top of an app's page has a pencil and opens the icon picker when clicked, for any app or launcher. The new icon shows at once, ready to save.
+
 ## 1.2.1 — 2026-11-14
 
 - New apps stay marked New until you open their page, instead of until you close App Entries, so you don't miss them. Filter has Mark all as seen.

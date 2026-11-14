@@ -192,7 +192,22 @@ class AppPage(Gtk.Box):
         text = vbox(2, name, label(origin, ("small", "dim")), ident)
         text.set_hexpand(True)
         text.set_valign(Gtk.Align.CENTER)
-        top = hbox(18, _tile(a.icon, 64), text)
+        # The icon is a button: the clearest way to say it can be changed.
+        tile = _tile(a.icon, 64)
+        self.head_image = tile.get_first_child()
+        badge = Gtk.Box(halign=Gtk.Align.END, valign=Gtk.Align.END)
+        badge.add_css_class("icon-edit-badge")
+        badge.append(icon("edit"))
+        over = Gtk.Overlay()
+        over.set_child(tile)
+        over.add_overlay(badge)
+        icon_btn = Gtk.Button(valign=Gtk.Align.CENTER)
+        icon_btn.add_css_class("icon-edit")
+        icon_btn.set_child(over)
+        icon_btn.set_tooltip_text(_("Change the icon"))
+        icon_btn.update_property([Gtk.AccessibleProperty.LABEL], [_("Change {name}'s icon").format(name=a.name)])
+        icon_btn.connect("clicked", lambda *_: self.change_icon())
+        top = hbox(18, icon_btn, text)
         if not (a.missing or a.uninstalled):
             run = button(_("Open"), "play_arrow", "tonal", small=True, tooltip=_("Start {name}").format(name=a.name),
                          cb=lambda *_: self.win._on_card_action(self.item, "launch"))
@@ -362,6 +377,11 @@ class AppPage(Gtk.Box):
             self.preview_holder.append(self._preview(self.item.app, f.name.strip() or self.item.app.name,
                                                      f.comment, f.icon, gicon))
             self.head_name.set_label(f.name.strip() or self.item.app.name)
+            from .app_card import gicon_for
+            if gicon is not None:
+                self.head_image.set_from_paintable(preview_texture(form.picked, 64))
+            else:
+                self.head_image.set_from_gicon(gicon_for(f.icon))
         self.bar_text.set_label(_("Unsaved changes to {name}").format(name=self.item.app.name))
         self.bar_save.set_sensitive(form.is_valid())
         self.savebar.set_reveal_child(dirty)
@@ -388,6 +408,22 @@ class AppPage(Gtk.Box):
                 self._quiet = True
                 item.emit("changed")
                 self._quiet = False
+
+    def change_icon(self):
+        """The icon picker, for this app's edit form or its launcher form."""
+        if self.form is not None:
+            self.form._pick_material()
+            return
+        if self.item is None:
+            return
+        self.win._on_card_action(self.item, "edit")
+
+        def open_picker():
+            form = self.form_holder.get_first_child()
+            if form is not None and hasattr(form, "_pick_icon"):
+                form._pick_icon()
+            return False
+        GLib.idle_add(open_picker)
 
     def focus_form(self):
         if self.form is not None:
