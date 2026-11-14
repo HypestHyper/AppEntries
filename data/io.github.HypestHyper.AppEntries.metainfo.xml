@@ -61,6 +61,16 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.2.4" date="2026-11-14">
+      <description>
+        <ul>
+          <li>Material 3 Expressive motion throughout the app</li>
+          <li>Hiding an app now shows clearly in its row</li>
+          <li>Reduce motion respects your desktop's animation setting</li>
+          <li>Everything takes its new size at once after resizing the window</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.3" date="2026-11-14">
       <description>
         <ul>

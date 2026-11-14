@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.4 — 2026-11-14
 
 - Motion follows Material 3 Expressive throughout. Things that move or change shape (button presses, the rail's indicator, switches, panels) overshoot slightly and settle; colours and fades never bounce. Small parts move fast, panels a little slower.
 - The rail's indicator grows out from the middle of the place you pick.
