@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 — 2026-11-14
 
 - New ▾ in Launchers adds what you downloaded, each filled in for you in the launcher form:
   - **AppImage**: its name, description, icon, categories, file types and window class are read from inside it with unsquashfs, without running it. (Without unsquashfs, it asks before using the AppImage's own extractor.) It can move to ~/Applications and is made executable.

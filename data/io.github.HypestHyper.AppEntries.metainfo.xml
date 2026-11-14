@@ -20,6 +20,7 @@
       <li>Hide or show apps with one click, or several at once, with Undo</li>
       <li>A page for each app: how it looks in your launcher, its settings and everything you can do with it</li>
       <li>Edit any app's entry, and find leftover files, missing programs and duplicates</li>
+      <li>Add AppImages, app folders, Windows programs and other downloads, with their name and icon filled in</li>
       <li>Make launchers for programs, scripts and commands (in one terminal or several), and web apps that open a site in its own window</li>
       <li>Styled icons from thousands of symbols or your own SVGs</li>
       <li>Turn login programs on and off</li>
@@ -60,6 +61,15 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.2.0" date="2026-11-14">
+      <description>
+        <ul>
+          <li>Add AppImages, app folders, Windows programs, Java apps, .desktop files and Distrobox apps, filled in for you</li>
+          <li>Launchers lists downloaded apps that have no launcher yet</li>
+          <li>Point an AppImage launcher at a newer download</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.1.2" date="2026-11-14">
       <description>
         <ul>
