@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.2 — 2026-11-14
 
 - No more dot on the Filter button. When the list is narrowed to a source, customised or new apps, the button is tinted and each filter shows under it as a chip that lifts it. Leaving out apps that aren't in menus is a preference, so it isn't marked.
 
