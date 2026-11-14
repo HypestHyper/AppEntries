@@ -61,6 +61,15 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.2.3" date="2026-11-14">
+      <description>
+        <ul>
+          <li>Open works for launchers that run in a terminal</li>
+          <li>A clear way back to the list in narrow windows</li>
+          <li>A commands launcher's page shows its commands</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.2" date="2026-11-14">
       <description>
         <ul>

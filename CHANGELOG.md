@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.3 — 2026-11-14
 
 - The pencil on an app's icon sits in the middle of its circle.
 - Open works for launchers that run in a terminal (commands launchers among them): App Entries starts them in your terminal itself, instead of relying on GLib, which only knows a few terminals and failed with "Unable to find terminal required for application".
