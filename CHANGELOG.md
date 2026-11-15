@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Installation** section at the bottom of each app's page: its package, version and where it came from (your distribution's repositories, the AUR, a PPA or other repository, a hand-installed package file, Flathub, a Snap channel), when it was installed, whether it was installed directly or pulled in by another package, who installed it (where apt records that), whether it's for all users or just you, and its size. **Dependencies** opens to show what it needs, what needs it, and optional extras with whether they're installed. For a Flatpak, its runtime and how many other apps share it; for a Snap, its publisher and base.
+- For an AppImage or a program no package owns: the file, its date, the web address your browser downloaded it from, and the GitHub project an AppImage says its updates come from.
+- The page doesn't wait for any of this: it opens at once, the section fills in from the background, and the dependency lists are only read when opened. Answers are remembered until something is installed or removed. Only reads; nothing is changed.
+
 ## 1.2.5 — 2026-11-15
 
 - Going from Launchers to another tab no longer flashes the Apps list on the way out.

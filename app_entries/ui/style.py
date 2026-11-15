@@ -178,6 +178,8 @@ button.icon-edit:focus-visible {{ outline: 2px solid {PRIMARY}; outline-offset: 
 button.back-button {{ min-height: 36px; padding: 0 16px 0 10px; border-radius: 18px; }}
 .draft-dot {{ background: {PRIMARY}; border-radius: 4px; min-width: 8px; min-height: 8px; }}
 expander.entry-expander > title {{ padding: 6px 4px; }}
+.dep-chip {{ background: {SURFACE_CONTAINER_HIGHEST}; border-radius: 8px; padding: 3px 9px; }}
+.dep-chip.dep-missing {{ background: transparent; box-shadow: inset 0 0 0 1px {OUTLINE_VARIANT}; color: {ON_SURFACE_VARIANT}; }}
 /* Navigation rail */
 .navrail {{ padding: 4px 0 8px 0; min-width: 64px; }}
 .navrail > button.rail-item {{ background: none; box-shadow: none; padding: 4px 0 6px 0; min-height: 0;

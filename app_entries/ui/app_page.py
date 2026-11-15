@@ -12,6 +12,7 @@ from gi.repository import Gio, GLib, Gtk, Pango
 from .. import APP_ID, autostart, defaults, history, uninstall
 from .app_card import UNINSTALL_HINTS, gicon_later, label_for_source
 from .dialogs import run_bg
+from .install_section import InstallSection
 from .widgets import Floating, Toggle, WrapBox, button, card, clear, enter, hbox, icon, label, section, vbox
 
 SELF_ID = APP_ID + ".desktop"
@@ -180,6 +181,8 @@ class AppPage(Gtk.Box):
         self._login(a)
         self._helpers(a)
         self._changes(a)
+        gen = self._gen
+        self.page.append(InstallSection(a, lambda: gen == self._gen))
         self.page.append(self._actions(a))
         adj.set_value(y)
         GLib.idle_add(lambda: (adj.set_value(y), False)[1])
