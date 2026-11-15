@@ -61,6 +61,15 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.2.12" date="2026-11-15">
+      <description>
+        <ul>
+          <li>A quiet daily watch for apps the package manager doesn't update, including Flatpaks: a small dot marks a newer version</li>
+          <li>Terminal windows wait for Enter instead of starting your shell</li>
+          <li>Tools with many commands show five, with Show all</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.11" date="2026-11-15">
       <description>
         <ul>

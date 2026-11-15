@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.12 — 2026-11-15
 
 - **Updates for your other apps are quiet now**: the App updates list and the System, Flatpak and Snap card are gone from Updates (some versions came out wrong, mostly for packages the package manager updates anyway). Instead, App Entries watches what the system's package manager doesn't update (AppImages, apps from GitHub, apps installed with pip, pipx or uv, git copies, tools in Tools, and Flatpaks) once a day, and a **small dot** on its row marks one with a newer version, its tooltip saying which. Its page shows the new version with the Update button ready (Flatpaks: Update in terminal). Turn it off in Updates → Checking.
 - A tool with many commands shows the first 5 on its page, with **Show all**, instead of a long list.
