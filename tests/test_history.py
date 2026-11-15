@@ -60,3 +60,19 @@ def test_history_is_trimmed_and_can_be_cleared(xdg, monkeypatch):
     history.clear(xdg.env)
     assert history.load(xdg.env) == []
     assert history.record("nothing", [], env=xdg.env) is None
+
+
+def test_undoing_an_update_puts_the_old_file_back_and_the_download_in_the_trash(xdg):
+    home = xdg.env["HOME"]
+    old, new = f"{home}/Tool-1.AppImage", f"{home}/Tool-2.AppImage"
+    for p in (old, new):
+        with open(p, "w") as f:
+            f.write(p)
+    t = trash.move(old, xdg.env)
+    e = history.record("Tool updated to 2", [], [t], env=xdg.env, added=[new])
+    (loaded,) = history.load(xdg.env)
+    assert loaded.added == [new] and loaded.can_undo
+    history.undo(e.id, xdg.env)
+    import os
+    assert os.path.exists(old) and not os.path.exists(new)
+    assert any(n.startswith("Tool-2") for n in os.listdir(trash.folder(xdg.env) + "/files"))

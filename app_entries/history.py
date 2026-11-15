@@ -34,6 +34,8 @@ class Entry:
     # and whether they open Steam instead.
     reinstall: list[list[str]] = field(default_factory=list)
     reinstall_steam: bool = False
+    # Files the change brought in (a downloaded update): Undo moves them to the Trash.
+    added: list[str] = field(default_factory=list)
 
     @property
     def can_undo(self) -> bool:
@@ -72,7 +74,7 @@ def _to_json(e: Entry) -> dict:
         "changes": [{"app_id": c.app_id, "app_name": c.app_name, "path": c.path, "before": _enc(c.before),
                      "after": _enc(c.after), "hidden": c.hidden} for c in e.changes],
         "trashed": [{"original": t.original, "file": t.file, "info": t.info} for t in e.trashed],
-        "reinstall": e.reinstall, "reinstall_steam": e.reinstall_steam,
+        "reinstall": e.reinstall, "reinstall_steam": e.reinstall_steam, "added": e.added,
     }
 
 
@@ -85,6 +87,7 @@ def _from_json(d: dict) -> Entry:
         trashed=[trash.Trashed(t["original"], t["file"], t["info"]) for t in d.get("trashed", [])],
         reinstall=[[str(w) for w in c] for c in d.get("reinstall") or [] if isinstance(c, list)],
         reinstall_steam=bool(d.get("reinstall_steam")),
+        added=[str(p) for p in d.get("added") or []],
     )
 
 
@@ -117,7 +120,8 @@ def _save(entries: list[Entry], env=None) -> None:
 
 
 def record(message: str, changes: list[Change], trashed: Optional[list[trash.Trashed]] = None,
-           env=None, reinstall: Optional[list[list[str]]] = None, reinstall_steam: bool = False) -> Optional[Entry]:
+           env=None, reinstall: Optional[list[list[str]]] = None, reinstall_steam: bool = False,
+           added: Optional[list[str]] = None) -> Optional[Entry]:
     """Add an entry. Returns it, or None if there was nothing to record or
     the log couldn't be written (the change itself is already made)."""
     trashed = list(trashed or [])
@@ -126,7 +130,7 @@ def record(message: str, changes: list[Change], trashed: Optional[list[trash.Tra
     entries = load(env)
     e = Entry(id=(entries[0].id + 1) if entries else 1, when=time.time(), message=message,
               changes=list(changes), trashed=trashed, reinstall=list(reinstall or []),
-              reinstall_steam=reinstall_steam)
+              reinstall_steam=reinstall_steam, added=list(added or []))
     size = sum(len(c.before or "") + len(c.after or "") for c in e.changes)
     if size > MAX_ENTRY:
         e.too_big = True
@@ -187,6 +191,12 @@ def undo(entry_id: int, env=None) -> Entry:
         raise UndoError(f"The file couldn't be changed: {err.reason}.", err.path) from err
     for t in e.trashed:
         trash.restore(t)
+    for p in e.added:
+        if os.path.lexists(p):
+            try:
+                trash.move(p, env)
+            except trash.TrashError:
+                pass
     e.undone = time.time()
     try:
         _save(entries, env)

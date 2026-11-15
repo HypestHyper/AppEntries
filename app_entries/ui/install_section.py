@@ -8,11 +8,11 @@ remembered (install_info), so a page opened again fills in at once."""
 from gettext import gettext as _
 from gettext import ngettext
 
-from gi.repository import GLib, Gtk, Pango
+from gi.repository import Gio, GLib, Gtk, Pango
 
-from .. import install_info
+from .. import github_apps, install_info
 from .dialogs import run_bg
-from .widgets import WrapBox, card, clear, hbox, icon, label, section, spinner, vbox
+from .widgets import WrapBox, button, card, clear, hbox, icon, label, section, spinner, vbox
 
 SHOWN = 40      # names shown in a list before "and N more"
 
@@ -140,10 +140,15 @@ class InstallSection(Gtk.Box):
             add(_("Size"), GLib.format_size(d.size))
         if d.origin:
             add(_("Downloaded from"), d.origin, mono=True)
-        if d.updates_from:
+        src = None
+        if d.kind in ("appimage", "file"):
+            src = github_apps.source_of(self.app.id, d.raw.get("update_info", ""), d.origin)
+        if d.updates_from and src is None:
             add(_("Updates come from"), d.updates_from)
         if d.kind in ("package", "flatpak", "snap"):
             c.append(self._deps_expander(d))
+        if d.kind in ("appimage", "file") and (src is not None or d.kind == "appimage"):
+            c.append(GitHubPart(self.app, d, src, self._here))
 
     # -- the dependency lists, read when opened ------------------------------
 
@@ -215,3 +220,198 @@ class InstallSection(Gtk.Box):
             row.append(label(_("and {n} more").format(n=len(items) - SHOWN), ("small", "dim")))
         box.append(row)
         self.deps.append(box)
+
+
+HOW = {
+    "appimage": _("The AppImage says its updates come from this project."),
+    "download": _("Your browser downloaded it from this project's releases."),
+    "linked": _("You linked it to this project."),
+    "updated": _("App Entries updated it from this project's releases."),
+}
+
+
+class GitHubPart(Gtk.Box):
+    """The GitHub project an app comes from: check for a newer release and,
+    for an AppImage, update it. Nothing is asked of GitHub until a button
+    is pressed."""
+
+    def __init__(self, app, d, src, still_here):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        self.add_css_class("card-inner")
+        self.app, self.d, self.src, self._here = app, d, src, still_here
+        self.path = d.path
+        self._stop = False
+        self._show()
+
+    def _show(self):
+        clear(self)
+        src = self.src
+        if src is None:
+            self.append(label(_("Is it from a GitHub project? Link it, and App Entries can check for new releases "
+                                "and update it."), ("body",), wrap=True))
+            row = hbox(8)
+            self.entry = Gtk.Entry(placeholder_text=_("owner/name, or the project's address"), hexpand=True)
+            self.entry.connect("activate", lambda *_a: self._link())
+            row.append(self.entry)
+            row.append(button(_("Link"), "link", "tonal", small=True, cb=lambda *_a: self._link()))
+            self.append(row)
+            self.status = label("", ("small", "error-text"), wrap=True)
+            self.status.set_visible(False)
+            self.append(self.status)
+            return
+        head = hbox(10, icon("deployed_code"))
+        text = vbox(0, label(_("GitHub: {project}").format(project=src.name), ("body", "subheading")),
+                    label(HOW.get(src.how, ""), ("small", "dim"), wrap=True))
+        text.set_hexpand(True)
+        head.append(text)
+        self.append(head)
+        self.status = vbox(8)
+        self.append(self.status)
+        row = WrapBox(8, 8)
+        self.check_btn = button(_("Check for updates"), "sync", "tonal", small=True,
+                                tooltip=_("Asks GitHub for the project's latest release. Nothing about you is sent."),
+                                cb=lambda *_a: self._check())
+        row.append(self.check_btn)
+        row.append(button(_("Project page"), "open_in_new", "text", small=True,
+                          cb=lambda *_a: _open(src.page)))
+        if src.how == "linked":
+            row.append(button(_("Unlink"), "link_off", "text", small=True,
+                              tooltip=_("Forget that it comes from this project"), cb=lambda *_a: self._unlink()))
+        self.append(row)
+
+    # -- linking --------------------------------------------------------------
+
+    def _link(self):
+        try:
+            self.src = github_apps.link(self.app.id, self.entry.get_text())
+        except (github_apps.GitHubError, OSError) as e:
+            self.status.set_label(str(e))
+            self.status.set_visible(True)
+            return
+        self._show()
+
+    def _unlink(self):
+        github_apps.unlink(self.app.id)
+        self.src = github_apps.source_of(self.app.id, self.d.raw.get("update_info", ""), self.d.origin)
+        self._show()
+
+    # -- checking ---------------------------------------------------------------
+
+    def _busy(self, text):
+        clear(self.status)
+        self.status.append(hbox(10, spinner(), label(text, ("small", "dim"))))
+
+    def _check(self):
+        self.check_btn.set_sensitive(False)
+        self._busy(_("Asking GitHub…"))
+        app_id, path, src = self.app.id, self.path, self.src
+        run_bg(lambda: github_apps.check(app_id, path, src), self._checked)
+
+    def _checked(self, r):
+        if not self._here():
+            return
+        self.check_btn.set_sensitive(True)
+        clear(self.status)
+        if isinstance(r, Exception):
+            self.status.append(label(str(r), ("small", "error-text"), wrap=True))
+            return
+        rel = r.release
+        version = github_apps.version_in(rel.tag) or rel.tag
+        if not r.newer:
+            self.status.append(label(_("Up to date: {version} is the latest release.").format(version=version),
+                                     ("body",), wrap=True))
+            return
+        title = _("Version {version} is out").format(version=version)
+        if r.current:
+            title += " " + _("(you have {current})").format(current=r.current)
+        self.status.append(label(title, ("body", "subheading"), wrap=True))
+        if rel.notes.strip():
+            ex = Gtk.Expander(label=_("What's new"))
+            ex.add_css_class("entry-expander")
+            notes = label(_short(rel.notes), ("small",), wrap=True, chars=60)
+            notes.set_selectable(True)
+            ex.set_child(notes)
+            self.status.append(ex)
+        row = WrapBox(8, 8)
+        if self.d.kind == "appimage" and r.asset is not None:
+            row.append(button(_("Update to {version}").format(version=version), "download", "filled", small=True,
+                              tooltip=_("Downloads {file} ({size}) next to the one you have, then points the "
+                                        "launcher at it. The old file goes to the Trash, and Undo puts it back.")
+                              .format(file=r.asset.name, size=GLib.format_size(r.asset.size)),
+                              cb=lambda *_a: self._update(r)))
+        elif self.d.kind == "appimage":
+            self.status.append(label(_("This release has no AppImage for this computer, so it can't be updated "
+                                       "from here."), ("small", "dim"), wrap=True))
+        row.append(button(_("Release page"), "open_in_new", "text", small=True, cb=lambda *_a: _open(rel.url)))
+        self.status.append(row)
+
+    # -- updating ---------------------------------------------------------------
+
+    def _update(self, r):
+        import os
+        clear(self.status)
+        self.check_btn.set_sensitive(False)
+        self._stop = False
+        bar = Gtk.ProgressBar(hexpand=True)
+        text = label(_("Downloading {file}…").format(file=r.asset.name), ("small", "dim"), ellipsize=True)
+        stop = button(_("Stop"), style="text", small=True, cb=lambda *_a: self._cancel())
+        self.status.append(text)
+        self.status.append(hbox(10, bar, stop))
+        folder = os.path.dirname(self.path)
+        self._win = self.get_root()     # the update finishes even if you move to another app meanwhile
+
+        def progress(done, total):
+            def show():
+                if total:
+                    bar.set_fraction(min(1.0, done / total))
+                    text.set_label(_("Downloading {file}: {done} of {total}").format(
+                        file=r.asset.name, done=GLib.format_size(done), total=GLib.format_size(total)))
+                else:
+                    bar.pulse()
+                return False
+            GLib.idle_add(show)
+
+        run_bg(lambda: github_apps.download(r.asset, folder, progress, cancelled=lambda: self._stop),
+               lambda new: self._downloaded(r, new))
+
+    def _cancel(self):
+        self._stop = True
+
+    def _downloaded(self, r, new):
+        import os
+        if isinstance(new, Exception):
+            if self._here():
+                self.check_btn.set_sensitive(True)
+                clear(self.status)
+                self.status.append(label(str(new), ("small", "error-text"), wrap=True))
+            return
+        win = self._win
+        version = github_apps.version_in(r.release.tag) or r.release.tag
+        app_id, tag, name, project = self.app.id, r.release.tag, os.path.basename(new), self.src.name
+
+        def done(ok):
+            if ok:
+                github_apps.remember_installed(app_id, tag, name, project)
+            elif os.path.exists(new):
+                os.remove(new)      # the launcher wasn't changed, so the download goes
+        if self._here():
+            self._busy(_("Putting it in place…"))
+        win.use_newer(self.app, self.path, new,
+                      message=lambda _n: _("{name} updated to {version}").format(name=self.app.name, version=version),
+                      done=done, downloaded=True)
+
+
+def _short(notes: str, lines: int = 14) -> str:
+    """Release notes as plain text, cut to a few lines."""
+    import re
+    text = re.sub(r"<!--.*?-->", "", notes, flags=re.DOTALL)
+    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"[*_`#>]+", "", text)
+    out = [l.rstrip() for l in text.splitlines() if l.strip()]
+    return "\n".join(out[:lines]) + ("\n…" if len(out) > lines else "")
+
+
+def _open(url):
+    if url:
+        Gio.AppInfo.launch_default_for_uri(url, None)

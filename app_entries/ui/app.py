@@ -1429,14 +1429,17 @@ class MainWindow(Gtk.ApplicationWindow):
             elif isinstance(result, Exception):
                 error_dialog(self, failed_title, str(result))
             elif result or allow_empty:
-                trashed = (after(result) or []) if after is not None else []
-                self._record(message(len(result)), result, trashed)
+                # `after` returns what it moved to the Trash, or (that, files it added).
+                res = (after(result) or []) if after is not None else []
+                trashed, added = res if isinstance(res, tuple) else (res, [])
+                self._record(message(len(result)), result, trashed, added=added)
 
         run_bg(work, done)
 
-    def _record(self, text, changes, trashed=(), reinstall=None, reinstall_steam=False):
+    def _record(self, text, changes, trashed=(), reinstall=None, reinstall_steam=False, added=()):
         """Log a change in the history and show it with Undo."""
-        entry = history.record(text, changes, list(trashed), reinstall=reinstall, reinstall_steam=reinstall_steam)
+        entry = history.record(text, changes, list(trashed), reinstall=reinstall, reinstall_steam=reinstall_steam,
+                               added=list(added))
         if entry is not None and entry.can_undo:
             self.snackbar.show(text, _("Undo"), lambda: self.undo_entry(entry.id))
         else:
@@ -1872,49 +1875,64 @@ class MainWindow(Gtk.ApplicationWindow):
                 error_dialog(self, _("Couldn't open the folder"), e.message, os.path.dirname(path))
 
     def _newer_file(self, app):
-        """Point an AppImage launcher at a newer download; the old file goes
-        to the Trash (Undo brings it back) and the new one moves next to it."""
+        """Point an AppImage launcher at a newer download you choose."""
         from .app_page import _program_file
-        old = _program_file(app)
+        old = _program_file(app) or appimages.appimage_of(app.exec)
         if not old:
             return
+        choose_file(self, _("Choose the newer AppImage"), lambda new: self.use_newer(app, old, new),
+                    patterns=["*.AppImage", "*.appimage"], filter_name=_("AppImages"),
+                    start=os.path.expanduser("~/Downloads"))
 
-        def chosen(new):
-            if os.path.realpath(new) == os.path.realpath(old):
-                return
-            text = overrides.read_text(app.override_path) or ""
-            spec = launchers.read_spec(text)
-            if spec is None:
-                error_dialog(self, _("Couldn't change {name}").format(name=app.name),
-                             _("Its launcher was changed by hand, so App Entries can't safely edit it."),
-                             app.override_path)
-                return
-            target = os.path.join(os.path.dirname(old), os.path.basename(new))
-            moved = []
+    def use_newer(self, app, old, new, message=None, done=None, downloaded=False):
+        """Swap an app's AppImage for a newer file: the new one moves next to
+        the old, the launcher is pointed at it, and the old file goes to the
+        Trash. Undo puts the launcher and the old file back. `done(ok)` is
+        called at the end."""
+        if os.path.realpath(new) == os.path.realpath(old):
+            return
+        target = os.path.join(os.path.dirname(old), os.path.basename(new))
 
-            def plan():
-                import shutil as sh
-                if os.path.realpath(os.path.dirname(new)) != os.path.realpath(os.path.dirname(old)):
-                    if os.path.exists(target):
-                        raise overrides.OverrideError(target, "a file with that name is already there")
-                    sh.move(new, target)
-                    moved.append(target)
-                importers.make_executable(target)
+        def plan():
+            import shutil as sh
+            if os.path.realpath(os.path.dirname(new)) != os.path.realpath(os.path.dirname(old)):
+                if os.path.exists(target):
+                    raise overrides.OverrideError(target, "a file with that name is already there")
+                sh.move(new, target)
+            importers.make_executable(target)
+            text = overrides.read_text(app.override_path) if app.override_path else None
+            spec = launchers.read_spec(text) if (app.created and text) else None
+            if spec is not None:
                 spec.program = spec.program.replace(old, target)
                 return launchers.plan_save(spec, app.id)[1]
+            # Any other launcher: its command (and icon, if it points at the
+            # file) now name the new file, saved as your own copy.
+            fields = editing.read_fields(app)
+            if old not in fields.command:
+                raise overrides.OverrideError(app.source_path, "its command doesn't run the old file")
+            changed = editing.copy_fields(fields, command=fields.command.replace(old, target),
+                                          icon=fields.icon.replace(old, target))
+            change = editing.plan_edit(app, changed)
+            return [change] if change is not None else []
 
-            def after(_changes):
-                try:
-                    return [trash.move(old)]
-                except trash.TrashError:
-                    return []
+        ok = {"yes": False}
 
-            self._run_changes(plan, lambda n: _("{name} now uses {file}").format(
-                name=app.name, file=os.path.basename(target)), _("Couldn't change {name}").format(name=app.name),
-                after=after)
+        def after(_changes):
+            ok["yes"] = True
+            # A downloaded update is the app's file now; Undo moves it to the Trash.
+            added = [target] if downloaded else []
+            try:
+                return [trash.move(old)], added
+            except trash.TrashError:
+                return [], added
 
-        choose_file(self, _("Choose the newer AppImage"), chosen, patterns=["*.AppImage", "*.appimage"],
-                    filter_name=_("AppImages"), start=os.path.expanduser("~/Downloads"))
+        def finished():
+            if done is not None:
+                GLib.idle_add(lambda: (done(ok["yes"]), False)[1])
+
+        self._run_changes(plan, message or (lambda n: _("{name} now uses {file}").format(
+            name=app.name, file=os.path.basename(target))), _("Couldn't change {name}").format(name=app.name),
+            after=after, done_anyway=finished)
 
     def _launch(self, app):
         """Start the app the way a launcher would, from the entry launchers use."""

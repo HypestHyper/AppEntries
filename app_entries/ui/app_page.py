@@ -9,7 +9,7 @@ from gettext import gettext as _
 
 from gi.repository import Gio, GLib, Gtk, Pango
 
-from .. import APP_ID, autostart, defaults, history, uninstall
+from .. import APP_ID, appimages, autostart, defaults, history, uninstall
 from .app_card import UNINSTALL_HINTS, gicon_later, label_for_source
 from .dialogs import run_bg
 from .install_section import InstallSection
@@ -649,7 +649,7 @@ class AppPage(Gtk.Box):
                               cb=lambda *_: self.win._on_card_action(self.item, action)))
 
         program = _program_file(a)
-        if a.created and program and program.lower().endswith(".appimage"):
+        if appimages.appimage_of(a.exec) and os.path.isfile(appimages.appimage_of(a.exec)):
             add(_("Use a newer file…"), "upload", "newer-file",
                 tip=_("Point this launcher at a newer download of the AppImage. The old file goes to the Trash, "
                       "and Undo brings it back."))

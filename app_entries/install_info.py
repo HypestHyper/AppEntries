@@ -386,6 +386,7 @@ def _file(path, sysm, kind="file"):
     except OSError:
         pass
     d.origin = download_origin(path)
+    d.raw["update_info"] = update_info(path) if kind == "appimage" else ""
     d.updates_from = appimage_updates(path) if kind == "appimage" else ""
     if not d.updates_from:
         d.updates_from = github_of(d.origin)
@@ -407,10 +408,14 @@ def github_of(url: str) -> str:
     return f"GitHub: {m.group(1)}/{m.group(2)}" if m else ""
 
 
+def update_info(path: str) -> str:
+    """An AppImage's update information (its .upd_info section), as written."""
+    return elf_section(path, ".upd_info").split(b"\0", 1)[0].decode("utf-8", "replace").strip()
+
+
 def appimage_updates(path: str) -> str:
-    """Where an AppImage says its updates come from (its .upd_info section),
-    e.g. "GitHub: owner/repo", or ""."""
-    info = elf_section(path, ".upd_info").split(b"\0", 1)[0].decode("utf-8", "replace").strip()
+    """Where an AppImage says its updates come from, e.g. "GitHub: owner/repo", or ""."""
+    info = update_info(path)
     if not info:
         return ""
     parts = info.split("|")
