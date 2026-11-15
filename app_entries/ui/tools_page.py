@@ -17,7 +17,7 @@ from gi.repository import Gdk, Gio, GLib, Gtk
 from .. import cli_tools, terminal, trash
 from .. import desktop_entries as de
 from .dialogs import Dialog, run_bg
-from .widgets import WrapBox, button, card, clear, hbox, icon, label, long_text, section, spinner, vbox
+from .widgets import WrapBox, button, card, clear, glyph, hbox, icon, label, long_text, section, spinner, vbox
 
 GLYPHS = {"cargo": "deployed_code", "go": "deployed_code", "pipx": "terminal", "uv": "terminal", "npm": "deployed_code",
           "file": "description"}
@@ -37,6 +37,7 @@ for _k in cli_tools.SYSTEM_KINDS:
     ABOUT_GROUP[_k] = _("Terminal programs you installed that have no menu entry. They update with the rest of "
                         "the system; Remove uninstalls one in your terminal.")
 LIST_WIDTH = 460
+SHOWN_COMMANDS = 5       # a tool's commands shown before Show all
 
 
 class ToolsPage(Gtk.Box):
@@ -269,34 +270,52 @@ class ToolsPage(Gtk.Box):
                               _("Type these in a terminal to use it. Manual opens its manual page in your "
                                 "terminal; where there's none, Help… offers to run its own --help.")))
         c = card()
-        helps = []
         paths = t.paths if len(t.paths) == len(t.commands) else [""] * len(t.commands)
-        for name, path in list(zip(t.commands, paths))[:40]:
-            text = vbox(0, label(name, ("mono", "body")))
-            if path:
-                p = label(_short(path), ("mono", "faint"), wrap=True)
-                p.set_selectable(True)
-                text.append(p)
-            text.set_hexpand(True)
-            b = button(_("Help…"), "help", "text", small=True, cb=lambda *_a, n=name: self._help(n),
-                       tooltip=_("Opens a terminal that offers to run {cmd} --help. Nothing runs until you press "
-                                 "Enter there.").format(cmd=name))
-            c.append(hbox(12, text, b))
-            helps.append((name, b))
-        if len(t.commands) > 40:
-            c.append(label(_("And {n} more.").format(n=len(t.commands) - 40), ("small", "dim")))
-        box.append(c)
+        items = list(zip(t.commands, paths))
+        first, rest = items[:SHOWN_COMMANDS], items[SHOWN_COMMANDS:]
+        for name, path in first:
+            c.append(self._command_row(name, path))
+        if rest:
+            # The rest stay folded away until asked for; their rows are made then.
+            more = vbox(12)
+            more.set_visible(False)
+            c.append(more)
+            toggle = button(_("Show all {n} commands").format(n=len(items)), "expand_more", "text", small=True)
+            toggle.set_halign(Gtk.Align.START)
 
-        def manuals(found):
-            if isinstance(found, Exception):
-                return
-            for (name, b), yes in zip(helps, found):
-                if yes:
-                    b.set_label(_("Manual"))
-                    b.set_tooltip_text(_("Opens the manual page for {cmd} in your terminal").format(cmd=name))
-        # Which have a manual page: asked off the main thread, the buttons say so when it's known.
-        run_bg(lambda: [cli_tools.has_manual(n) for n, _b in helps], manuals)
+            arrow, words = toggle.get_child().get_first_child(), toggle.get_child().get_last_child()
+
+            def flip(*_a):
+                if more.get_first_child() is None:
+                    for name, path in rest:
+                        more.append(self._command_row(name, path))
+                more.set_visible(not more.get_visible())
+                words.set_label(_("Show fewer") if more.get_visible() else
+                                _("Show all {n} commands").format(n=len(items)))
+                arrow.set_label(glyph("expand_less" if more.get_visible() else "expand_more"))
+            toggle.connect("clicked", flip)
+            c.append(toggle)
+        box.append(c)
         return box
+
+    def _command_row(self, name, path):
+        text = vbox(0, label(name, ("mono", "body")))
+        if path:
+            p = label(_short(path), ("mono", "faint"), wrap=True)
+            p.set_selectable(True)
+            text.append(p)
+        text.set_hexpand(True)
+        b = button(_("Help…"), "help", "text", small=True, cb=lambda *_a: self._help(name),
+                   tooltip=_("Opens a terminal that offers to run {cmd} --help. Nothing runs until you press "
+                             "Enter there.").format(cmd=name))
+
+        def manual(yes):
+            if yes is True:
+                b.set_label(_("Manual"))
+                b.set_tooltip_text(_("Opens the manual page for {cmd} in your terminal").format(cmd=name))
+        # Whether it has a manual page: asked off the main thread; the button says so when it's known.
+        run_bg(lambda: cli_tools.has_manual(name), manual)
+        return hbox(12, text, b)
 
     # -- actions --------------------------------------------------------------------------
 

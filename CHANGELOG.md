@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A tool with many commands shows the first 5 on its page, with **Show all**, instead of a long list.
 - When App Entries runs something in your terminal (Help, Update, Remove, installs), the window now waits for Enter afterwards instead of starting your shell, so your shell's startup (fastfetch in its config file, say) no longer prints over what the command said.
 
 ## 1.2.11 — 2026-11-15
