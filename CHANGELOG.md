@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Ctrl+Z** while typing in a field undoes the typing there, instead of the last change in History.
+- A new icon shows in the app list straight away, even when it replaces the old icon file under the same name.
+- Status chips sit in the title bar, beside History and Refresh, so an app's page starts level with the search box.
 - **Tools** in the rail opens again: the installed settings didn't list it as a place, so clicking it did nothing.
 - A commands launcher's script shows its first 10 lines on its page, with **Show all**, instead of the whole script; and no tooltip repeats it.
 - Tooltips use the app's own colours, so they're dark in dark mode instead of a bright box.

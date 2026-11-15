@@ -2,12 +2,13 @@
 what needs saying. Hidden apps carry a crossed-out eye; on the row you point
 at or move to, an eye button hides or shows the app. Right-click for the
 rest of its options."""
+import os
 from gettext import gettext as _
 
 from gi.repository import Gdk, Gtk, Pango
 
 from .. import APP_ID
-from .app_card import Badge, gicon_later, menu_box
+from .app_card import Badge, gicon_later, icon_generation, menu_box
 from .widgets import glyph, icon, label, set_text, vbox
 
 
@@ -138,12 +139,16 @@ class AppRow(Gtk.Box):
             second = next((w[len("--app="):] for w in a.exec.split() if w.startswith("--app=")), "")
         set_text(self.desc, second or a.id)
         self.desc.set_tooltip_text(a.id)
-        if a.icon != self._icon_name:
-            self._icon_name = name = a.icon
-            self.image.clear()
+        # The file's time too: changing an icon often rewrites the same file.
+        key = (a.icon, _mtime(a.icon), icon_generation())
+        if key != self._icon_name:
+            if self._icon_name is not None and self._icon_name[:2] != key[:2]:
+                self.image.clear()      # so GTK reads the file again, not its copy of the old one
+            self._icon_name = key
+            name = a.icon
 
-            def show(gicon, name=name):
-                if self._icon_name == name:
+            def show(gicon, key=key):
+                if self._icon_name == key:
                     self.image.set_from_gicon(gicon)
             gicon_later(name, show)
         self.new_badge.set_visible(a.new)
@@ -260,3 +265,11 @@ class AppRow(Gtk.Box):
             pop.set_pointing_to(rect)
         pop.popup()
 
+
+def _mtime(icon: str) -> int:
+    if not icon or not os.path.isabs(icon):
+        return 0
+    try:
+        return os.stat(icon).st_mtime_ns
+    except OSError:
+        return 0

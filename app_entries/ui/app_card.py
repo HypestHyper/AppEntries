@@ -82,9 +82,19 @@ def gicon_later(name: str, apply) -> None:
             t.start()
 
 
+_generation = [0]
+
+
+def icon_generation() -> int:
+    """Goes up each time icons are forgotten, so rows showing an icon whose
+    file changed under the same name load it again."""
+    return _generation[0]
+
+
 def forget_icons() -> None:
-    """Look icons up again next time (after installs and removals)."""
+    """Look icons up again next time (after installs, removals and edits)."""
     _found.clear()
+    _generation[0] += 1
 
 
 class Badge(Gtk.Box):

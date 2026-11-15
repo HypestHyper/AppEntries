@@ -355,8 +355,11 @@ class MainWindow(Gtk.ApplicationWindow):
         # Status chips: above the app page when it's beside the list, else at
         # the top of the window's main area.
         self._scanning = self._scan_failed = self._scan_done = False
+        # Status chips sit in the title bar, beside History and Refresh, so
+        # the app page starts level with the search box.
         self.status = StatusBar(self)
-        self.status.set_size_request(-1, 56)   # level with the search box
+        self.status.set_valign(Gtk.Align.CENTER)
+        self.header.pack_end(self.status)
         self.page_col = vbox(10, self.app_page)
         self.page_col.add_css_class("m-page")
         self.page_col.set_hexpand(True)
@@ -636,6 +639,23 @@ class MainWindow(Gtk.ApplicationWindow):
         elif key == "size":
             self._compact = None
             self._apply_size(self.get_width())
+
+    def _icons_changed(self):
+        """An icon changed in place (the same file, new picture) doesn't change
+        the app's entry, so its row wouldn't know: refresh the ones whose icon
+        file is newer than last time."""
+        seen = getattr(self, "_icon_times", {})
+        now = {}
+        for item in self.apps.items():
+            icon = item.app.icon
+            if icon and os.path.isabs(icon):
+                try:
+                    now[item.app.id] = os.stat(icon).st_mtime_ns
+                except OSError:
+                    continue
+                if item.app.id in seen and seen[item.app.id] != now[item.app.id]:
+                    item.emit("changed")
+        self._icon_times = now
 
     def set_app_updates(self, newer):
         """Apps and tools from GitHub with a newer release (a status chip)."""
@@ -1168,6 +1188,7 @@ class MainWindow(Gtk.ApplicationWindow):
             if self.defaults is not None:
                 self.defaults.reload()
             self.report = report
+            self._icons_changed()
             if self.issues is not None:
                 self.issues.update(report)
             self.rail.set_count("issues", report.count)
@@ -1356,16 +1377,8 @@ class MainWindow(Gtk.ApplicationWindow):
         self._place_status()
 
     def _place_status(self):
-        """Above the page, always taking its room so the page doesn't move
-        as chips come and go; or at the top, only while there's a chip."""
-        beside = self.page_col.get_visible() and not self._narrow
-        want = self.page_col if beside else self.top_status
-        if self.status.get_parent() is not want:
-            if self.status.get_parent() is not None:
-                self.status.get_parent().remove(self.status)
-            want.prepend(self.status)
-        self.status.set_size_request(-1, 56 if beside else -1)
-        self.top_status.set_visible(not beside and self.status.has_items)
+        """The chips stay in the title bar; nothing to move."""
+        self.top_status.set_visible(False)
 
     def _on_toggle(self, item: AppItem, hidden: bool, allow_delete=False):
         if item.busy or (hidden and item.app.id == SELF_ID):
@@ -1490,6 +1503,17 @@ class MainWindow(Gtk.ApplicationWindow):
         run_bg(work, done)
 
     def _undo_last(self):
+        # Typing in a field: Ctrl+Z undoes the typing there, as anywhere else,
+        # not the last change in History.
+        focus = self.get_focus()
+        if isinstance(focus, (Gtk.Text, Gtk.TextView)):
+            focus.activate_action("text.undo", None)
+            return
+        for w in self._other_focus():
+            if isinstance(w, (Gtk.Text, Gtk.TextView)):
+                w.activate_action("text.undo", None)
+                return
+
         def found(entries):
             e = next((x for x in entries if x.can_undo), None) if not isinstance(entries, Exception) else None
             if e is None:
@@ -1498,6 +1522,12 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.undo_entry(e.id)
 
         run_bg(history.load, found)
+
+    def _other_focus(self):
+        """The focused widget in App Entries' other windows (an editor or the
+        icon picker), where Ctrl+Z reaches the main window's shortcut too."""
+        app = self.get_application()
+        return [x.get_focus() for x in (app.get_windows() if app else []) if x is not self and x.is_active()]
 
     def history_changed(self):
         if self.history_window is not None:
