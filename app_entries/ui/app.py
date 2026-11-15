@@ -1,6 +1,7 @@
 """The main window."""
 import os
 import subprocess
+import time
 from gettext import gettext as _
 from gettext import ngettext
 
@@ -325,6 +326,8 @@ class MainWindow(Gtk.ApplicationWindow):
         self._auto_busy = False
         self._sort_newest = self.settings.get("sort") == "newest"
         self._new_ids = set()   # apps marked New: until you open their page
+        self.app_updates_newer = []     # apps and tools from GitHub with a newer release (App updates)
+        self.app_update_results = {}
 
         self.snackbar = Snackbar()
         overlay = Gtk.Overlay(vexpand=True)
@@ -394,6 +397,8 @@ class MainWindow(Gtk.ApplicationWindow):
         elif name == "updates":
             inner = UpdatesPage(self.get_application().updates, self.settings)
             inner.set_margin_bottom(24)
+            from .app_updates_part import AppUpdates
+            inner.append(AppUpdates(self))
             page = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
             page.set_child(Clamp(inner, 760))
         else:
@@ -631,6 +636,38 @@ class MainWindow(Gtk.ApplicationWindow):
         elif key == "size":
             self._compact = None
             self._apply_size(self.get_width())
+
+    def set_app_updates(self, newer):
+        """Apps and tools from GitHub with a newer release (a status chip)."""
+        self.app_updates_newer = list(newer)
+        self.status.update()
+
+    def _daily_app_check(self):
+        """Once a day, if turned on: check apps from GitHub in the background.
+        Nothing is downloaded or changed; a status chip says what's newer."""
+        from .. import app_updates
+        if not self.settings.get("check-app-updates"):
+            self.app_updates_newer = list(app_updates.load_state().get("newer", []))
+            return
+        if not app_updates.due():
+            self.app_updates_newer = list(app_updates.load_state().get("newer", []))
+            self.status.update()
+            return
+        apps = [i.app for i in self.apps.items()]
+
+        def work():
+            items = [app_updates.check(c) for c in app_updates.gather(apps)]
+            newer = [c.key for c in items if c.result is not None and c.result.newer]
+            app_updates.save_state(time.time(), newer)
+            return items, newer
+
+        def done(r):
+            if isinstance(r, Exception):
+                return
+            items, newer = r
+            self.app_update_results = {c.key: (c.result, c.error) for c in items}
+            self.set_app_updates(newer)
+        run_bg(work, done)
 
     def _close_with_drafts(self, *_a):
         """Unsaved edits aren't lost without asking."""
@@ -1146,6 +1183,8 @@ class MainWindow(Gtk.ApplicationWindow):
             self._update_state()
             if first and self.sorted.get_n_items():
                 GLib.idle_add(lambda: (self.grid.grab_focus(), False)[1])
+            if first:
+                self._daily_app_check()
 
         icon_lookup.clear_cache()
         forget_icons()

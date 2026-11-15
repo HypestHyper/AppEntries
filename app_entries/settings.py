@@ -29,6 +29,7 @@ DEFAULTS = {
     "window-height": 760,
     "maximized": False,
     "check-updates": True,
+    "check-app-updates": False,
     "update-notify": True,
     "update-test": False,
     "last-update-check": 0,

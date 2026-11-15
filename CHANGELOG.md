@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **App updates**, on the Updates page: every app and tool from a GitHub project in one list (AppImages, apps installed with pip, pipx or uv, git copies, AUR packages, package files from GitHub, and tools in Tools). **Check all** asks GitHub for each one's latest release; AppImages update right there (with Undo), and the rest run their own update command in your terminal. Turn on **Check once a day** and a status chip says when something is newer; nothing is downloaded or changed until you press Update.
+- **System, Flatpak and Snap**: how many updates are waiting (pacman with checkupdates, apt, dnf, zypper, Flatpak, Snap), with the command that installs them run in your terminal, one by one or all together. With paru or yay, AUR packages are included.
 - **Tools**, a new place in the rail: command-line tools in your home folder that have no menu entry, grouped by how they were installed (cargo, go install, pipx, uv, npm, or files you put in ~/.local/bin), with their version, size and GitHub project. **Update** and **Remove** run the tool's own command in your terminal; a file you put there yourself goes to the Trash, with Undo. Commands that belong to an app with a menu entry aren't listed again.
 - **Waydroid's Android apps**, **JetBrains Toolbox apps** and **Windows programs run with Wine or Bottles** are recognised in Installation: which app looks after them, the Toolbox app's folder, size and version, and the Wine prefix or bottle with its size. Uninstall removes an Android app with Waydroid, hands a Toolbox app to Toolbox, trashes a Wine prefix named like its app, and never deletes a bottle (it can hold other programs).
 - **Uninstall** works for more kinds of app, each shown in full first and undone with Undo:

@@ -71,7 +71,7 @@
   <a href="docs/screenshots/default-apps.png"><img alt="Default apps: web browser, email, files, text, PDFs, pictures, videos and music, each with the app that opens them" src="docs/screenshots/default-apps.png" width="400"></a>
 - **History** of every change, each with Undo, kept between sessions.
 - **Export / Import** your changes to set up another computer.
-- **Updates** from GitHub releases, installed with one button.
+- **Updates**: App Entries' own updates with one button, every app and tool from GitHub in one list to check and update (optionally once a day), and how many system, Flatpak and Snap updates are waiting, with the command run in your terminal.
 - A **command line** for scripts, and full keyboard and screen reader support.
 - Light and dark themes and a responsive layout. The accent can follow your desktop's (GNOME and KDE settings, or the colours Noctalia, matugen, wallust and other theme tools write for GTK apps), and palettes like Catppuccin, Gruvbox, Nord, Rosé Pine, Tokyo Night, Everforest and Solarized restyle the whole app.<br>
   <a href="docs/screenshots/settings.png"><img alt="Settings: accent colours with a colour picker, palettes, light or dark, and size" src="docs/screenshots/settings.png" width="400"></a>
