@@ -44,7 +44,8 @@ class AppRow(Gtk.Box):
         self.name = label("", ("body", "app-name"), ellipsize=True)
         self.name.set_hexpand(False)
         self.new_badge = Badge("auto_awesome", _("New"), "custom",
-                               _("Appeared since App Entries last looked. Marked until you open it here."))
+                               _("Appeared since App Entries last looked. Marked until you open it here, or until "
+                                 "App Entries starts again."))
         self.custom_badge = Badge("edit_note", _("Customised"), "custom",
                                   _("Changed from the version its package installed."))
         self.missing_badge = Badge("link_off", _("Missing program"), "error")

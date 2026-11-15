@@ -44,7 +44,7 @@ def test_new_stays_until_opened(xdg):
     xdg.write(xdg.sys_b, "b.desktop", entry("B"))
     xdg.write(xdg.sys_b, "c.desktop", entry("C"))
     assert seen.update(de.scan(xdg.env), xdg.env, now=2000) == {"b.desktop", "c.desktop"}
-    # Next start: still New, as neither was opened.
+    # Looked again while App Entries runs: still New, as neither was opened.
     assert seen.update(de.scan(xdg.env), xdg.env, now=3000) == {"b.desktop", "c.desktop"}
     assert seen.mark_seen(["b.desktop"], xdg.env) == {"c.desktop"}
     assert seen.update(de.scan(xdg.env), xdg.env, now=4000) == {"c.desktop"}
@@ -52,3 +52,14 @@ def test_new_stays_until_opened(xdg):
     (xdg.sys_b / "c.desktop").unlink()
     assert seen.update(de.scan(xdg.env), xdg.env, now=5000) == set()
     assert seen.load_unseen(xdg.env) == set()
+
+
+def test_new_ends_when_app_entries_starts_again(xdg):
+    xdg.write(xdg.sys_b, "a.desktop", entry("A"))
+    seen.update(de.scan(xdg.env), xdg.env, now=1000, starting=True)
+    xdg.write(xdg.sys_b, "b.desktop", entry("B"))
+    assert seen.update(de.scan(xdg.env), xdg.env, now=2000) == {"b.desktop"}
+    # Installed while App Entries was closed: New at the next start. Last run's New: not any more.
+    xdg.write(xdg.sys_b, "c.desktop", entry("C"))
+    assert seen.update(de.scan(xdg.env), xdg.env, now=3000, starting=True) == {"c.desktop"}
+    assert seen.load_unseen(xdg.env) == {"c.desktop"}

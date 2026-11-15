@@ -44,7 +44,7 @@
   Apps installed with pip, pipx or uv, git copies of projects, and .deb or .rpm packages downloaded from GitHub are recognised too, with an update run in your terminal.
 - **Select several** to hide, show, restore, restyle or uninstall many apps at once.
 - **Edit** any entry (name, icon, command, environment, folders, desktops, quick actions) with a live view of the file. Editing a system app saves your own copy; *Restore original* puts it back.
-- **Open** any app from its page or right-click menu, hidden ones included. Sort A–Z or newest first; apps that appeared since App Entries last looked are marked New until you open them.
+- **Open** any app from its page or right-click menu, hidden ones included. Sort A–Z or newest first; apps that appeared since App Entries last looked are marked New until you open them or start App Entries again.
 - **Issues** finds leftover files, missing programs and duplicates, and explains each with a button to fix it.<br>
   <a href="docs/screenshots/issues.png"><img alt="Issues listing an entry whose program isn't installed, with a button to hide it" src="docs/screenshots/issues.png" width="400"></a>
 - Apps you edited and then uninstalled some other way are hidden from menus with your edits kept, and the edits apply again if you reinstall. Both are options in Issues, each done once with Undo.

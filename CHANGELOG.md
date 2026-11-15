@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **New** lasts until you open the app or App Entries starts again, as intended. The Filter menu's Mark as seen button is gone.
 - **Games from Heroic, Lutris, Bottles, itch and Minigalaxy** are recognised in Installation, instead of showing the package of the helper their launcher calls (like xdg-utils for `xdg-open heroic://…`). The page says which launcher installed and starts the game and, for Heroic, which store it's from (Epic, GOG or Amazon). Where Heroic or Lutris keep a record, it shows the game's folder and real size, its version and (Lutris) when it was installed.
 - Commands that only adjust how an app runs (`env`, `gamemoderun`, `prime-run`, `mangohud` and the like) are looked through to the app itself, and openers (`xdg-open`, `gio open`, `gtk-launch`…) are never taken for the app.
 

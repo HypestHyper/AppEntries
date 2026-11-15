@@ -1,6 +1,6 @@
 """When each app first appeared on this computer, for sorting by newest and
-for the New badge. An app stays New until you open its page (or mark them
-all as seen); that list is kept in unseen.json beside it.
+for the New badge. An app stays New until you open its page or App Entries
+starts again; while it runs, that list is kept in unseen.json beside it.
 
 Package managers keep the build date as an entry file's modification time and
 rewrite the file on every update, so neither file time says when an app was
@@ -90,11 +90,12 @@ def mark_seen(ids, env=None) -> set:
     return left
 
 
-def update(apps, env=None, now=None) -> set:
+def update(apps, env=None, now=None, starting=False) -> set:
     """Note apps not seen before and set each app's `first_seen`. Returns the
     IDs that are New: the ones that appeared now, and earlier ones you
-    haven't opened yet. An app that's removed is forgotten, so installing it
-    again counts as new."""
+    haven't opened yet in this run of App Entries (`starting`: the first
+    look since it started, so the last run's New ones aren't new any more).
+    An app that's removed is forgotten, so installing it again counts as new."""
     now = time.time() if now is None else now
     known = load(env)
     first_run = known is None
@@ -111,8 +112,9 @@ def update(apps, env=None, now=None) -> set:
         a.first_seen = when
     if out != known:
         _save(out, env)
-    unseen = load_unseen(env)
-    still = (unseen & set(out)) | new
-    if still != unseen:
+    before = load_unseen(env)
+    kept = set() if starting else before
+    still = (kept & set(out)) | new
+    if still != before:
         _save_unseen(still, env)
     return still
