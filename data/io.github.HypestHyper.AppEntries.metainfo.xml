@@ -61,6 +61,13 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.2.13" date="2026-11-15">
+      <description>
+        <ul>
+          <li>The update dot clears when an app turns out to be up to date, or its file was updated another way</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.12" date="2026-11-15">
       <description>
         <ul>

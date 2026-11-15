@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.13 — 2026-11-15
 
 - The update dot no longer stays on an app that's up to date: a check on its page (including the one that runs when you open an app with a dot) now clears the dot or adds it, and a dot for an AppImage whose file has changed since the daily check (updated another way) is dropped.
 
