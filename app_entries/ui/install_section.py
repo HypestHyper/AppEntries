@@ -10,7 +10,7 @@ from gettext import ngettext
 
 from gi.repository import Gio, GLib, Gtk, Pango
 
-from .. import github_apps, install_info
+from .. import github_apps, install_info, terminal
 from .dialogs import run_bg
 from .widgets import WrapBox, button, card, clear, hbox, icon, label, section, spinner, vbox
 
@@ -90,15 +90,37 @@ class InstallSection(Gtk.Box):
         def add(title, value, mono=False, tip=None):
             if not value:
                 return None
-            v = label(value, ("mono",) if mono else ("body",), wrap=not mono, ellipsize=mono, chars=34)
-            if mono:
-                v.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
+            v = label(value, ("mono",) if mono else ("body",), wrap=True, chars=34)
+            v.set_wrap_mode(Pango.WrapMode.WORD_CHAR)     # long paths wrap, shown whole
             v.set_selectable(True)
             v.set_tooltip_text(tip or (value if mono else None))
             grid.append(vbox(2, label(title, ("small", "dim")), v))
             return v
 
-        if d.kind == "package":
+        home = GLib.get_home_dir()
+
+        def short(path):
+            return "~" + path[len(home):] if path.startswith(home + "/") else path
+
+        if d.made:
+            add(_("Launcher"), _("Made with App Entries"))
+            if d.made_date:
+                add(_("Launcher last changed"), _date(d.made_date))
+        if d.kind == "self":
+            add(_("Version"), d.version)
+            add(_("Installed in"), short(d.folder), mono=True, tip=d.folder)
+            add(_("Updates"), _("From GitHub: HypestHyper/AppEntries, in Updates"))
+        elif d.made == "webapp":
+            add(_("Opens"), d.site, mono=True)
+            add(_("In"), d.browser)
+            if d.folder:
+                add(_("Its own sign-ins and data"), GLib.format_size(d.data_size) + " · " + short(d.folder),
+                    tip=d.folder)
+            else:
+                add(_("Sign-ins"), _("Shared with the browser"))
+        elif d.made == "commands":
+            add(_("Runs"), _("Commands you wrote, with {shell}").format(shell=d.shell or "sh"))
+        elif d.kind == "package":
             add(_("Package"), _("{name} {version} ({manager})").format(name=d.package, version=d.version,
                                                                       manager=d.manager).replace("  ", " "))
             where = add(_("From"), REPO.get(d.repo, d.repo) or _("Checking…"))
@@ -110,6 +132,9 @@ class InstallSection(Gtk.Box):
                     if self._here() and not isinstance(r, Exception):
                         where.set_label(REPO.get(r.repo, r.repo))
                         where.remove_css_class("dim")
+                        later = getattr(self, "_apt_github", None)
+                        if later and r.repo in ("local", "unknown"):
+                            later[0].append(GitHubPart(self.app, r, later[1], self._here))
                 run_bg(lambda: install_info.origin(self.app), found)
         elif d.kind == "flatpak":
             add(_("Flatpak"), f"{d.package} {d.version}".strip(), mono=True)
@@ -122,8 +147,12 @@ class InstallSection(Gtk.Box):
             home = GLib.get_home_dir()
             shown = "~" + d.path[len(home):] if d.path.startswith(home + "/") else d.path
             add(_("AppImage") if d.kind == "appimage" else _("Program"), shown, mono=True, tip=d.path)
+            if d.folder:
+                add(_("Its folder"), short(d.folder), mono=True, tip=d.folder)
             if d.kind == "file":
-                add(_("From"), _("Not from a package: copied, downloaded or built by hand"))
+                add(_("From"), INSTALLERS.get(d.installer, INSTALLERS[""]))
+                if d.installer:
+                    add(_("Version"), f"{d.package} {d.version}".strip())
         # Package managers record whether it was asked for by name or came
         # in for another package; only some record who asked.
         how = {"you": _("installed directly"), "dependency": _("pulled in by another package")}.get(d.reason, "")
@@ -136,19 +165,27 @@ class InstallSection(Gtk.Box):
             add(_("Installed by"), d.by)
         if d.scope:
             add(_("For"), _("All users") if d.scope == "system" else _("Just you"))
-        if d.size:
-            add(_("Size"), GLib.format_size(d.size))
+        if d.size and d.made not in ("webapp", "commands"):
+            add(_("Size") if not d.folder or d.kind == "self" else _("Size of its folder"), GLib.format_size(d.size))
         if d.origin:
             add(_("Downloaded from"), d.origin, mono=True)
         src = None
-        if d.kind in ("appimage", "file"):
-            src = github_apps.source_of(self.app.id, d.raw.get("update_info", ""), d.origin)
+        if d.kind in ("appimage", "file", "package") and d.made != "webapp":
+            src = github_apps.source_of(self.app.id, d.raw.get("update_info", ""), d.origin,
+                                        project=d.project or d.homepage, how=d.installer or "homepage")
         if d.updates_from and src is None:
             add(_("Updates come from"), d.updates_from)
-        if d.kind in ("package", "flatpak", "snap"):
+        if d.kind in ("package", "flatpak", "snap") and d.made != "webapp":
             c.append(self._deps_expander(d))
-        if d.kind in ("appimage", "file") and (src is not None or d.kind == "appimage"):
+        if d.kind in ("appimage", "file") and d.made not in ("webapp", "commands"):
             c.append(GitHubPart(self.app, d, src, self._here))
+        elif d.kind == "package" and src is not None and d.made != "webapp":
+            # Only for packages your distribution doesn't keep up to date.
+            if d.foreign or d.repo in ("local", "unknown") or (d.manager not in ("pacman", "apt") and not any(
+                    v in d.repo for v in ("Fedora", "openSUSE", "SUSE", "Red Hat", "CentOS", "Rocky", "Alma"))):
+                c.append(GitHubPart(self.app, d, src, self._here))
+            elif d.manager == "apt" and not d.repo:
+                self._apt_github = (c, src)     # shown if apt says it was installed from a file
 
     # -- the dependency lists, read when opened ------------------------------
 
@@ -186,11 +223,24 @@ class InstallSection(Gtk.Box):
     def _deps(self, d):
         if d.kind == "flatpak":
             if d.depends:
-                text = _("Runs on {runtime}.").format(runtime=d.depends[0].name)
+                name = runtime_name(d.depends[0].name)
+                size = f" ({GLib.format_size(d.runtime_size)})" if d.runtime_size else ""
+                self.deps.append(label(_("Runtime: {runtime}{size}").format(runtime=name, size=size),
+                                       ("subheading",), wrap=True))
+                text = _("Flatpak apps don't use the libraries installed on your system. Each runs on a runtime: a "
+                         "shared set of libraries, installed once for all the apps that need it.")
                 if d.shared_with:
-                    text += " " + ngettext("{n} other app uses it too.", "{n} other apps use it too.",
-                                           d.shared_with).format(n=d.shared_with)
-                self.deps.append(label(text, ("body",), wrap=True))
+                    text += " " + ngettext(
+                        "{n} other app uses this one too, so it stays when {name} is uninstalled.",
+                        "{n} other apps use this one too, so it stays when {name} is uninstalled.",
+                        d.shared_with).format(n=d.shared_with, name=self.app.name)
+                else:
+                    text += " " + _("Only {name} uses this one. After uninstalling {name}, “flatpak uninstall "
+                                    "--unused” removes it too.").format(name=self.app.name)
+                self.deps.append(label(text, ("small", "dim"), wrap=True))
+                tech = label(d.depends[0].name, ("mono", "faint"))
+                tech.set_selectable(True)
+                self.deps.append(tech)
             return
         self._list(_("Needs"), [(x.name, x.installed, "") for x in d.depends],
                    _("Nothing listed."))
@@ -222,7 +272,19 @@ class InstallSection(Gtk.Box):
         self.deps.append(box)
 
 
+INSTALLERS = {
+    "": _("Not from a package: copied, downloaded or built by hand"),
+    "pipx": _("Installed with pipx, in its own Python environment"),
+    "uv": _("Installed with uv, in its own Python environment"),
+    "pip": _("Installed with pip, in its own Python environment"),
+    "git": _("A copy of a git project (cloned and run from there)"),
+}
 HOW = {
+    "pip": _("pip installed it from this project."),
+    "pipx": _("pipx installed it from this project."),
+    "uv": _("uv installed it from this project."),
+    "git": _("Its folder is a git copy of this project."),
+    "homepage": _("Its package names this project as its home."),
     "appimage": _("The AppImage says its updates come from this project."),
     "download": _("Your browser downloaded it from this project's releases."),
     "linked": _("You linked it to this project."),
@@ -272,6 +334,12 @@ class GitHubPart(Gtk.Box):
                                 tooltip=_("Asks GitHub for the project's latest release. Nothing about you is sent."),
                                 cb=lambda *_a: self._check())
         row.append(self.check_btn)
+        if self.d.update_cmd:
+            # pip, pipx, uv or git update it themselves: run that, where you can see it.
+            row.append(button(_("Update in terminal"), "terminal", "tonal", small=True,
+                              tooltip=_("Runs this in your terminal:\n{cmd}").format(
+                                  cmd=terminal.shown(self.d.update_cmd)),
+                              cb=lambda *_a: self._run(self.d.update_cmd)))
         row.append(button(_("Project page"), "open_in_new", "text", small=True,
                           cb=lambda *_a: _open(src.page)))
         if src.how == "linked":
@@ -304,8 +372,12 @@ class GitHubPart(Gtk.Box):
     def _check(self):
         self.check_btn.set_sensitive(False)
         self._busy(_("Asking GitHub…"))
-        app_id, path, src = self.app.id, self.path, self.src
-        run_bg(lambda: github_apps.check(app_id, path, src), self._checked)
+        app_id, path, src, d = self.app.id, self.path, self.src, self.d
+        if d.kind == "appimage":
+            run_bg(lambda: github_apps.check(app_id, path, src), self._checked)
+        else:
+            run_bg(lambda: github_apps.check_version(src, d.version, d.manager if d.kind == "package" else ""),
+                   self._checked)
 
     def _checked(self, r):
         if not self._here():
@@ -342,6 +414,22 @@ class GitHubPart(Gtk.Box):
         elif self.d.kind == "appimage":
             self.status.append(label(_("This release has no AppImage for this computer, so it can't be updated "
                                        "from here."), ("small", "dim"), wrap=True))
+        elif self.d.kind == "package" and r.asset is not None:
+            row.append(button(_("Update to {version}").format(version=version), "download", "filled", small=True,
+                              tooltip=_("Downloads {file} ({size}) to your Downloads folder, then installs it with "
+                                        "{manager} in your terminal, where it asks for your password and shows what "
+                                        "it does.").format(file=r.asset.name, size=GLib.format_size(r.asset.size),
+                                                           manager=self.d.manager),
+                              cb=lambda *_a: self._update_package(r)))
+        elif self.d.kind == "package" and self.d.foreign and self.d.manager == "pacman":
+            self.status.append(label(_("Your AUR helper updates it, for example with “paru -Syu” or “yay -Syu”."),
+                                     ("small", "dim"), wrap=True))
+        elif self.d.kind == "package":
+            self.status.append(label(_("This release has no package file for this computer, so it can't be updated "
+                                       "from here."), ("small", "dim"), wrap=True))
+        elif self.d.update_cmd:
+            row.append(button(_("Update in terminal"), "terminal", "filled", small=True,
+                              tooltip=terminal.shown(self.d.update_cmd), cb=lambda *_a: self._run(self.d.update_cmd)))
         row.append(button(_("Release page"), "open_in_new", "text", small=True, cb=lambda *_a: _open(rel.url)))
         self.status.append(row)
 
@@ -376,6 +464,41 @@ class GitHubPart(Gtk.Box):
 
     def _cancel(self):
         self._stop = True
+
+    def _run(self, commands):
+        try:
+            terminal.start(commands)
+        except (terminal.NoTerminal, OSError) as e:
+            clear(self.status)
+            self.status.append(label(_("Couldn't open a terminal: {error}. Run this yourself:\n{cmd}").format(
+                error=e, cmd=terminal.shown(commands)), ("small", "error-text"), wrap=True))
+            return
+        clear(self.status)
+        self.status.append(label(_("Updating in your terminal. The page shows the new version once it's done."),
+                                 ("small", "dim"), wrap=True))
+
+    def _update_package(self, r):
+        clear(self.status)
+        self.check_btn.set_sensitive(False)
+        self._stop = False
+        bar = Gtk.ProgressBar(hexpand=True)
+        text = label(_("Downloading {file}…").format(file=r.asset.name), ("small", "dim"), ellipsize=True)
+        self.status.append(text)
+        self.status.append(hbox(10, bar, button(_("Stop"), style="text", small=True, cb=lambda *_a: self._cancel())))
+
+        def progress(done, total):
+            GLib.idle_add(lambda: (bar.set_fraction(min(1.0, done / total)) if total else bar.pulse(), False)[1])
+
+        def done(path):
+            if not self._here():
+                return
+            self.check_btn.set_sensitive(True)
+            if isinstance(path, Exception):
+                clear(self.status)
+                self.status.append(label(str(path), ("small", "error-text"), wrap=True))
+                return
+            self._run([_install_command(self.d.manager, path)])
+        run_bg(lambda: github_apps.download(r.asset, _downloads(), progress, cancelled=lambda: self._stop), done)
 
     def _downloaded(self, r, new):
         import os
@@ -415,3 +538,26 @@ def _short(notes: str, lines: int = 14) -> str:
 def _open(url):
     if url:
         Gio.AppInfo.launch_default_for_uri(url, None)
+
+
+PLATFORMS = {"org.gnome.Platform": "GNOME", "org.kde.Platform": "KDE", "org.freedesktop.Platform": "Freedesktop",
+             "io.elementary.Platform": "elementary", "org.gtk.Gtk3theme": "GTK theme"}
+
+
+def runtime_name(ref: str) -> str:
+    """"org.gnome.Platform/x86_64/50" in words: "GNOME Platform 50"."""
+    parts = ref.split("/")
+    rid, branch = parts[0], parts[-1] if len(parts) >= 3 else ""
+    who = PLATFORMS.get(rid)
+    if who is None:
+        return ref
+    return f"{who} Platform {branch}".strip()
+
+
+def _install_command(manager: str, path: str) -> list:
+    from .. import pkgmanagers
+    return pkgmanagers.as_root([{"apt": "apt", "dnf": "dnf", "zypper": "zypper"}[manager], "install", path])
+
+
+def _downloads() -> str:
+    return GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOWNLOAD) or GLib.get_home_dir()

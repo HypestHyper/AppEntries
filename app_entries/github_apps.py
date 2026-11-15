@@ -148,9 +148,11 @@ def remember_installed(app_id: str, tag: str, file_name: str, project: str = "",
     _save(data, env)
 
 
-def source_of(app_id: str, update_info: str = "", origin: str = "", env=None) -> Optional[Source]:
+def source_of(app_id: str, update_info: str = "", origin: str = "", env=None, project: str = "",
+              how: str = "") -> Optional[Source]:
     """The project an app comes from, or None. `update_info` is an
-    AppImage's update information, `origin` the download's web address."""
+    AppImage's update information, `origin` the download's web address,
+    `project` an address found another way (`how`: pip, git or homepage)."""
     linked = _load(env).get(app_id, {}).get("project", "")
     if linked and parse_project(linked):
         return Source(*parse_project(linked), how="linked")
@@ -161,6 +163,9 @@ def source_of(app_id: str, update_info: str = "", origin: str = "", env=None) ->
     found = parse_project(origin) if "github.com/" in (origin or "") else None
     if found:
         return Source(*found, how="download")
+    found = parse_project(project) if "github.com/" in (project or "") else None
+    if found:
+        return Source(*found, how=how or "homepage")
     known = _load(env).get(app_id, {}).get("updated_from", "")
     if known and parse_project(known):
         return Source(*parse_project(known), how="updated")
@@ -231,11 +236,11 @@ def _has_word(name: str, word: str) -> bool:
 
 
 def pick_asset(assets: list[Asset], pattern: str = "", current: str = "",
-               machine: str = "") -> Optional[Asset]:
+               machine: str = "", ext: str = ".appimage") -> Optional[Asset]:
     """The release file to use: the one the AppImage's update information
-    names, else an AppImage for this computer's processor, closest in name
-    to the file in use."""
-    images = [a for a in assets if a.name.lower().endswith(".appimage")]
+    names, else a file of this type (.appimage, .deb, .rpm) for this
+    computer's processor, closest in name to the file in use."""
+    images = [a for a in assets if a.name.lower().endswith(ext)]
     if pattern:
         named = [a for a in images if fnmatch.fnmatchcase(a.name, pattern)]
         if named:
@@ -305,8 +310,30 @@ def check(app_id: str, path: str, src: Source, get: Callable = _get, env=None, m
     return compare(app_id, path, rel, asset, env)
 
 
+PACKAGE_FILES = {"apt": ".deb", "dnf": ".rpm", "zypper": ".rpm"}
+
+
+def check_version(src: Source, installed: str, kind: str = "", get: Callable = _get, machine: str = "") -> Check:
+    """For apps whose version is known (a package, a Python app): whether
+    the latest release is newer, and for a package the release's .deb or
+    .rpm for this computer."""
+    rel = latest(src, get)
+    ext = PACKAGE_FILES.get(kind, "")
+    asset = pick_asset(rel.assets, "", installed, machine, ext) if ext else None
+    current = version_in(installed) or installed
+    latest_v = version_in(rel.tag) or version_in(rel.name)
+    newer = bool(current and latest_v and _key(latest_v) > _key(current))
+    if not (current and latest_v):
+        newer = bool(latest_v or rel.tag) and rel.tag not in (installed or "")
+    return Check(rel, asset, current, newer)
+
+
 # ---------------------------------------------------------------------------
 # downloading
+
+
+MAGIC = {".appimage": (b"\x7fELF", "an AppImage"), ".deb": (b"!<arch>", "a .deb package"),
+         ".rpm": (b"\xed\xab\xee\xdb", "an .rpm package")}
 
 
 def download(asset: Asset, folder: str, progress: Callable[[int, int], None] = lambda done, total: None,
@@ -348,10 +375,12 @@ def download(asset: Asset, folder: str, progress: Callable[[int, int], None] = l
                 progress(done, total)
         if asset.size and done != asset.size:
             raise GitHubError("The download was cut short. Nothing was changed.")
+        ext = next((e for e in MAGIC if name.lower().endswith(e)), ".appimage")
+        magic, what = MAGIC[ext]
         with open(part, "rb") as f:
-            if f.read(4) != b"\x7fELF":
-                raise GitHubError("The downloaded file isn't an AppImage. Nothing was changed.")
-        os.chmod(part, 0o755)
+            if f.read(len(magic)) != magic:
+                raise GitHubError(f"The downloaded file isn't {what}. Nothing was changed.")
+        os.chmod(part, 0o755 if ext == ".appimage" else 0o644)
         try:
             # As browsers do, so it's still known where it came from.
             os.setxattr(part, "user.xdg.origin.url", asset.url.encode())

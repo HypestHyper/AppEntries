@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
-from . import appimages, pkgmanagers, uninstall
+from . import APP_ID, VERSION, appimages, launchers, pkgmanagers, uninstall, webapps
 
 Run = Callable[[list[str]], Optional[tuple[int, str]]]
 
@@ -54,6 +54,19 @@ class Details:
     required_by: list[str] = field(default_factory=list)
     optional: list[Dep] = field(default_factory=list)
     shared_with: int = 0          # other apps using the same Flatpak runtime
+    runtime_size: int = 0
+    # Launchers made with App Entries: webapp, commands, program or appimage.
+    made: str = ""
+    made_date: float = 0          # when its launcher file last changed
+    site: str = ""                # a web app's address
+    browser: str = ""             # the browser it opens in, and how that's installed
+    data_size: int = 0            # a web app's own sign-ins and data
+    shell: str = ""               # what runs a commands launcher
+    folder: str = ""              # the folder the app lives in, when it has its own
+    homepage: str = ""            # the project's address, as its package records it
+    installer: str = ""           # pipx, uv, pip or git, for apps installed with those
+    project: str = ""             # a GitHub address found for it
+    update_cmd: list = field(default_factory=list)   # commands that update it, run in a terminal
     raw: dict = field(default_factory=dict, repr=False)   # what the quick question returned, kept for later
 
 
@@ -159,7 +172,52 @@ def _program(app) -> str:
     return ""
 
 
+def _keys(app) -> dict:
+    try:
+        with open(app.override_path or app.source_path, encoding="utf-8", errors="replace") as f:
+            text = f.read()
+    except OSError:
+        return {}
+    keys = {}
+    for line in text.split("\n[", 1)[0].splitlines():
+        k, sep, v = line.partition("=")
+        if sep and not line.startswith("#"):
+            keys.setdefault(k.strip(), v.strip())
+    keys["\0text"] = text
+    return keys
+
+
+def _made(app) -> str:
+    """What kind of launcher App Entries made this, or ""."""
+    keys = _keys(app)
+    if app.source == "webapp" or keys.get("X-AppEntries-WebApp"):
+        return "webapp"
+    if not (app.created or keys.get("X-AppEntries-Created") == "true"):
+        return ""
+    spec = launchers.read_spec(keys.get("\0text", ""))
+    return "commands" if spec is not None and spec.kind == "commands" else "program"
+
+
 def _summary(app, sysm: System) -> Details:
+    if app.id == APP_ID + ".desktop":
+        return _self(sysm)
+    made = _made(app)
+    if made == "webapp":
+        d = _webapp(app, sysm)
+    elif made == "commands":
+        d = _commands(app)
+    else:
+        d = _installed(app, sysm)
+    if made:
+        d.made = "appimage" if d.kind == "appimage" else made
+        try:
+            d.made_date = os.stat(app.override_path or app.source_path).st_mtime
+        except OSError:
+            pass
+    return d
+
+
+def _installed(app, sysm: System) -> Details:
     kind = uninstall.kind_of(app)
     if kind == "flatpak":
         return _flatpak(uninstall._flatpak_id(app), sysm)
@@ -184,6 +242,73 @@ def _summary(app, sysm: System) -> Details:
     if prog:
         return _file(prog, sysm, kind="file")
     return Details()
+
+
+# -- App Entries itself, and launchers made with it -----------------------------
+
+
+def _self(sysm) -> Details:
+    pkg_dir = os.path.dirname(os.path.abspath(__file__))
+    home = os.path.dirname(pkg_dir)
+    d = Details(kind="self", manager="App Entries", version=VERSION, folder=home,
+                scope="user" if home.startswith(sysm.home + os.sep) else "system",
+                updates_from="GitHub: HypestHyper/AppEntries")
+    d.size = uninstall.folder_size(pkg_dir)
+    try:
+        d.date, d.date_label = os.stat(os.path.join(pkg_dir, "__init__.py")).st_mtime, "updated"
+    except OSError:
+        pass
+    return d
+
+
+def _words(exec_line: str) -> list[str]:
+    try:
+        return shlex.split(exec_line)
+    except ValueError:
+        return exec_line.split()
+
+
+def _browser_name(words: list[str]) -> str:
+    names = {}
+    for _bid, name, commands, flatpaks in webapps.BROWSERS:
+        for c in list(commands) + list(flatpaks):
+            names[c] = name
+    for w in words:
+        base = os.path.basename(w)
+        if base in names:
+            return names[base] + (" (Flatpak)" if base.count(".") >= 2 else "")
+    return ""
+
+
+def _webapp(app, sysm) -> Details:
+    words = _words(app.exec)
+    keys = _keys(app)
+    d = Details(kind="made", scope="user")
+    d.site = keys.get("X-AppEntries-WebApp") or next((w[len("--app="):] for w in words if w.startswith("--app=")), "")
+    bid = keys.get("X-AppEntries-WebApp-Browser", "")
+    named = next((name for b, name, _c, _f in webapps.BROWSERS if b == bid), "")
+    d.browser = _browser_name(words) or named or (os.path.basename(words[0]) if words else "")
+    # How the browser itself is installed, in a few words.
+    b = _installed(app, sysm)
+    if b.kind == "package":
+        d.browser += f" ({b.manager} package {b.package})"
+    elif b.kind == "flatpak":
+        d.browser += f" ({b.package})" if "Flatpak" not in d.browser else ""
+    profile = webapps.profile_of(app.exec)
+    if profile and os.path.isdir(profile):
+        d.folder, d.data_size = profile, uninstall.folder_size(profile)
+    return d
+
+
+def _commands(app) -> Details:
+    d = Details(kind="made", scope="user")
+    try:
+        with open(app.override_path or app.source_path, encoding="utf-8", errors="replace") as f:
+            spec = launchers.read_spec(f.read())
+        d.shell = spec.shell if spec is not None else ""
+    except OSError:
+        pass
+    return d
 
 
 # -- packages -----------------------------------------------------------------
@@ -223,6 +348,7 @@ def _pacman(pkg, sysm):
     d.repo = "foreign" if d.foreign else "distribution"
     reason = f.get("Install Reason", "")
     d.reason = "dependency" if "dependency" in reason.lower() else ("you" if reason else "")
+    d.homepage = f.get("URL", "") if f.get("URL", "") != "None" else ""
     # The exact time is in pacman's own record; the printed date is a fallback.
     desc = sysm.p(f"/var/lib/pacman/local/{pkg}-{d.version}/desc")
     try:
@@ -248,10 +374,10 @@ def _parse_date(text: str) -> float:
 
 
 def _apt(pkg, sysm):
-    out = sysm.out(["dpkg-query", "-W", "-f", "${Version}\t${Installed-Size}\t${Architecture}\t${Maintainer}\n",
+    out = sysm.out(["dpkg-query", "-W", "-f", "${Version}\t${Installed-Size}\t${Architecture}\t${Homepage}\n",
                     pkg])
     parts = (out.splitlines()[0].split("\t") if out.strip() else []) + [""] * 4
-    d = Details(kind="package", manager="apt", package=pkg, version=parts[0], scope="system")
+    d = Details(kind="package", manager="apt", package=pkg, version=parts[0], scope="system", homepage=parts[3])
     d.size = int(parts[1]) * 1024 if parts[1].isdigit() else 0
     arch = parts[2]
     # Installed for something else? apt keeps that in extended_states.
@@ -315,9 +441,11 @@ def _apt_history(pkg, sysm) -> tuple[float, str]:
 
 
 def _rpm(m, pkg, sysm):
-    out = sysm.out(["rpm", "-q", "--qf", "%{VERSION}-%{RELEASE}\\t%{INSTALLTIME}\\t%{SIZE}\\t%{VENDOR}\\n", pkg])
-    parts = (out.splitlines()[0].split("\t") if out.strip() else []) + [""] * 4
-    d = Details(kind="package", manager=m.label, package=pkg, version=parts[0], scope="system")
+    out = sysm.out(["rpm", "-q", "--qf", "%{VERSION}-%{RELEASE}\\t%{INSTALLTIME}\\t%{SIZE}\\t%{VENDOR}\\t%{URL}\\n",
+                    pkg])
+    parts = (out.splitlines()[0].split("\t") if out.strip() else []) + [""] * 5
+    d = Details(kind="package", manager=m.label, package=pkg, version=parts[0], scope="system",
+                homepage="" if parts[4] == "(none)" else parts[4])
     d.date = float(parts[1]) if parts[1].isdigit() else 0
     d.date_label = "installed" if d.date else ""
     d.size = int(parts[2]) if parts[2].isdigit() else 0
@@ -378,6 +506,59 @@ def _snap(name, sysm):
 # -- programs that are just a file --------------------------------------------
 
 
+SHARED_DIRS = ("/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/local/bin", "/usr/local/sbin", "/usr/games",
+               "/opt/bin", "/snap/bin", "/usr/lib", "/usr/libexec", "/usr/share", "/usr/local/share", "/usr/local/lib",
+               "/opt", "/tmp")
+
+
+def _shared(folder: str, home: str) -> bool:
+    """A folder many programs share, so its size says nothing about one app."""
+    folder = folder.rstrip("/") or "/"
+    shared = list(SHARED_DIRS) + [os.path.join(home, p) for p in
+                                  (".local/bin", "bin", ".local/share", ".local", "Applications", "AppImages",
+                                   "Downloads", "Desktop", ".local/share/applications", "")]
+    return folder in [s.rstrip("/") for s in shared]
+
+
+def real_program(path: str, depth: int = 0) -> str:
+    """What a program really is: links followed, and for a small start
+    script, the program or folder it starts (like App Entries' own)."""
+    path = os.path.realpath(path)
+    if depth > 2 or not os.path.isfile(path):
+        return path
+    try:
+        if os.path.getsize(path) > 16384:
+            return path
+        with open(path, "rb") as f:
+            text = f.read(16384)
+    except OSError:
+        return path
+    if not text.startswith(b"#!"):
+        return path
+    body = text.decode("utf-8", "replace").split("\n", 1)[-1]
+    for m in re.finditer(r"(?<![\w$])(/[\w.+@/-]+)", body):
+        cand = m.group(1).rstrip("/")
+        if not os.path.exists(cand) or os.path.realpath(cand) == path:
+            continue
+        if os.path.dirname(cand) in ("/bin", "/usr/bin", "/usr/local/bin") or cand in ("/bin", "/usr/bin", "/dev/null"):
+            continue        # an interpreter or a tool, not the app
+        return real_program(cand, depth + 1) if os.path.isfile(cand) else cand
+    return path
+
+
+def _own_folder(path: str, home: str) -> str:
+    """The folder an app lives in on its own (/opt/thing, ~/Apps/Thing), or ""."""
+    folder = path if os.path.isdir(path) else os.path.dirname(path)
+    if os.path.basename(folder) in ("bin", "lib", "libexec"):
+        folder = os.path.dirname(folder)
+    # A Python environment inside the app's folder (iridia/venv): the app's folder.
+    if os.path.basename(folder) in ("venv", ".venv", "env", ".env") and not _shared(os.path.dirname(folder), home):
+        folder = os.path.dirname(folder)
+    if _shared(folder, home) or folder in ("/", home):
+        return ""
+    return folder
+
+
 def _file(path, sysm, kind="file"):
     d = Details(kind=kind, path=path, scope="user" if path.startswith(sysm.home + os.sep) else "system")
     try:
@@ -385,9 +566,17 @@ def _file(path, sysm, kind="file"):
         d.size, d.date, d.date_label = st.st_size, st.st_mtime, "file"
     except OSError:
         pass
+    if kind == "file":
+        real = real_program(path)
+        folder = _own_folder(real, sysm.home)
+        if folder:
+            d.folder, d.size = folder, uninstall.folder_size(folder)
+        elif real != path and os.path.isfile(real):
+            d.size = os.path.getsize(real)
+        _python_or_git(d, real, sysm.home)
     d.origin = download_origin(path)
     d.raw["update_info"] = update_info(path) if kind == "appimage" else ""
-    d.updates_from = appimage_updates(path) if kind == "appimage" else ""
+    d.updates_from = d.updates_from or (appimage_updates(path) if kind == "appimage" else "")
     if not d.updates_from:
         d.updates_from = github_of(d.origin)
     return d
@@ -599,6 +788,136 @@ def _rpm_deps(d, sysm):
 def _flatpak_deps(d, sysm):
     if d.runtime:
         d.depends = [Dep(d.runtime)]
+        f = _fields(sysm.out(["flatpak", "info", d.runtime]), indented=True)
+        d.runtime_size = pkgmanagers._human_size(f.get("Installed", "").replace("\xa0", " "))
         rows = sysm.out(["flatpak", "list", "--app", "--columns=application,runtime"]).splitlines()
         d.shared_with = sum(1 for r in rows if r.split("\t")[-1].strip() == d.runtime
                             and r.split("\t")[0].strip() != d.package)
+
+
+# ---------------------------------------------------------------------------
+# apps installed with pip, pipx or uv, or from a git checkout
+
+
+def _venv_of(path: str) -> str:
+    """The Python environment a program is in (the folder with pyvenv.cfg), or ""."""
+    folder = path if os.path.isdir(path) else os.path.dirname(path)
+    for _ in range(3):
+        if os.path.isfile(os.path.join(folder, "pyvenv.cfg")):
+            return folder
+        folder = os.path.dirname(folder)
+    return ""
+
+
+def _dists(venv: str):
+    """(name, version, direct_url) of each package installed in an environment."""
+    import glob
+    import json
+    for info in glob.glob(os.path.join(venv, "lib", "python*", "site-packages", "*.dist-info")):
+        name, version, url, editable = "", "", "", False
+        try:
+            with open(os.path.join(info, "METADATA"), encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    if line.startswith("Name:"):
+                        name = line.split(":", 1)[1].strip()
+                    elif line.startswith("Version:"):
+                        version = line.split(":", 1)[1].strip()
+                    elif not line.strip():
+                        break
+        except OSError:
+            continue
+        try:
+            with open(os.path.join(info, "direct_url.json"), encoding="utf-8") as f:
+                du = json.load(f)
+            url = du.get("url", "")
+            editable = bool((du.get("dir_info") or {}).get("editable"))
+        except (OSError, ValueError, AttributeError):
+            pass
+        yield name, version, url, editable
+
+
+def git_remote(start: str, stop: str) -> tuple[str, str]:
+    """(the checkout's folder, its origin's address) for a folder inside a git
+    checkout, looking a few folders up but not above `stop`."""
+    folder = start if os.path.isdir(start) else os.path.dirname(start)
+    for _ in range(5):
+        if folder in ("/", stop, os.path.dirname(stop)):
+            break
+        cfg = os.path.join(folder, ".git", "config")
+        if os.path.isfile(cfg):
+            try:
+                with open(cfg, encoding="utf-8", errors="replace") as f:
+                    text = f.read()
+            except OSError:
+                return folder, ""
+            remotes = re.findall(r'\[remote "([^"]+)"\]([^\[]*)', text)
+            remotes.sort(key=lambda r: r[0] != "origin")
+            for _name, body in remotes:
+                m = re.search(r"^\s*url\s*=\s*(\S+)", body, flags=re.MULTILINE)
+                if m:
+                    return folder, _https(m.group(1))
+            return folder, ""
+        folder = os.path.dirname(folder)
+    return "", ""
+
+
+def _https(url: str) -> str:
+    """git@github.com:o/r.git and the like as https://github.com/o/r."""
+    url = re.sub(r"^git\+", "", url)
+    m = re.match(r"^(?:ssh://)?git@github\.com[:/](.+?)(?:\.git)?/?$", url)
+    if m:
+        return "https://github.com/" + m.group(1)
+    return re.sub(r"\.git/?$", "", url)
+
+
+def _python_or_git(d: Details, real: str, home: str) -> None:
+    """Fill in how an app was installed with pip, pipx or uv, or from a git
+    checkout, the GitHub project it came from, and the command that updates it."""
+    venv = _venv_of(real)
+    if venv:
+        prog = os.path.basename(d.path).lower().replace("_", "-")
+        tools = {"pip", "setuptools", "wheel", "uv", "pipx"}
+        dists = [x for x in _dists(venv) if x[0].lower() not in tools]
+
+        def fit(x):
+            # The package the program belongs to: named like it, else one installed from an address.
+            n = x[0].lower().replace("_", "-")
+            return (not (n and (prog.startswith(n) or n.startswith(prog.split("-")[0]))), not x[2])
+        dists.sort(key=fit)
+        name, version, url, editable = dists[0] if dists else ("", "", "", False)
+        d.version = d.version or version
+        d.package = name
+        rel = os.path.relpath(venv, home)
+        python = os.path.join(venv, "bin", "python")
+        if rel.startswith(".local/share/pipx/venvs/"):
+            d.installer, d.update_cmd = "pipx", [["pipx", "upgrade", os.path.basename(venv)]]
+        elif rel.startswith(".local/share/uv/tools/"):
+            d.installer, d.update_cmd = "uv", [["uv", "tool", "upgrade", os.path.basename(venv)]]
+        else:
+            d.installer = "pip"
+        if url.startswith("file://"):
+            # Installed from a folder (often a git checkout): update that, then reinstall.
+            src = url[len("file://"):]
+            checkout, remote = git_remote(src + "/", "/")
+            if remote:
+                d.project = remote
+                pull = [["git", "-C", checkout, "pull"]]
+                if d.installer == "pip" and not editable:
+                    pull.append([python, "-m", "pip", "install", "--upgrade", checkout])
+                d.update_cmd = d.update_cmd if d.installer != "pip" else pull
+        elif url:
+            d.project = _https(url)
+            if d.installer == "pip" and name:
+                d.update_cmd = [[python, "-m", "pip", "install", "--upgrade", "git+" + d.project if
+                                 "github.com" in d.project else name]]
+        elif d.installer == "pip" and name:
+            d.update_cmd = [[python, "-m", "pip", "install", "--upgrade", name]]
+    if not d.project:
+        checkout, remote = git_remote(real, home)
+        if remote:
+            d.installer = d.installer or "git"
+            d.project = remote
+            if not d.update_cmd:
+                d.update_cmd = [["git", "-C", checkout, "pull"]]
+    if d.project and not d.updates_from:
+        d.updates_from = github_of(d.project) or d.project

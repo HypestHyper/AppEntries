@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Launchers made with App Entries** say so in Installation, instead of showing the program they run: a web app shows its site, its browser and how much its own sign-ins take; a commands launcher, the shell that runs your commands; a launcher for a program, the program's own details below.
+- **App Entries itself** shows its version, where it's installed and its real size.
+- **Sizes**: a program started by a small script or a link is followed to the real program, and an app that lives in its own folder (/opt/app, an app folder in your home) shows the size of the whole folder, not of its start script.
+- **Apps installed with pip, pipx or uv, and git copies of projects** are recognised: how they were installed, their version, and the GitHub project they came from (from pip's own record or the copy's git settings). **Update in terminal** runs pipx upgrade, uv tool upgrade, pip install --upgrade or git pull where you can see it.
+- **Packages downloaded from GitHub** (a .deb or .rpm installed by hand, or an AUR package) are matched to the GitHub project their package names as home. Check for updates compares versions; Update downloads the new .deb or .rpm for your computer to Downloads and installs it in your terminal. AUR packages say your AUR helper updates them.
+- Paths are shown whole, wrapping onto more lines, instead of being shortened in the middle.
+- The Flatpak runtime is explained: which one (GNOME Platform 50), its size, what a runtime is, and whether other apps share it.
+
 ## 1.2.6 — 2026-11-15
 
 - **Installation** section at the bottom of each app's page: its package, version and where it came from (your distribution's repositories, the AUR, a PPA or other repository, a hand-installed package file, Flathub, a Snap channel), when it was installed, whether it was installed directly or pulled in by another package, who installed it (where apt records that), whether it's for all users or just you, and its size. **Dependencies** opens to show what it needs, what needs it, and optional extras with whether they're installed. For a Flatpak, its runtime and how many other apps share it; for a Snap, its publisher and base.
