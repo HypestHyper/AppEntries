@@ -212,7 +212,7 @@ def kind_of(app: de.App) -> str:
     # Not from a package: games another launcher installed, and apps that
     # live in a folder of your own (pip, pipx and uv apps, git copies, app folders).
     from . import install_info
-    key, _arg = install_info._launcher_of(install_info._words(app.exec))
+    key, _arg = install_info.managed_key(app)
     if key and key != "steam":
         return "game"
     found = install_info.home_install(app)
@@ -651,25 +651,34 @@ def _plan_home(app: de.App, apps, env) -> Plan:
 
 def _plan_game(app: de.App, apps, env, which) -> Plan:
     from . import install_info
-    key, _arg = install_info._launcher_of(install_info._words(app.exec))
+    key, arg = install_info.managed_key(app)
     d = install_info._game_launcher(app, install_info.System(home=_home(env)))
     name = install_info.GAME_LAUNCHERS[key][0]
-    p = Plan(app, "game", f"{name} game" + (f" · {d.store}" if d and d.store else ""), d.package if d else "",
+    what = "game" if key in install_info.GAMES else "app"
+    p = Plan(app, "game", f"{name} {what}" + (f" · {d.store}" if d and d.store else ""), d.package if d else "",
              size=d.size if d else 0)
     p.opener = name
     mine = de.user_apps_dir(env) + os.sep
     p.app_ids = [app.id]
     p.entry_files = [app.source_path] if app.source_path.startswith(mine) else []
     opener = install_info.open_launcher(key, which, _home(env))
-    if d is not None and d.folder:
+    if key == "waydroid" and arg:
+        # Waydroid removes Android apps itself, without a password.
+        p.removes.append(Line("android", f"The Android app {arg}, removed by Waydroid"))
+        p._commands = lambda plan, opts: [["waydroid", "app", "remove", arg]]
+    elif key == "bottles":
+        p.notes.append(f"The program stays in its bottle ({arg or 'unknown'}), which can hold other programs too. "
+                       "Remove it in Bottles if you want it gone; only its menu entry is removed here.")
+    elif d is not None and d.folder:
         folder = d.folder
-        p.removes.append(Line("sports_esports", f"The game, removed in {name}", p.size))
+        p.removes.append(Line("sports_esports" if what == "game" else "apps", f"The {what}, removed in {name}",
+                              p.size))
         p.opens_steam = True
         p._commands = lambda plan, opts: [opener]
         p._gone = lambda plan: not os.path.isdir(folder)
     else:
-        p.notes.append(f"{name} doesn't say where the game is, so only its menu entry is removed here. Uninstall "
-                       f"the game itself in {name}.")
+        p.notes.append(f"{name} doesn't say where the {what} is, so only its menu entry is removed here. Uninstall "
+                       f"the {what} itself in {name}.")
     for f in p.entry_files:
         p.removes.append(Line("description", _short(f, env)))
     p._reinstall = lambda plan, opts: [opener]

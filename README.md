@@ -65,6 +65,7 @@
   <a href="docs/screenshots/icon-picker.png"><img alt="The icon picker: a grid of symbols, and the style, background, shading, size and colour of the tile" src="docs/screenshots/icon-picker.png" width="400"></a>
 
 **More**
+- **Tools**: command-line tools in your home folder without a menu entry (cargo, go install, pipx, uv, npm or files in ~/.local/bin), with version, size and project, and Update or Remove run in your terminal.
 - **Autostart**: turn login programs on and off, or add your own.
 - **Default apps**: choose which app opens links, email, folders, text, PDFs, pictures, videos, music and archives, for a whole kind or each type on its own. **By app** lists every file type one app opens (File types… on its page) and makes it the default for any of them. Uses the standard `mimeapps.list`, and also updates Xfce's and KDE's own browser settings.<br>
   <a href="docs/screenshots/default-apps.png"><img alt="Default apps: web browser, email, files, text, PDFs, pictures, videos and music, each with the app that opens them" src="docs/screenshots/default-apps.png" width="400"></a>

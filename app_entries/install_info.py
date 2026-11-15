@@ -233,6 +233,9 @@ def _installed(app, sysm: System) -> Details:
     game = _game_launcher(app, sysm)
     if game is not None:
         return game
+    wine = _wine(app, sysm)
+    if wine is not None:
+        return wine
     kind = uninstall.kind_of(app)
     if kind == "flatpak":
         return _flatpak(uninstall._flatpak_id(app), sysm)
@@ -951,7 +954,38 @@ GAME_LAUNCHERS = {
     "itch": ("itch", ("itch",), ("itch", "kitch"), ("io.itch.itch",)),
     "minigalaxy": ("Minigalaxy", ("minigalaxy",), ("minigalaxy",), ("io.github.sharkwouter.Minigalaxy",)),
     "steam": ("Steam", ("steam",), ("steam",), ("com.valvesoftware.Steam",)),
+    "waydroid": ("Waydroid", (), ("waydroid",), ()),
+    "toolbox": ("JetBrains Toolbox", (), ("jetbrains-toolbox",), ()),
 }
+GAMES = {"heroic", "lutris", "itch", "minigalaxy", "steam"}
+TOOLBOX_APPS = "/JetBrains/Toolbox/apps/"
+
+
+def managed_key(app) -> tuple[str, str]:
+    """(launcher key, its argument) for an app another app installed and
+    looks after (Heroic, Lutris, Waydroid, JetBrains Toolbox…), or ("", "")."""
+    words = _words(app.exec)
+    key, arg = _launcher_of(words)
+    if key == "waydroid":
+        arg = words[words.index("launch") + 1] if "launch" in words and words.index("launch") + 1 < len(words) else ""
+    elif key == "bottles":
+        arg = _option(words, ("-b", "--bottle"))
+    if key:
+        return key, arg
+    prog = _program(app)
+    if prog and TOOLBOX_APPS in real_program(prog):
+        return "toolbox", ""
+    return "", ""
+
+
+def _option(words: list[str], names) -> str:
+    for i, w in enumerate(words):
+        for n in names:
+            if w == n and i + 1 < len(words):
+                return words[i + 1]
+            if w.startswith(n + "="):
+                return w.split("=", 1)[1]
+    return ""
 HEROIC_STORES = {"legendary": "Epic Games Store", "gog": "GOG", "nile": "Amazon Games", "sideload": "added by hand"}
 
 
@@ -1036,7 +1070,7 @@ def _lutris_game(home: str, game_id: str) -> dict:
 
 def _game_launcher(app, sysm) -> Optional[Details]:
     words = _words(app.exec)
-    key, arg = _launcher_of(words)
+    key, arg = managed_key(app)
     if not key or (key == "steam" and uninstall.kind_of(app) == "steam"):
         return None
     name = GAME_LAUNCHERS[key][0]
@@ -1057,6 +1091,27 @@ def _game_launcher(app, sysm) -> Optional[Details]:
             if info.get("installed"):
                 d.date, d.date_label = float(info["installed"]), "installed"
             d.store = info.get("runner", "")
+    elif key == "waydroid":
+        d.package, d.store = arg, "Android app"
+    elif key == "bottles":
+        d.package = arg
+        d.raw["program"] = _option(words, ("-p", "--program"))
+        for base in (os.path.join(sysm.home, ".local/share/bottles/bottles"),
+                     os.path.join(sysm.home, ".var/app/com.usebottles.bottles/data/bottles/bottles")):
+            if arg and os.path.isdir(os.path.join(base, arg)):
+                info = {"path": os.path.join(base, arg)}
+                break
+    elif key == "toolbox":
+        real = real_program(_program(app))
+        top = real[:real.index(TOOLBOX_APPS) + len(TOOLBOX_APPS)]
+        folder = os.path.join(top, real[len(top):].split("/", 1)[0])
+        d.package = os.path.basename(folder)
+        info = {"path": folder}
+        for root in (folder, os.path.dirname(os.path.dirname(real))):
+            meta = _json(os.path.join(root, "product-info.json"))
+            if isinstance(meta, dict):
+                info["version"] = meta.get("version", "")
+                break
     else:
         d.package = arg
     path = info.get("path", "")
@@ -1179,6 +1234,12 @@ def home_install(app, home: str = "") -> Optional[tuple[str, str, str]]:
     ("python", its folder, its Python environment) or ("folder", its folder,
     ""), or None. Only looks at files; quick enough for menus."""
     home = home or os.path.expanduser("~")
+    prefix, exe = wine_prefix(app, home)
+    if prefix:
+        names = [app.name, app.id.removesuffix(".desktop"), os.path.splitext(os.path.basename(exe))[0]]
+        own = prefix.startswith(home + os.sep) and not _shared(prefix, home) and \
+            _named_like(os.path.basename(prefix), names)
+        return ("folder", prefix, "") if own else None
     prog = _program(app)
     if not prog:
         return None
@@ -1231,8 +1292,38 @@ def open_launcher(key: str, which=None, home: str = "") -> list[str]:
     for prog in programs:
         if which(prog):
             return [prog]
+    if key == "toolbox":
+        p = os.path.join(home, ".local/share/JetBrains/Toolbox/bin/jetbrains-toolbox")
+        if os.path.isfile(p):
+            return [p]
     for fid in flatpaks:
         if any(os.path.isdir(os.path.join(base, fid)) for base in
                ("/var/lib/flatpak/app", os.path.join(home, ".local/share/flatpak/app"))):
             return ["flatpak", "run", fid]
-    return ["xdg-open", schemes[0] + "://"]
+    return ["xdg-open", schemes[0] + "://"] if schemes else [programs[0]]
+
+
+def wine_prefix(app, home: str = "") -> tuple[str, str]:
+    """(the Wine prefix, the Windows program) for an entry that runs a
+    Windows program with Wine, or ("", "")."""
+    home = home or os.path.expanduser("~")
+    words = _words(app.exec)
+    if not any(os.path.basename(w) in ("wine", "wine64", "wine-stable", "wine-staging") for w in words) and \
+            "/drive_c/" not in app.exec:
+        return "", ""
+    prefix = next((w.split("=", 1)[1] for w in words if w.startswith("WINEPREFIX=")), "")
+    exe = next((w for w in words if w.lower().endswith((".exe", ".msi", ".lnk", ".bat"))), "")
+    if not prefix and "/drive_c/" in exe:
+        prefix = exe.split("/drive_c/", 1)[0]
+    prefix = os.path.expanduser(prefix) if prefix else os.path.join(home, ".wine")
+    return prefix, exe
+
+
+def _wine(app, sysm) -> Optional[Details]:
+    prefix, exe = wine_prefix(app, sysm.home)
+    if not prefix:
+        return None
+    d = Details(kind="wine", manager="Wine", path=exe, scope="user" if prefix.startswith(sysm.home) else "system")
+    if os.path.isdir(prefix):
+        d.folder, d.size = prefix, uninstall.folder_size(prefix)
+    return d

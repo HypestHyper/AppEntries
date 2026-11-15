@@ -386,6 +386,7 @@ button.fab .icon {{ font-size: 24px; min-width: 24px; }}
 button.fab.tonal {{ background-color: {SECONDARY_CONTAINER}; color: {ON_SECONDARY_CONTAINER}; }}
 button.fab.tonal:hover {{ background-color: mix({SECONDARY_CONTAINER}, {ON_SECONDARY_CONTAINER}, .08); }}
 .autostart-row {{ padding: 14px 16px; }}
+.tool-row {{ padding: 4px 0; }}
 .history-row {{ padding: 14px 16px; }}
 .default-glyph {{ font-size: 26px; min-width: 36px; color: {PRIMARY}; }}
 button.default-pick {{ min-height: 40px; padding: 0 12px; border-radius: 20px; }}

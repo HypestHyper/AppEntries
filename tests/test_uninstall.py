@@ -515,3 +515,15 @@ def test_a_heroic_game_hands_over_to_heroic(xdg, monkeypatch):
     assert p.commands([]) == [["heroic"]] and not p.gone()
     os.rmdir(game)
     assert p.gone()
+
+
+def test_waydroid_and_bottles(xdg, monkeypatch):
+    home = xdg.env["HOME"]
+    monkeypatch.setenv("HOME", home)
+    maps = _home_app(xdg, "Maps", "waydroid app launch com.google.android.apps.maps")
+    p = uninstall.plan(maps, de.scan(xdg.env), xdg.env)
+    assert uninstall.kind_of(maps) == "game" and p.kind_label == "Waydroid app · Android app"
+    assert p.commands([]) == [["waydroid", "app", "remove", "com.google.android.apps.maps"]] and not p.opens_steam
+    word = _home_app(xdg, "Word", "bottles-cli run -b Office -p Word")
+    p = uninstall.plan(word, de.scan(xdg.env), xdg.env)
+    assert p.commands([]) == [] and "stays in its bottle (Office)" in p.notes[0]

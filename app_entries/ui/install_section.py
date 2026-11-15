@@ -102,19 +102,28 @@ class InstallSection(Gtk.Box):
         def short(path):
             return "~" + path[len(home):] if path.startswith(home + "/") else path
 
-        if d.kind == "managed":
+        if d.kind == "managed" and d.manager != "Bottles":
             c.prepend(label(_("{launcher} installed this and starts it. Update or uninstall it there; its files are "
                               "{launcher}'s to manage.").format(launcher=d.manager), ("body",), wrap=True))
         if d.made:
             add(_("Launcher"), _("Made with App Entries"))
             if d.made_date:
                 add(_("Launcher last changed"), _date(d.made_date))
-        if d.kind == "managed":
+        if d.kind == "wine":
+            add(_("Windows program"), d.path, mono=True)
+            add(_("Run with"), _("Wine"))
+            add(_("Its Wine prefix"), short(d.folder), mono=True, tip=d.folder)
+        elif d.kind == "managed" and d.manager == "Bottles":
+            add(_("Runs in"), _("Bottles, in the bottle “{bottle}”").format(bottle=d.package))
+            add(_("Program"), d.raw.get("program", ""))
+            add(_("The bottle's folder"), short(d.folder), mono=True, tip=d.folder)
+        elif d.kind == "managed":
             add(_("Installed and started by"), d.manager)
             add(_("From"), d.store)
             add(_("Version"), d.version)
             add(_("Its folder"), short(d.folder), mono=True, tip=d.folder)
-            add(_("Its ID in {launcher}").format(launcher=d.manager), d.package, mono=True)
+            if d.manager != "JetBrains Toolbox":
+                add(_("Its ID in {launcher}").format(launcher=d.manager), d.package, mono=True)
         elif d.kind == "self":
             add(_("Version"), d.version)
             add(_("Installed in"), short(d.folder), mono=True, tip=d.folder)
@@ -175,7 +184,9 @@ class InstallSection(Gtk.Box):
         if d.scope:
             add(_("For"), _("All users") if d.scope == "system" else _("Just you"))
         if d.size and d.made not in ("webapp", "commands"):
-            add(_("Size") if not d.folder or d.kind == "self" else _("Size of its folder"), GLib.format_size(d.size))
+            add(_("Size of the prefix") if d.kind == "wine" else _("Size of the bottle") if d.manager == "Bottles"
+                else _("Size") if not d.folder or d.kind == "self" else _("Size of its folder"),
+                GLib.format_size(d.size))
         if d.origin:
             add(_("Downloaded from"), d.origin, mono=True)
         src = None

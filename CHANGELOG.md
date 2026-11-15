@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Tools**, a new place in the rail: command-line tools in your home folder that have no menu entry, grouped by how they were installed (cargo, go install, pipx, uv, npm, or files you put in ~/.local/bin), with their version, size and GitHub project. **Update** and **Remove** run the tool's own command in your terminal; a file you put there yourself goes to the Trash, with Undo. Commands that belong to an app with a menu entry aren't listed again.
+- **Waydroid's Android apps**, **JetBrains Toolbox apps** and **Windows programs run with Wine or Bottles** are recognised in Installation: which app looks after them, the Toolbox app's folder, size and version, and the Wine prefix or bottle with its size. Uninstall removes an Android app with Waydroid, hands a Toolbox app to Toolbox, trashes a Wine prefix named like its app, and never deletes a bottle (it can hold other programs).
 - **Uninstall** works for more kinds of app, each shown in full first and undone with Undo:
   - **Python apps** installed with pip, pipx or uv: their environment and the commands they added to ~/.local/bin go to the Trash, with their menu entry.
   - **Git copies and app folders** in your home folder: the folder goes to the Trash. Only a folder named like the app is offered, so a script in ~/scripts or a dotfiles copy never takes its whole folder with it.

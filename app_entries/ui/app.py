@@ -85,6 +85,7 @@ from .status_bar import StatusBar  # noqa: E402
 RAIL = [
     ("all", _("Apps"), "apps"),
     ("mine", _("Launchers"), "rocket_launch"),
+    ("tools", _("Tools"), "terminal"),
     ("issues", _("Issues"), "healing"),
     ("autostart", _("Autostart"), "power_settings_new"),
     ("defaults", _("Defaults"), "star"),
@@ -95,7 +96,7 @@ RAIL_BOTTOM = [
 ]
 # Older versions had Hidden and Customised as tabs; they're views of Apps now.
 LEGACY_FILTERS = {"hidden": ("view", "hidden"), "customised": ("only", "customised"), "system": None}
-PAGES = ("issues", "autostart", "defaults", "settings", "updates")  # tabs that aren't app lists
+PAGES = ("issues", "autostart", "defaults", "settings", "updates", "tools")  # tabs that aren't app lists
 SELF_ID = APP_ID + ".desktop"
 COMPACT_BELOW = 900
 SPLIT_FROM = 860        # window width from which the list and the app page sit side by side
@@ -180,7 +181,7 @@ class MainWindow(Gtk.ApplicationWindow):
             elif what:
                 self._only.add(what[1])
             self.settings.set("filter", "all")
-        elif f in ("settings", "updates", "autostart", "defaults"):
+        elif f in ("settings", "updates", "autostart", "defaults", "tools"):
             self.settings.set("filter", "all")  # start on the apps, not where you left off
         # The list keeps showing its own tab (Apps or Launchers) while another
         # tab is open, so it doesn't change under the crossfade on the way out.
@@ -387,6 +388,9 @@ class MainWindow(Gtk.ApplicationWindow):
             page.reload()   # it's filled from the app list, which may be in already
         elif name == "settings":
             page = SettingsPage(self, self.settings)
+        elif name == "tools":
+            from .tools_page import ToolsPage
+            page = ToolsPage(self)
         elif name == "updates":
             inner = UpdatesPage(self.get_application().updates, self.settings)
             inner.set_margin_bottom(24)

@@ -410,3 +410,39 @@ def test_what_a_flatpak_can_reach(tmp_path):
     files = [t for g, t, _w in got if g == "files"]
     assert files == ["Downloads", "Pictures/Screenshots (read only)", "~/Games"]   # home taken away by Flatseal
     assert ("other", "Talks to: org.freedesktop.Notifications", False) in got
+
+
+def test_waydroid_toolbox_bottles_and_wine(tmp_path):
+    home = tmp_path / "home"
+    s = system(tmp_path, {}, set())
+    d = ii.summary(de.App(id="w.desktop", name="Maps", source="user", system=False,
+                          exec="waydroid app launch com.google.android.apps.maps"), s)
+    assert (d.manager, d.package, d.store) == ("Waydroid", "com.google.android.apps.maps", "Android app")
+
+    ide = home / ".local/share/JetBrains/Toolbox/apps/pycharm-community"
+    (ide / "bin").mkdir(parents=True)
+    (ide / "bin" / "pycharm").write_bytes(b"\x7fELF" + b"x" * 100)
+    (ide / "bin" / "pycharm").chmod(0o755)
+    (ide / "product-info.json").write_text('{"name": "PyCharm", "version": "2024.3.1"}')
+    d = ii.summary(de.App(id="jetbrains-pycharm-ce.desktop", name="PyCharm", source="user", system=False,
+                          exec=f"{ide}/bin/pycharm %u"), s)
+    assert (d.manager, d.folder, d.version) == ("JetBrains Toolbox", str(ide), "2024.3.1")
+
+    bottle = home / ".local/share/bottles/bottles/Office"
+    bottle.mkdir(parents=True)
+    (bottle / "system.reg").write_text("x" * 50)
+    d = ii.summary(de.App(id="b.desktop", name="Word", source="user", system=False,
+                          exec="bottles-cli run -b Office -p 'Word'"), s)
+    assert (d.manager, d.package, d.raw["program"], d.folder, d.size) == ("Bottles", "Office", "Word", str(bottle), 50)
+
+    prefix = home / ".wine-photoshop"
+    (prefix / "drive_c").mkdir(parents=True)
+    (prefix / "drive_c" / "ps.exe").write_text("MZ" + "x" * 98)
+    app = de.App(id="ps.desktop", name="Photoshop", source="user", system=False,
+                 exec=f"env WINEPREFIX={prefix} wine C:\\\\ps.exe")
+    d = ii.summary(app, s)
+    assert (d.kind, d.folder, d.size) == ("wine", str(prefix), 100)
+    assert ii.home_install(app, str(home)) == ("folder", str(prefix), "")
+    shared = de.App(id="n.desktop", name="Notepad++", source="user", system=False,
+                    exec=f"wine {home}/.wine/drive_c/npp/notepad++.exe")
+    assert ii.wine_prefix(shared, str(home))[0] == str(home / ".wine") and ii.home_install(shared, str(home)) is None
