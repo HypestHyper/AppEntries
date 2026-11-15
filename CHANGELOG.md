@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.9 — 2026-11-15
 
 - **Terminal programs from your package manager** in Tools: packages you installed yourself that add a command but have no menu entry (ripgrep, btop, tmux and the like), grouped under the package manager that installed them, with their version, size and commands. **Remove** uninstalls one in your terminal, with the same command and options as Uninstall. Packages pulled in for others, and ones the system, your desktop or App Entries needs, aren't listed. Works with pacman, apt, dnf, zypper, rpm-ostree, xbps, apk, Portage and your Nix profile; on apt, packages Debian counts as part of the base system are left out too. (eopkg doesn't record which packages you installed yourself, so it isn't covered.)
 - **Install from GitHub** (New ▾ → From GitHub…, and Tools → Add from GitHub…): paste a project's link and App Entries reads its releases, lets you pick the version (test versions if you want them) and suggests the file that fits this computer, saying why:
