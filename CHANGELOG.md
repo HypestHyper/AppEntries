@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- A tool in Tools opens with a click anywhere on its row, not just its name or arrow.
+
 ## 1.2.10 — 2026-11-15
 
 - **Tools has pages**: click a tool to open its page beside the list (or instead of it in a narrow window), like an app's:

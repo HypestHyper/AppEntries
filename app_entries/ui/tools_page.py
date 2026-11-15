@@ -164,9 +164,11 @@ class ToolsPage(Gtk.Box):
         text.set_hexpand(True)
         row = hbox(12, icon(GLYPHS.get(t.kind, "terminal")), text, icon("chevron_right", ("faint",)))
         row.add_css_class("tool-row")
+        row.add_css_class("no-copy")    # a click anywhere opens the tool, it doesn't select text
         if self.current is not None and (t.kind, t.name) == (self.current.kind, self.current.name):
             row.add_css_class("is-current")
         click = Gtk.GestureClick()
+        click.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)    # before anything inside the row
         click.connect("released", lambda *_a: self.show(t))
         row.add_controller(click)
         row.set_cursor(Gdk.Cursor.new_from_name("pointer", None))
