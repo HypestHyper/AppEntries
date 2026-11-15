@@ -57,6 +57,7 @@ class Asset:
     name: str
     url: str
     size: int = 0
+    approx: bool = False         # the size is rounded (read from github.com's page, not the API)
 
 
 @dataclass
@@ -207,7 +208,154 @@ def _release(data) -> Release:
                 for a in data.get("assets") or [] if a.get("browser_download_url")])
 
 
-def latest(src: Source, get: Callable = _get) -> Release:
+# ---------------------------------------------------------------------------
+# reading releases from github.com's own pages
+#
+# GitHub's API allows 60 questions an hour without an account, which a list
+# of apps uses up fast. github.com's pages answer the same questions without
+# that limit: /releases/latest redirects to the newest version's page, the
+# release's file list is a small page of its own, and releases.atom lists
+# recent versions with their notes. The API is only asked if they fail.
+
+WEB = "https://github.com/"
+_remembered: dict = {}          # (project, tag) -> (when, Release): asked within the hour
+REMEMBER = 3600
+
+
+def _fetch(url: str, follow: bool = True, timeout: float = 15) -> tuple[int, dict, bytes]:
+    """(status, headers, body) of a github.com page."""
+    import urllib.error
+    import urllib.request
+
+    class Stay(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *a, **kw):
+            return None
+    opener = urllib.request.build_opener() if follow else urllib.request.build_opener(Stay)
+    req = urllib.request.Request(url, headers={"User-Agent": AGENT, "Accept": "text/html,application/atom+xml"})
+    try:
+        with opener.open(req, timeout=timeout) as r:
+            return r.status, dict(r.headers), r.read(4 * 1024 * 1024)
+    except urllib.error.HTTPError as e:
+        return e.code, dict(e.headers or {}), b""
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise GitHubError(f"Couldn't reach GitHub: {getattr(e, 'reason', e)}") from e
+
+
+def web_latest_tag(src: Source, fetch: Callable = _fetch) -> str:
+    """The newest (non-test) release's tag, from where /releases/latest leads."""
+    status, headers, _body = fetch(WEB + src.name + "/releases/latest", False)
+    where = headers.get("Location") or headers.get("location") or ""
+    m = re.search(r"/releases/tag/([^/?#]+)", where)
+    if status in (301, 302, 303, 307, 308) and m:
+        from urllib.parse import unquote
+        return unquote(m.group(1))
+    if status == 404 or (status in (301, 302) and not m):
+        raise GitHubError("GitHub has no releases for this project (or it's private).")
+    raise GitHubError(f"GitHub answered {status}.")
+
+
+_SIZE = {"B": 1, "KB": 1024, "MB": 1024 ** 2, "GB": 1024 ** 3}
+
+
+def web_assets(src: Source, tag: str, fetch: Callable = _fetch) -> list[Asset]:
+    """A release's files, from its file list page (the source code archives
+    GitHub adds to every release are left out)."""
+    from html import unescape
+    from urllib.parse import quote, unquote
+    status, _h, body = fetch(WEB + src.name + "/releases/expanded_assets/" + quote(tag, safe=""))
+    if status != 200:
+        raise GitHubError(f"GitHub answered {status}.")
+    html = body.decode("utf-8", "replace")
+    out, seen = [], set()
+    for m in re.finditer(r'href="(/[^"]+/releases/download/[^"]+)"', html):
+        path = unescape(m.group(1))
+        name = unquote(path.rsplit("/", 1)[1])
+        if name in seen:
+            continue
+        seen.add(name)
+        size = 0
+        # The size follows the link, before the next file's link.
+        nxt = html.find("/releases/download/", m.end())
+        after = html[m.end():nxt if nxt > 0 else m.end() + 6000]
+        sm = re.search(r">\s*([\d.]+)\s*(B|KB|MB|GB)\s*<", after)
+        if sm:
+            size = int(float(sm.group(1)) * _SIZE[sm.group(2)])
+        out.append(Asset(name, "https://github.com" + path, size, approx=True))
+    return out
+
+
+def web_releases(src: Source, fetch: Callable = _fetch) -> list[Release]:
+    """Recent releases with their notes, newest first, from releases.atom
+    (it doesn't say which are test versions)."""
+    from html import unescape
+    status, _h, body = fetch(WEB + src.name + "/releases.atom")
+    if status != 200:
+        raise GitHubError(f"GitHub answered {status}.")
+    text = body.decode("utf-8", "replace")
+    out = []
+    for entry in re.findall(r"<entry>(.*?)</entry>", text, flags=re.DOTALL):
+        link = re.search(r'<link[^>]+href="([^"]+)"', entry)
+        tag = re.search(r"/releases/tag/([^\"/?#]+)", link.group(1)).group(1) if link and "/releases/tag/" in \
+            link.group(1) else ""
+        if not tag:
+            continue
+        from urllib.parse import unquote
+        title = re.search(r"<title>(.*?)</title>", entry, flags=re.DOTALL)
+        content = re.search(r"<content[^>]*>(.*?)</content>", entry, flags=re.DOTALL)
+        updated = re.search(r"<updated>(.*?)</updated>", entry)
+        notes = unescape(content.group(1)) if content else ""
+        notes = unescape(re.sub(r"<[^>]+>", "", notes.replace("<li>", "- ").replace("</p>", "\n").replace(
+            "<br>", "\n")))
+        out.append(Release(unquote(tag), unescape(title.group(1)).strip() if title else "", notes.strip(),
+                           WEB + src.name + "/releases/tag/" + tag, updated.group(1) if updated else ""))
+    return out
+
+
+def latest_web(src: Source, fetch: Callable = _fetch, notes: bool = False) -> Release:
+    if src.tag in ("latest", ""):
+        tag = web_latest_tag(src, fetch)
+    elif src.tag in ("latest-pre", "latest-all"):
+        found = web_releases(src, fetch)
+        if not found:
+            raise GitHubError("GitHub has no releases for this project.")
+        tag = found[0].tag
+    else:
+        tag = src.tag
+    rel = Release(tag, url=WEB + src.name + "/releases/tag/" + tag)
+    rel.assets = web_assets(src, tag, fetch)
+    if notes:
+        try:
+            match = next((r for r in web_releases(src, fetch) if r.tag == tag), None)
+            if match is not None:
+                rel.name, rel.notes, rel.published = match.name, match.notes, match.published
+        except GitHubError:
+            pass
+    return rel
+
+
+def latest(src: Source, get: Callable = _get, fetch: Callable = _fetch, notes: bool = True) -> Release:
+    """The release to compare with: from github.com's pages, remembered for
+    an hour; the API only if the pages fail (or when tests pass their own `get`)."""
+    import time as _time
+    key = (src.name, src.tag)
+    hit = _remembered.get(key)
+    if hit is not None and _time.time() - hit[0] < REMEMBER and get is _get:
+        return hit[1]
+    if get is _get:
+        try:
+            rel = latest_web(src, fetch, notes)
+            _remembered[key] = (_time.time(), rel)
+            return rel
+        except GitHubError as e:
+            if "no releases" in str(e):
+                raise
+    rel = latest_api(src, get)
+    if get is _get:
+        _remembered[key] = (_time.time(), rel)
+    return rel
+
+
+def latest_api(src: Source, get: Callable = _get) -> Release:
     base = API + src.name
     if src.tag in ("latest", ""):
         return _release(get(base + "/releases/latest"))
@@ -295,7 +443,7 @@ def compare(app_id: str, path: str, release: Release, asset: Optional[Asset], en
     elif asset is not None:
         # No version in the name: the same file name and size mean the same file.
         try:
-            same_size = asset.size and os.path.getsize(path) == asset.size
+            same_size = asset.size and not asset.approx and os.path.getsize(path) == asset.size
         except OSError:
             same_size = False
         newer = not (asset.name == name or same_size)
@@ -360,7 +508,8 @@ def download(asset: Asset, folder: str, progress: Callable[[int, int], None] = l
     opener = opener or urllib.request.urlopen
     try:
         with opener(req, timeout=60) as r, open(part, "wb") as f:
-            total = int(r.headers.get("Content-Length") or asset.size or 0) if hasattr(r, "headers") else asset.size
+            sent = int((r.headers.get("Content-Length") if hasattr(r, "headers") else 0) or 0)
+            total = sent or asset.size
             done = 0
             while True:
                 if cancelled():
@@ -373,7 +522,8 @@ def download(asset: Asset, folder: str, progress: Callable[[int, int], None] = l
                     raise GitHubError("The download is far larger than an app should be, so it was stopped.")
                 f.write(chunk)
                 progress(done, total)
-        if asset.size and done != asset.size:
+        expected = asset.size if asset.size and not asset.approx else sent
+        if expected and done != expected:
             raise GitHubError("The download was cut short. Nothing was changed.")
         ext = next((e for e in MAGIC if name.lower().endswith(e)), ".appimage")
         magic, what = MAGIC[ext]

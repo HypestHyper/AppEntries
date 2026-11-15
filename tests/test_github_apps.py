@@ -125,3 +125,76 @@ def test_downloading(tmp_path):
                     cancelled=lambda: True)
     left = sorted(os.listdir(tmp_path))
     assert left == ["Tool-2.0-2.AppImage", "Tool-2.0.AppImage"]      # no half-written files left behind
+
+
+ASSETS_PAGE = """<li class="Box-row d-flex flex-column flex-md-row">
+<div class="d-flex flex-justify-start col-12 col-lg-9">
+<a href="/o/tool/releases/download/v2.0/Tool-2.0-x86_64.AppImage" rel="nofollow" data-turbo="false" class="Truncate">
+<span data-view-component="true" class="Truncate-text text-bold">Tool-2.0-x86_64.AppImage</span></a></div>
+<div class="d-flex flex-auto flex-justify-end col-md-4 ml-3 ml-md-0 mt-1 mt-md-0 pl-1 pl-md-0">
+<span style="white-space: nowrap;" class="color-fg-muted text-right flex-shrink-0">98.3 MB</span>
+<span class="color-fg-muted text-right flex-shrink-0">
+<relative-time datetime="2026-11-01">Nov 1</relative-time></span></div></li>
+<li><a href="/o/tool/archive/refs/tags/v2.0.zip" rel="nofollow">Source code</a></li>
+"""
+ATOM = """<?xml version="1.0"?><feed><entry><id>tag:github.com,2008:Repository/1/v2.1-beta</id>
+<updated>2026-11-10T00:00:00Z</updated><link rel="alternate" type="text/html" href="https://github.com/o/tool/releases/tag/v2.1-beta"/>
+<title>2.1 beta</title><content type="html">&lt;ul&gt;&lt;li&gt;Faster&lt;/li&gt;&lt;/ul&gt;</content></entry>
+<entry><updated>2026-11-01T00:00:00Z</updated><link rel="alternate" type="text/html" href="https://github.com/o/tool/releases/tag/v2.0"/>
+<title>2.0</title><content type="html">&lt;p&gt;Big release&lt;/p&gt;</content></entry></feed>"""
+
+
+def web(pages, calls=None):
+    def fetch(url, follow=True):
+        if calls is not None:
+            calls.append(url)
+        for key, answer in pages.items():
+            if url.endswith(key):
+                return answer
+        return (404, {}, b"")
+    return fetch
+
+
+def test_reading_releases_from_github_pages_not_the_api():
+    src = gh.Source("o", "tool")
+    pages = {"/releases/latest": (302, {"Location": "https://github.com/o/tool/releases/tag/v2.0"}, b""),
+             "/expanded_assets/v2.0": (200, {}, ASSETS_PAGE.encode()),
+             "/expanded_assets/v2.1-beta": (200, {}, b""),
+             "/releases.atom": (200, {}, ATOM.encode())}
+    assert gh.web_latest_tag(src, web(pages)) == "v2.0"
+    (a,) = gh.web_assets(src, "v2.0", web(pages))
+    assert (a.name, a.approx) == ("Tool-2.0-x86_64.AppImage", True)
+    assert a.url == "https://github.com/o/tool/releases/download/v2.0/Tool-2.0-x86_64.AppImage"
+    assert 98 * 1024 * 1024 < a.size < 99 * 1024 * 1024        # read from "98.3 MB"
+    rels = gh.web_releases(src, web(pages))
+    assert [(r.tag, r.name, r.notes) for r in rels] == [("v2.1-beta", "2.1 beta", "- Faster"),
+                                                        ("v2.0", "2.0", "Big release")]
+    rel = gh.latest_web(src, web(pages), notes=True)
+    assert (rel.tag, rel.notes, rel.assets[0].name) == ("v2.0", "Big release", "Tool-2.0-x86_64.AppImage")
+    assert gh.latest_web(gh.Source("o", "tool", "latest-pre"), web(pages)).tag == "v2.1-beta"
+    with pytest.raises(gh.GitHubError, match="no releases"):
+        gh.web_latest_tag(src, web({}))
+
+
+def test_answers_are_remembered_for_an_hour_and_the_api_is_the_fallback(monkeypatch):
+    gh._remembered.clear()
+    calls = []
+    pages = {"/releases/latest": (302, {"Location": "https://github.com/o/tool/releases/tag/v2.0"}, b""),
+             "/expanded_assets/v2.0": (200, {}, ASSETS_PAGE.encode())}
+    src = gh.Source("o", "tool")
+    assert gh.latest(src, fetch=web(pages, calls), notes=False).tag == "v2.0"
+    n = len(calls)
+    assert gh.latest(src, fetch=web(pages, calls), notes=False).tag == "v2.0" and len(calls) == n
+    # github.com's pages failing (not "no releases"): the API answers instead.
+    gh._remembered.clear()
+    monkeypatch.setattr(gh, "latest_api", lambda s, get=None: gh.Release("v9"))
+    broken = web({"/releases/latest": (500, {}, b"")})
+    assert gh.latest(src, fetch=broken, notes=False).tag == "v9"
+    gh._remembered.clear()
+
+
+def test_a_rounded_size_doesnt_fail_the_download(tmp_path):
+    body = b"\x7fELF" + b"x" * 1000
+    asset = A("Tool.AppImage", "https://x/T", 2000, approx=True)       # the page said "2 KB"
+    path = gh.download(asset, str(tmp_path), opener=lambda r, timeout: Response(body))
+    assert os.path.getsize(path) == len(body)

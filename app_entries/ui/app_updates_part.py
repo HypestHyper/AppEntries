@@ -40,9 +40,9 @@ class AppUpdates(Gtk.Box):
                               win.settings.get("check-app-updates"),
                               lambda v: win.settings.set("check-app-updates", v))
         c.append(row)
-        c.append(label(_("A daily check asks GitHub for each project's latest release, sends nothing about you, and "
-                         "never downloads or changes anything. Without an account GitHub allows 60 questions an "
-                         "hour."), ("small", "faint"), wrap=True, chars=60))
+        c.append(label(_("A daily check reads each project's release page on github.com, sends nothing about you, "
+                         "and never downloads or changes anything. Answers are remembered for an hour, so checking "
+                         "again doesn't ask twice."), ("small", "faint"), wrap=True, chars=60))
         self.append(c)
         self.append(SystemUpdates())
         self._gather()
