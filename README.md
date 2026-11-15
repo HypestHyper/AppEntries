@@ -67,7 +67,7 @@
   <a href="docs/screenshots/icon-picker.png"><img alt="The icon picker: a grid of symbols, and the style, background, shading, size and colour of the tile" src="docs/screenshots/icon-picker.png" width="400"></a>
 
 **More**
-- **Tools**: command-line tools in your home folder without a menu entry (cargo, go install, pipx, uv, npm or files in ~/.local/bin), with version, size and project, and Update or Remove run in your terminal.<br>
+- **Tools**: command-line tools without a menu entry: ones in your home folder (cargo, go install, pipx, uv, npm or files in ~/.local/bin) and terminal programs you installed with your package manager (pacman, apt, dnf, zypper, rpm-ostree, xbps, apk, Portage, Nix), with version, size and project, and Update or Remove run in your terminal.<br>
   <a href="docs/screenshots/tools.png"><img alt="Tools: ripgrep and zellij from cargo, lazygit from go install, black from pipx and a script in ~/.local/bin, each with Update and Remove" src="docs/screenshots/tools.png" width="400"></a>
 - **Autostart**: turn login programs on and off, or add your own.
 - **Default apps**: choose which app opens links, email, folders, text, PDFs, pictures, videos, music and archives, for a whole kind or each type on its own. **By app** lists every file type one app opens (File types… on its page) and makes it the default for any of them. Uses the standard `mimeapps.list`, and also updates Xfce's and KDE's own browser settings.<br>

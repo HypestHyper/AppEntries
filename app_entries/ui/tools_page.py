@@ -19,6 +19,9 @@ KIND_NAMES = {
     "pipx": _("Python, installed with pipx"), "uv": _("Python, installed with uv"),
     "npm": _("Node, installed with npm"), "file": _("Files in ~/.local/bin and ~/bin"),
 }
+for _k in cli_tools.SYSTEM_KINDS:
+    KIND_NAMES[_k] = _("Installed with {manager}").format(manager=cli_tools.KINDS[_k])
+    GLYPHS[_k] = "inventory_2"
 
 
 class ToolsPage(Gtk.ScrolledWindow):
@@ -53,7 +56,7 @@ class ToolsPage(Gtk.ScrolledWindow):
         clear(self.list)
         self.list.append(hbox(10, spinner(), label(_("Looking for tools…"), ("body", "dim"))))
         apps = [i.app for i in self.win.apps.items()] if hasattr(self.win, "apps") else []
-        run_bg(lambda: cli_tools.scan(apps=apps), self._fill)
+        run_bg(lambda: cli_tools.scan(apps=apps, system=True), self._fill)
 
     def _fill(self, tools):
         clear(self.list)
@@ -65,6 +68,10 @@ class ToolsPage(Gtk.ScrolledWindow):
             return
         for kind, items in cli_tools.by_kind(tools):
             self.list.append(label(f"{KIND_NAMES[kind]} ({len(items)})", ("subheading",)))
+            if kind in cli_tools.SYSTEM_KINDS:
+                self.list.append(label(_("Terminal programs you installed that have no menu entry. They update with "
+                                         "the rest of the system; Remove uninstalls one in your terminal."),
+                                       ("small", "dim"), wrap=True, chars=80))
             c = card()
             for t in items:
                 c.append(self._row(t))
@@ -76,7 +83,10 @@ class ToolsPage(Gtk.ScrolledWindow):
             title.append(label(t.version, ("small", "dim")))
         bits = []
         if t.commands and t.commands != [t.name]:
-            bits.append(ngettext("Adds {cmds}", "Adds {cmds}", len(t.commands)).format(cmds=", ".join(t.commands)))
+            shown = ", ".join(t.commands[:5])
+            if len(t.commands) > 5:
+                shown = _("{cmds} and {n} more").format(cmds=shown, n=len(t.commands) - 5)
+            bits.append(ngettext("Adds {cmds}", "Adds {cmds}", len(t.commands)).format(cmds=shown))
         if t.github:
             bits.append(_("from GitHub: {project}").format(project=t.github))
         elif t.project:
@@ -121,7 +131,9 @@ class ToolsPage(Gtk.ScrolledWindow):
                 error=e, cmd=terminal.shown(commands)), [("ok", _("Close"), "tonal")]).present()
 
     def _remove(self, t):
-        what = (_("Runs this in your terminal:\n{cmd}").format(cmd=terminal.shown(t.remove)) if t.remove else
+        what = ((_("Runs this in your terminal, where it asks for your password and shows what else would go "
+                   "before anything changes:\n{cmd}") if t.needs_password else
+                 _("Runs this in your terminal:\n{cmd}")).format(cmd=terminal.shown(t.remove)) if t.remove else
                 _("Moves {path} to the Trash. Undo puts it back.").format(path=", ".join(t.trash)))
 
         def answer(resp):

@@ -7,12 +7,17 @@ import re
 from dataclasses import dataclass, field
 from typing import Optional
 
-from . import APP_ID, install_info, uninstall
+from . import APP_ID, install_info, pkgmanagers, uninstall
 
 KINDS = {
     "cargo": "Rust · cargo", "go": "Go · go install", "pipx": "Python · pipx", "uv": "Python · uv",
     "npm": "Node · npm", "file": "A file in ~/.local/bin",
+    # Packages you installed with the system's package manager.
+    "pacman": "pacman", "apt": "apt", "dnf": "dnf", "zypper": "zypper", "rpm-ostree": "rpm-ostree",
+    "xbps": "xbps", "apk": "apk", "portage": "Portage", "nix": "Nix",
 }
+SYSTEM_KINDS = ("pacman", "apt", "dnf", "zypper", "rpm-ostree", "xbps", "apk", "portage", "nix")
+BIN_DIRS = ("/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/games", "/usr/local/bin")
 
 
 @dataclass
@@ -28,6 +33,7 @@ class Tool:
     update: list = field(default_factory=list)          # commands that update it
     remove: list = field(default_factory=list)          # commands that remove it ([] = move `trash` to the Trash)
     trash: list[str] = field(default_factory=list)
+    needs_password: bool = False    # removing it asks for your password (a system package)
 
     @property
     def github(self) -> str:
@@ -204,9 +210,69 @@ def _loose(home: str, bins: list[str], taken: set[str]) -> list[Tool]:
     return out
 
 
-def scan(env=None, apps=()) -> list[Tool]:
+def _packages(managers, apps) -> list[Tool]:
+    """Packages you installed yourself that add a command (a program in
+    /usr/bin and the like) and have no menu entry: terminal programs, which
+    the app list doesn't show. Ones the system, your desktop or App Entries
+    needs are left out, as Uninstall would refuse them anyway."""
+    out = []
+    with_entry = {a.base_path for a in apps if a.base_path} | {a.source_path for a in apps if a.source_path}
+    for m in managers:
+        try:
+            mine = m.user_installed()
+        except (OSError, ValueError, KeyError):
+            mine = []       # one manager failing shouldn't hide the others
+        keep = set(m.protected())
+        mine = [p for p in dict.fromkeys(mine) if p and p not in keep and not pkgmanagers.needed_by_system(p)]
+        files = m.files_many(mine)
+        # Cheap first: only packages that add a command and have no menu entry.
+        found = {}
+        for pkg in mine:
+            own = files.get(pkg, [])
+            if any(f.endswith(".desktop") and "/applications/" in f for f in own) or any(f in with_entry for f in own):
+                continue        # it has a menu entry: it's in the app list
+            bins = sorted({os.path.basename(f) for f in own if os.path.dirname(f) in BIN_DIRS})
+            if bins:            # else a library, data or a service, not something you run
+                found[pkg] = bins
+        found = {p: b for p, b in found.items() if not m.base_system(p) and not m.blocked(p)}
+        infos = m.info_many(list(found))
+        defaults = [o.key for o in m.options if o.default]
+        for pkg, bins in found.items():
+            info = infos.get(pkg) or pkgmanagers.Info(pkg)
+            t = Tool(pkg, m.name, info.version, commands=bins, size=info.size, needs_password=m.needs_root)
+            t.remove = m.commands([pkg], defaults)
+            out.append(t)
+    return out
+
+
+def _nix(home: str) -> list[Tool]:
+    """Programs in your own Nix profile, grouped by the package they come from."""
+    bin_dir = os.path.join(home, ".nix-profile", "bin")
+    try:
+        names = sorted(os.listdir(bin_dir))
+    except OSError:
+        return []
+    by_pkg: dict[str, list[str]] = {}
+    for n in names:
+        store = pkgmanagers._store_name(os.path.realpath(os.path.join(bin_dir, n)))
+        if store:
+            pkg = re.sub(r"-\d[\w.+-]*$", "", store) or store
+            by_pkg.setdefault(pkg, []).append(n)
+    out = []
+    for pkg, bins in sorted(by_pkg.items()):
+        version = re.search(r"-(\d[\w.+-]*)$", pkgmanagers._store_name(os.path.realpath(
+            os.path.join(bin_dir, bins[0])))) if bins else None
+        t = Tool(pkg, "nix", version.group(1) if version else "", commands=bins)
+        t.remove = [["nix", "profile", "remove", pkg]] if os.path.isfile(
+            os.path.join(home, ".nix-profile", "manifest.json")) else [["nix-env", "--uninstall", pkg]]
+        out.append(t)
+    return out
+
+
+def scan(env=None, apps=(), system: bool = False, managers=None) -> list[Tool]:
     """`apps` are the apps with menu entries: the programs they start aren't
-    listed here, as they already have a page."""
+    listed here, as they already have a page. With `system`, terminal
+    programs installed with the system's package manager are listed too."""
     env = os.environ if env is None else env
     home = env.get("HOME") or os.path.expanduser("~")
     bins = [os.path.join(home, ".local", "bin"), os.path.join(home, "bin")]
@@ -220,6 +286,10 @@ def scan(env=None, apps=()) -> list[Tool]:
     tools = [t for t in tools if not any(p in launched or os.path.realpath(p) in launched for p in t.paths)]
     taken = {p for t in tools for p in t.paths} | {t.folder for t in tools if t.folder} | launched
     tools += _loose(home, bins, taken)
+    if system:
+        if managers is None:
+            managers = [m for m in pkgmanagers.detect() if m.name != "nix"]
+        tools += _packages(managers, apps) + _nix(home)
     return tools
 
 

@@ -173,6 +173,23 @@ class Manager:
     def files(self, pkg: str) -> list[str]:
         return []
 
+    def user_installed(self) -> list[str]:
+        """Packages you installed yourself, not ones pulled in for others.
+        [] where the manager doesn't record it."""
+        return []
+
+    def files_many(self, pkgs: Sequence[str]) -> dict[str, list[str]]:
+        """Each package's files; one question where the manager allows it."""
+        return {p: self.files(p) for p in pkgs}
+
+    def info_many(self, pkgs: Sequence[str]) -> dict[str, Info]:
+        return {p: self.info(p) for p in pkgs}
+
+    def base_system(self, pkg: str) -> bool:
+        """Part of the installed base system, though marked as installed by you
+        (Debian and Ubuntu mark much of it that way)."""
+        return False
+
     def preview(self, pkgs: Sequence[str], opts: Sequence[str]) -> Preview:
         return Preview(removed=list(pkgs))
 
@@ -238,6 +255,34 @@ class Pacman(Manager):
 
     def files(self, pkg):
         return [l for l in _ok(self.run(["pacman", "-Qlq", pkg])).splitlines() if l and not l.endswith("/")]
+
+    def user_installed(self):
+        return _ok(self.run(["pacman", "-Qqe"])).split()
+
+    def info_many(self, pkgs):
+        if not pkgs:
+            return {}
+        out = {}
+        foreign = set(_ok(self.run(["pacman", "-Qqm"])).split())
+        for block in _ok(self.run(["pacman", "-Qi"] + list(pkgs))).split("\n\n"):
+            fields = {}
+            for line in block.splitlines():
+                m = re.match(r"^(\S[^:]*?)\s*:\s?(.*)$", line)
+                if m:
+                    fields[m.group(1).strip()] = m.group(2).strip()
+            name = fields.get("Name", "")
+            if name:
+                out[name] = Info(name, fields.get("Version", ""), _human_size(fields.get("Installed Size", "")),
+                                 name in foreign)
+        return {p: out.get(p, Info(p)) for p in pkgs}
+
+    def files_many(self, pkgs):
+        out: dict[str, list[str]] = {p: [] for p in pkgs}
+        for line in _ok(self.run(["pacman", "-Ql"] + list(pkgs))).splitlines() if pkgs else []:
+            pkg, _sep, path = line.partition(" ")
+            if pkg in out and path and not path.endswith("/"):
+                out[pkg].append(path)
+        return out
 
     def _flags(self, opts) -> str:
         flags = "-R"
@@ -346,6 +391,61 @@ class Apt(Manager):
     def files(self, pkg):
         return [l for l in _ok(self.run(["dpkg-query", "-L", pkg])).splitlines() if l.startswith("/")]
 
+    def user_installed(self):
+        return _ok(self.run(["apt-mark", "showmanual"])).split()
+
+    def _status(self, path="/var/lib/dpkg/status") -> dict:
+        """Every installed package's fields, read once from dpkg's own record."""
+        if getattr(self, "_status_cache", None) is None:
+            out = {}
+            try:
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    text = f.read()
+            except OSError:
+                text = ""
+            for block in text.split("\n\n"):
+                fields = {}
+                for line in block.splitlines():
+                    k, sep, v = line.partition(":")
+                    if sep and not line.startswith(" "):
+                        fields[k] = v.strip()
+                if fields.get("Package") and fields.get("Status", "").endswith(" installed"):
+                    out.setdefault(fields["Package"], fields)
+            self._status_cache = out
+        return self._status_cache
+
+    def info_many(self, pkgs):
+        st = self._status()
+        out = {}
+        for p in pkgs:
+            f = st.get(p)
+            if f is None:
+                out[p] = self.info(p)
+            else:
+                size = f.get("Installed-Size", "")
+                out[p] = Info(p, f.get("Version", ""), int(size) * 1024 if size.isdigit() else 0)
+        return out
+
+    def base_system(self, pkg):
+        f = self._status().get(pkg, {})
+        return f.get("Essential") == "yes" or f.get("Priority") in ("required", "important", "standard")
+
+    def files_many(self, pkgs, info_dir="/var/lib/dpkg/info"):
+        """From dpkg's own file lists, without asking dpkg once per package."""
+        import glob
+        out = {}
+        for p in pkgs:
+            lists = glob.glob(os.path.join(info_dir, p + ".list")) + glob.glob(os.path.join(info_dir, p + ":*.list"))
+            files = []
+            for path in lists:
+                try:
+                    with open(path, encoding="utf-8", errors="replace") as f:
+                        files += [l.strip() for l in f if l.startswith("/")]
+                except OSError:
+                    pass
+            out[p] = files if lists else self.files(p)
+        return out
+
     def _simulate(self, pkgs, autoremove, purge):
         argv = ["apt-get", "-s"] + (["--auto-remove"] if autoremove else []) + (["--purge"] if purge else []) + \
             ["remove"] + list(pkgs)
@@ -393,7 +493,11 @@ class Apt(Manager):
         return [self._root(["apt", "install"] + list(pkgs))]
 
     def blocked(self, pkg):
-        _v, _s, essential, priority, _sec = self._fields(pkg)
+        f = self._status().get(pkg)
+        if f is not None:
+            essential, priority = f.get("Essential", ""), f.get("Priority", "")
+        else:
+            _v, _s, essential, priority, _sec = self._fields(pkg)
         if essential == "yes":
             return "Debian marks it as essential to the system"
         if priority == "required":
@@ -428,6 +532,16 @@ class _Rpm(Manager):
     def files(self, pkg):
         return [l for l in _ok(self.run(["rpm", "-ql", pkg])).splitlines() if l.startswith("/")]
 
+    def files_many(self, pkgs):
+        out: dict[str, list[str]] = {p: [] for p in pkgs}
+        if not pkgs:
+            return out
+        for line in _ok(self.run(["rpm", "-q", "--qf", "[%{NAME}\\t%{FILENAMES}\\n]"] + list(pkgs))).splitlines():
+            name, _t, path = line.partition("\t")
+            if name in out and path.startswith("/"):
+                out[name].append(path)
+        return out
+
     def _needed_by(self, pkgs) -> list[str]:
         r = self.run(["rpm", "-e", "--test"] + list(pkgs))
         if r is None:
@@ -460,6 +574,10 @@ class _Rpm(Manager):
 
 
 class Dnf(_Rpm):
+    def user_installed(self):
+        out = _ok(self.run(["dnf", "repoquery", "--userinstalled", "--qf", "%{name}\\n"]))
+        return [l.strip() for l in out.splitlines() if l.strip() and " " not in l.strip()]
+
     name, label, tools = "dnf", "dnf", ("dnf", "dnf5")
     options = (
         Option("deps", "Remove packages only it needed",
@@ -522,6 +640,15 @@ class Dnf(_Rpm):
 
 
 class Zypper(_Rpm):
+    def user_installed(self):
+        out = _ok(self.run(["zypper", "--quiet", "--no-refresh", "search", "--installed-only", "--type", "package"]))
+        names = []
+        for line in out.splitlines():
+            cols = [c.strip() for c in line.split("|")]
+            if len(cols) >= 2 and cols[0] == "i+":       # i+: installed by you; i: for another package
+                names.append(cols[1])
+        return names
+
     name, label, tools = "zypper", "zypper", ("zypper",)
     options = (
         Option("deps", "Remove packages only it needed",
@@ -561,6 +688,14 @@ class Zypper(_Rpm):
 
 
 class RpmOstree(_Rpm):
+    def user_installed(self):
+        try:
+            data = json.loads(_ok(self.run(["rpm-ostree", "status", "--json"])) or "{}")
+            d = (data.get("deployments") or [{}])[0]
+        except (ValueError, AttributeError):
+            return []
+        return list(d.get("requested-packages") or []) + list(d.get("requested-local-packages") or [])
+
     """Image-based Fedora (Silverblue, Kinoite, Bazzite): only packages you
     layered on top can be removed, and that takes effect after a restart."""
     name, label, tools = "rpm-ostree", "rpm-ostree", ("rpm-ostree",)
@@ -606,6 +741,9 @@ def _xbps_name(pkgver: str) -> str:
 
 
 class Xbps(Manager):
+    def user_installed(self):
+        return [_xbps_name(l.strip()) for l in _ok(self.run(["xbps-query", "-m"])).splitlines() if l.strip()]
+
     name, label, tools = "xbps", "xbps", ("xbps-query",)
     options = (
         Option("deps", "Remove packages only it needed",
@@ -671,6 +809,13 @@ def _apk_name(pkgver: str) -> str:
 
 
 class Apk(Manager):
+    def user_installed(self, world="/etc/apk/world"):
+        try:
+            with open(world, encoding="utf-8") as f:
+                return [re.split(r"[<>=~@]", w, maxsplit=1)[0] for w in f.read().split() if w]
+        except OSError:
+            return []
+
     name, label, tools = "apk", "apk", ("apk",)
     options = (
         Option("rdepends", "Also remove packages that need it",
@@ -770,6 +915,13 @@ class Eopkg(Manager):
 
 
 class Portage(Manager):
+    def user_installed(self, world="/var/lib/portage/world"):
+        try:
+            with open(world, encoding="utf-8") as f:
+                return [w.strip() for w in f if w.strip() and not w.startswith("@")]
+        except OSError:
+            return []
+
     name, label, tools = "portage", "Portage", ("emerge",)
     options = (
         Option("unmerge", "Remove even if other packages need it",
