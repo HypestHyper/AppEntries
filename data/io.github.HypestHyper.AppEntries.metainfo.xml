@@ -61,6 +61,14 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.2.5" date="2026-11-15">
+      <description>
+        <ul>
+          <li>Window buttons follow your desktop's layout and press evenly</li>
+          <li>No flash of the Apps list when leaving Launchers</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.4" date="2026-11-14">
       <description>
         <ul>

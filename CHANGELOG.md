@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.5 — 2026-11-15
 
 - Going from Launchers to another tab no longer flashes the Apps list on the way out.
 - Window buttons press evenly into a rounded square, instead of collapsing towards one corner.
