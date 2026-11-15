@@ -1,18 +1,18 @@
-"""Updates for apps from GitHub, in one list, and how many system, Flatpak
-and Snap updates are waiting. Pure Python, no GTK.
+"""Watching apps that come from GitHub for new versions: the ones the
+system's package manager doesn't update (AppImages, apps linked to a
+project, pip/pipx/uv apps, git copies and tools from cargo, go, pipx, uv and
+npm). Pure Python, no GTK.
 
-Nothing is asked online until the user checks (or turns on the daily
-check). Updating is done the way each kind of app is updated: an AppImage
-by App Entries (download, check, swap, with Undo), everything else by its
-own command in the user's terminal."""
+Checked at most once a day, reading only public release pages; a newer
+version shows as a small dot on the app. Nothing is downloaded until the
+user presses Update on its page."""
 import json
 import os
-import shutil
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
-from . import cli_tools, github_apps, install_info, pkgmanagers, uninstall
+from . import cli_tools, github_apps, install_info, uninstall
 
 DAY = 24 * 3600
 
@@ -46,12 +46,14 @@ def load_state(env=None) -> dict:
         return {}
 
 
-def save_state(checked: float, newer: list[str], env=None) -> None:
+def save_state(checked: float, newer: list[str], env=None, info: Optional[dict] = None) -> None:
+    """When it last looked, what has an update, and for each a few words
+    (the new version) for the dot's tooltip."""
     p = _state_path(env)
     try:
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p + ".tmp", "w", encoding="utf-8") as f:
-            json.dump({"checked": checked, "newer": sorted(newer)}, f)
+            json.dump({"checked": checked, "newer": sorted(newer), "info": info or {}}, f)
         os.replace(p + ".tmp", p)
     except OSError:
         pass
@@ -89,30 +91,6 @@ def _apps(apps) -> list[Candidate]:
     return out
 
 
-def _packages(run, which) -> list[Candidate]:
-    """Packages not from the distribution whose home is a GitHub project:
-    AUR packages (pacman) and package files installed by hand (apt)."""
-    out = []
-    if which("pacman"):
-        r = run(["pacman", "-Qqm"])
-        for pkg in (r[1].split() if r and r[0] == 0 else []):
-            f = install_info._fields((run(["pacman", "-Qi", pkg]) or (1, ""))[1])
-            src = github_apps.source_of("pkg:" + pkg, project=f.get("URL", ""), how="homepage")
-            if src:
-                out.append(Candidate("pkg:" + pkg, pkg, src, f.get("Version", ""), kind="aur", manager="pacman"))
-    elif which("apt"):
-        r = run(["apt", "list", "--installed"])
-        local = [line.split("/", 1)[0] for line in (r[1].splitlines() if r and r[0] == 0 else [])
-                 if "[installed,local]" in line]
-        for pkg in local:
-            r2 = run(["dpkg-query", "-W", "-f", "${Version}\t${Homepage}\n", pkg])
-            version, _t, home = ((r2[1] if r2 and r2[0] == 0 else "") + "\t\t").split("\n")[0].partition("\t")
-            src = github_apps.source_of("pkg:" + pkg, project=home.strip(), how="homepage")
-            if src:
-                out.append(Candidate("pkg:" + pkg, pkg, src, version, kind="package", manager="apt"))
-    return out
-
-
 def _tools(apps) -> list[Candidate]:
     out = []
     for t in cli_tools.scan(apps=apps):
@@ -123,11 +101,13 @@ def _tools(apps) -> list[Candidate]:
     return out
 
 
-def gather(apps, run=pkgmanagers.run, which=shutil.which) -> list[Candidate]:
-    """Everything with a GitHub project App Entries can check. Only reads
-    local files and asks the package manager; nothing goes online."""
+def gather(apps) -> list[Candidate]:
+    """Everything with a GitHub project that the system's package manager
+    doesn't update: AppImages, apps you linked, pip/pipx/uv apps and git
+    copies, and tools from cargo, go, pipx, uv and npm. Only reads local
+    files; nothing goes online."""
     seen, out = set(), []
-    for c in _apps(apps) + _packages(run, which) + _tools(apps):
+    for c in _apps(apps) + _tools(apps):
         if c.key not in seen:
             seen.add(c.key)
             out.append(c)
@@ -148,68 +128,17 @@ def check(c: Candidate, get: Optional[Callable] = None) -> Candidate:
     return c
 
 
-# ---------------------------------------------------------------------------
-# the system's own updates (read only)
+def flatpak_waiting(run=None, which=None) -> set[str]:
+    """IDs of Flatpaks with an update waiting (Flatpak updates them, not
+    the system's package manager). One question to Flatpak, which asks its
+    remotes."""
+    import shutil
 
-
-@dataclass
-class Waiting:
-    source: str          # e.g. "pacman", "Flatpak", "Snap"
-    count: int
-    names: list[str]
-    command: list        # what updates them, run in a terminal
-
-
-def _lines(run, argv, none=(1, 2)) -> Optional[list[str]]:
-    """Its output lines; [] for the exit codes that mean "nothing to update"
-    (checkupdates gives 2, pacman -Qu 1; dnf check-update gives 100 when there
-    are some); None if it couldn't say."""
-    r = run(argv)
-    if r is None:
-        return None
-    code, out = r
-    if code in (0, 100):
-        return [line for line in out.splitlines() if line.strip()]
-    return [] if code in none else None
-
-
-def system_updates(run=pkgmanagers.run, which=shutil.which) -> list[Waiting]:
-    """How many updates each source has waiting. Uses what each manager
-    already knows where it can (pacman's checkupdates and apt read lists
-    that may be a few hours old); Flatpak and Snap ask their servers."""
-    out = []
-    helper = next((h for h in ("paru", "yay") if which(h)), "")
-    if which("pacman"):
-        lines = _lines(run, ["checkupdates"]) if which("checkupdates") else _lines(run, ["pacman", "-Qu"])
-        if lines is not None:
-            names = [line.split()[0] for line in lines]
-            cmd = [helper, "-Syu"] if helper else pkgmanagers.as_root(["pacman", "-Syu"], which)
-            out.append(Waiting("pacman", len(names), names, [cmd]))
-    elif which("apt"):
-        lines = _lines(run, ["apt", "list", "--upgradable"])
-        if lines is not None:
-            names = [line.split("/", 1)[0] for line in lines if "/" in line]
-            out.append(Waiting("apt", len(names), names, [pkgmanagers.as_root(["apt", "update"], which),
-                                                          pkgmanagers.as_root(["apt", "upgrade"], which)]))
-    elif which("dnf"):
-        lines = _lines(run, ["dnf", "check-update", "-q"])
-        if lines is not None:
-            names = [line.split()[0] for line in lines if len(line.split()) >= 3]
-            out.append(Waiting("dnf", len(names), names, [pkgmanagers.as_root(["dnf", "upgrade"], which)]))
-    elif which("zypper"):
-        lines = _lines(run, ["zypper", "-q", "lu"])
-        if lines is not None:
-            names = [line.split("|")[2].strip() for line in lines if line.count("|") >= 4 and
-                     not line.lstrip().startswith(("S ", "--"))]
-            out.append(Waiting("zypper", len(names), names, [pkgmanagers.as_root(["zypper", "update"], which)]))
-    if which("flatpak"):
-        lines = _lines(run, ["flatpak", "remote-ls", "--updates", "--columns=application"])
-        if lines is not None:
-            names = [line.strip() for line in lines if not line.startswith("Application")]
-            out.append(Waiting("Flatpak", len(names), names, [["flatpak", "update"]]))
-    if which("snap"):
-        lines = _lines(run, ["snap", "refresh", "--list"])
-        if lines is not None:
-            names = [line.split()[0] for line in lines[1:]] if lines and lines[0].startswith("Name") else []
-            out.append(Waiting("Snap", len(names), names, [pkgmanagers.as_root(["snap", "refresh"], which)]))
-    return out
+    from . import pkgmanagers
+    run = run or pkgmanagers.run
+    if not (which or shutil.which)("flatpak"):
+        return set()
+    r = run(["flatpak", "remote-ls", "--updates", "--app", "--columns=application"])
+    if r is None or r[0] != 0:
+        return set()
+    return {line.strip() for line in r[1].splitlines() if line.strip() and not line.startswith("Application")}

@@ -163,7 +163,14 @@ class ToolsPage(Gtk.Box):
             bits.append(GLib.format_size(t.size))
         text = vbox(2, title, label(" · ".join(bits), ("small", "dim"), ellipsize=True))
         text.set_hexpand(True)
-        row = hbox(12, icon(GLYPHS.get(t.kind, "terminal")), text, icon("chevron_right", ("faint",)))
+        row = hbox(12, icon(GLYPHS.get(t.kind, "terminal")), text)
+        note = self.win.update_note("tool:" + t.name) if hasattr(self.win, "update_note") else ""
+        if note:
+            dot = Gtk.Box(valign=Gtk.Align.CENTER)
+            dot.add_css_class("update-dot")
+            dot.set_tooltip_text(note)
+            row.append(dot)
+        row.append(icon("chevron_right", ("faint",)))
         row.add_css_class("tool-row")
         row.add_css_class("no-copy")    # a click anywhere opens the tool, it doesn't select text
         if self.current is not None and (t.kind, t.name) == (self.current.kind, self.current.name):
@@ -210,7 +217,7 @@ class ToolsPage(Gtk.Box):
         fake = _as_app(t)
         if fake is not None:
             from .install_section import InstallSection
-            self.detail.append(InstallSection(fake, lambda: gen == self._gen))
+            self.detail.append(InstallSection(fake, lambda: gen == self._gen, self.win, "tool:" + t.name))
         self.right.get_vadjustment().set_value(0)
         self._layout()
         self._filter()

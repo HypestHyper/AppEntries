@@ -65,11 +65,6 @@ class StatusBar(Gtk.Box):
             items.append(("restart_alt", _("Restart to finish updating"), "accent",
                           _("Version {version} is installed. Restart App Entries to use it.")
                           .format(version=ups.installed), lambda: w.settings.set("filter", "updates")))
-        newer = getattr(w, "app_updates_newer", [])
-        if newer and here != "updates":
-            items.append(("download", ngettext("{n} app update", "{n} app updates", len(newer)).format(n=len(newer)),
-                          "accent", _("Apps or tools from GitHub have a newer release. Open Updates to see them."),
-                          lambda: w.settings.set("filter", "updates")))
         for did in list(w.drafts):
             item = w.apps.by_id.get(did)
             if item is None or item is w._current:

@@ -151,13 +151,19 @@ class UpdatesPage(Gtk.Box):
         c = card()
         for key, text in (("check-updates", _("Look for updates when App Entries starts")),
                           ("update-notify", _("Show a notification when there's a new version")),
-                          ("update-test", _("Include test versions"))):
+                          ("update-test", _("Include test versions")),
+                          ("check-app-updates", _("Watch my other apps for new versions"))):
             row, _sw = switch_row(text, settings.get(key), lambda v, k=key: settings.set(k, v))
             c.append(row)
         c.append(label(_("App Entries asks GitHub for its list of releases at most once every six hours, when it "
                          "starts, and sends nothing about you. Test versions are releases marked as pre-releases; "
                          "they get new features first and may have rough edges."),
                        ("small", "faint"), wrap=True, chars=60))
+        c.append(label(_("Watching your other apps covers what your system's package manager doesn't update: "
+                         "AppImages, apps from GitHub, apps installed with pip, pipx or uv, git copies, tools in "
+                         "Tools, and Flatpaks. Once a day it reads their public release pages (and asks Flatpak), "
+                         "and a small dot marks what has a newer version. Nothing is downloaded until you press "
+                         "Update on its page."), ("small", "faint"), wrap=True, chars=60))
         self.append(c)
 
         manager.connect(self.refresh)

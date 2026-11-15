@@ -14,6 +14,7 @@ from .. import (
     autostart,
     desktop_entries,
     editing,
+    github_apps,
     health,
     history,
     icon_lookup,
@@ -326,8 +327,9 @@ class MainWindow(Gtk.ApplicationWindow):
         self._auto_busy = False
         self._sort_newest = self.settings.get("sort") == "newest"
         self._new_ids = set()   # apps marked New: until you open their page
-        self.app_updates_newer = []     # apps and tools from GitHub with a newer release (App updates)
-        self.app_update_results = {}
+        self.app_updates_newer = []     # apps and tools with a newer version: a dot on their row
+        self.app_update_results = {}    # GitHub checks made this run, by app ID
+        self.app_update_info = {}       # the new version, for the dot's tooltip
 
         self.snackbar = Snackbar()
         overlay = Gtk.Overlay(vexpand=True)
@@ -400,8 +402,6 @@ class MainWindow(Gtk.ApplicationWindow):
         elif name == "updates":
             inner = UpdatesPage(self.get_application().updates, self.settings)
             inner.set_margin_bottom(24)
-            from .app_updates_part import AppUpdates
-            inner.append(AppUpdates(self))
             page = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
             page.set_child(Clamp(inner, 760))
         else:
@@ -411,7 +411,7 @@ class MainWindow(Gtk.ApplicationWindow):
     def _setup_card(self, _f, list_item):
         list_item.set_child(AppRow(self._on_toggle, self._on_card_action, lambda: self._selecting,
                                    lambda: self._current.app.id if self._current is not None else None,
-                                   lambda did: did in self.drafts))
+                                   lambda did: did in self.drafts, self.update_note))
 
     def _focused_row(self):
         w = self.grid.get_focus_child()
@@ -634,6 +634,8 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.issues.update(self.report, force=True)
             if self.settings.get(key) and self.report is not None:
                 self._handle_uninstalled(self.report)
+        elif key == "check-app-updates":
+            self._daily_app_check(force=True)
         elif key == "window-controls":
             self._apply_window_controls()
         elif key == "size":
@@ -657,36 +659,74 @@ class MainWindow(Gtk.ApplicationWindow):
                     item.emit("changed")
         self._icon_times = now
 
-    def set_app_updates(self, newer):
-        """Apps and tools from GitHub with a newer release (a status chip)."""
+    def set_app_updates(self, newer, info=None):
+        """What has a newer version: a small dot on its row (apps and tools),
+        nothing louder."""
+        old = set(self.app_updates_newer)
         self.app_updates_newer = list(newer)
-        self.status.update()
+        if info is not None:
+            self.app_update_info = dict(info)
+        for did in old ^ set(newer):
+            item = self.apps.by_id.get(did)
+            if item is not None:
+                item.emit("changed")
+        tools = self.stack.get_child_by_name("tools")
+        if tools is not None:
+            tools._filter()
 
-    def _daily_app_check(self):
-        """Once a day, if turned on: check apps from GitHub in the background.
-        Nothing is downloaded or changed; a status chip says what's newer."""
+    def update_note(self, key) -> str:
+        """The dot's words for an app or tool with an update, or ""."""
+        if key not in self.app_updates_newer:
+            return ""
+        version = (getattr(self, "app_update_info", {}) or {}).get(key, "")
+        return (_("Version {version} is out").format(version=version) if version
+                else _("An update is waiting"))
+
+    def updated(self, key):
+        """An app was just updated from its page: its dot goes."""
         from .. import app_updates
+        if key in self.app_updates_newer:
+            newer = [k for k in self.app_updates_newer if k != key]
+            info = {k: v for k, v in getattr(self, "app_update_info", {}).items() if k != key}
+            st = app_updates.load_state()
+            app_updates.save_state(st.get("checked", 0), newer, info=info)
+            self.set_app_updates(newer, info)
+
+    def _daily_app_check(self, force=False):
+        """Once a day, if turned on (Updates → Checking): look for newer
+        versions of what the system's package manager doesn't update
+        (AppImages, apps from GitHub, pip/pipx/uv apps, git copies, tools,
+        and Flatpaks). Nothing is downloaded or changed; a small dot marks
+        what's newer."""
+        from .. import app_updates
+        st = app_updates.load_state()
         if not self.settings.get("check-app-updates"):
-            self.app_updates_newer = list(app_updates.load_state().get("newer", []))
+            self.set_app_updates([], {})
             return
-        if not app_updates.due():
-            self.app_updates_newer = list(app_updates.load_state().get("newer", []))
-            self.status.update()
+        if not force and not app_updates.due():
+            self.set_app_updates(st.get("newer", []), st.get("info", {}))
             return
         apps = [i.app for i in self.apps.items()]
+        flatpaks = {uninstall._flatpak_id(a): a.id for a in apps if a.source == "flatpak"}
 
         def work():
             items = [app_updates.check(c) for c in app_updates.gather(apps)]
-            newer = [c.key for c in items if c.result is not None and c.result.newer]
-            app_updates.save_state(time.time(), newer)
-            return items, newer
+            info = {}
+            for c in items:
+                if c.result is not None and c.result.newer:
+                    info[c.key] = github_apps.version_in(c.result.release.tag) or c.result.release.tag
+            for fid in app_updates.flatpak_waiting():
+                if fid in flatpaks:
+                    info[flatpaks[fid]] = ""
+            app_updates.save_state(time.time(), list(info), info=info)
+            return items, info
 
         def done(r):
             if isinstance(r, Exception):
                 return
-            items, newer = r
+            items, info = r
             self.app_update_results = {c.key: (c.result, c.error) for c in items}
-            self.set_app_updates(newer)
+            self.set_app_updates(list(info), info)
         run_bg(work, done)
 
     def _close_with_drafts(self, *_a):

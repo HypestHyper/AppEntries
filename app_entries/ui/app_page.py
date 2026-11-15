@@ -196,7 +196,7 @@ class AppPage(Gtk.Box):
         self._helpers(a)
         self._changes(a)
         gen = self._gen
-        self.page.append(InstallSection(a, lambda: gen == self._gen))
+        self.page.append(InstallSection(a, lambda: gen == self._gen, self.win))
         self.page.append(self._actions(a))
         adj.set_value(y)
         GLib.idle_add(lambda: (adj.set_value(y), False)[1])

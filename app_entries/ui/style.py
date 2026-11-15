@@ -177,6 +177,7 @@ button.icon-edit:hover .icon-tile {{ outline: 2px solid alpha({PRIMARY}, .6); ou
 button.icon-edit:focus-visible {{ outline: 2px solid {PRIMARY}; outline-offset: 2px; }}
 button.back-button {{ min-height: 36px; padding: 0 16px 0 10px; border-radius: 18px; }}
 .draft-dot {{ background: {PRIMARY}; border-radius: 4px; min-width: 8px; min-height: 8px; }}
+.update-dot {{ background: {TERTIARY}; border-radius: 4px; min-width: 8px; min-height: 8px; }}
 expander.entry-expander > title {{ padding: 6px 4px; }}
 progressbar trough {{ min-height: 6px; border-radius: 3px; background: {SECONDARY_CONTAINER}; border: none; }}
 progressbar progress {{ min-height: 6px; border-radius: 3px; background: {PRIMARY}; border: none; }}

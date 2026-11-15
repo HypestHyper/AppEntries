@@ -42,10 +42,14 @@ class InstallSection(Gtk.Box):
     """`still_here()` says whether the page still shows this app, so an
     answer that arrives after the user moved on is dropped."""
 
-    def __init__(self, app, still_here):
+    def __init__(self, app, still_here, win=None, key=None):
+        """`win` is the main window, for what the update watch found (`key`
+        is the app's or tool's key there, its ID by default)."""
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.app = app
         self._here = still_here
+        self.win = win
+        self.key = key or app.id
         self.append(section(_("Installation"),
                             _("Where {name} came from, as recorded by what installed it.").format(name=app.name)))
         self.card = card()
@@ -199,13 +203,24 @@ class InstallSection(Gtk.Box):
             c.append(self._deps_expander(d))
         if d.kind == "flatpak":
             c.append(self._permissions_expander(d))
+            note = self.win.update_note(self.key) if self.win is not None else ""
+            if note:
+                # Flatpak updates it, not the system's package manager.
+                cmd = [["flatpak", "update", "--user" if d.scope == "user" else "--system", d.package]]
+                waiting = vbox(8)
+                waiting.add_css_class("card-inner")
+                waiting.append(hbox(10, Gtk.Box(css_classes=["update-dot"], valign=Gtk.Align.CENTER),
+                                    label(_("An update is waiting in Flatpak."), ("body",))))
+                waiting.append(_start(button(_("Update in terminal"), "terminal", "tonal", small=True,
+                                             tooltip=terminal.shown(cmd), cb=lambda *_a: _run_terminal(self, cmd))))
+                c.append(waiting)
         if d.kind in ("appimage", "file") and d.made not in ("webapp", "commands"):
-            c.append(GitHubPart(self.app, d, src, self._here))
+            c.append(GitHubPart(self.app, d, src, self._here, self.win, self.key))
         elif d.kind == "package" and src is not None and d.made != "webapp":
             # Only for packages your distribution doesn't keep up to date.
             if d.foreign or d.repo in ("local", "unknown") or (d.manager not in ("pacman", "apt") and not any(
                     v in d.repo for v in ("Fedora", "openSUSE", "SUSE", "Red Hat", "CentOS", "Rocky", "Alma"))):
-                c.append(GitHubPart(self.app, d, src, self._here))
+                c.append(GitHubPart(self.app, d, src, self._here, self.win, self.key))
             elif d.manager == "apt" and not d.repo:
                 self._apt_github = (c, src)     # shown if apt says it was installed from a file
 
@@ -374,13 +389,17 @@ class GitHubPart(Gtk.Box):
     for an AppImage, update it. Nothing is asked of GitHub until a button
     is pressed."""
 
-    def __init__(self, app, d, src, still_here):
+    def __init__(self, app, d, src, still_here, win=None, key=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.add_css_class("card-inner")
         self.app, self.d, self.src, self._here = app, d, src, still_here
+        self.win, self.key = win, key or app.id
         self.path = d.path
         self._stop = False
         self._show()
+        if src is not None and win is not None and win.update_note(self.key):
+            # The watch found a newer version: show it now (one page read, remembered for an hour).
+            self._check()
 
     def _show(self):
         clear(self)
@@ -592,6 +611,8 @@ class GitHubPart(Gtk.Box):
         def done(ok):
             if ok:
                 github_apps.remember_installed(app_id, tag, name, project)
+                if self.win is not None:
+                    self.win.updated(self.key)
             elif os.path.exists(new):
                 os.remove(new)      # the launcher wasn't changed, so the download goes
         if self._here():
@@ -643,3 +664,12 @@ def _downloads() -> str:
 def _start(w):
     w.set_halign(Gtk.Align.START)
     return w
+
+
+def _run_terminal(widget, commands):
+    try:
+        terminal.start(commands)
+    except (terminal.NoTerminal, OSError) as e:
+        from .dialogs import Dialog
+        Dialog(widget.get_root(), _("Couldn't open a terminal"), _("{error}. Run this yourself:\n{cmd}").format(
+            error=e, cmd=terminal.shown(commands)), [("ok", _("Close"), "tonal")]).present()
