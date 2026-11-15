@@ -61,6 +61,15 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.2.6" date="2026-11-15">
+      <description>
+        <ul>
+          <li>Installation details on each app's page: package, source, install date, size and dependencies</li>
+          <li>AppImages from GitHub: check for new releases and update with one click, with Undo</li>
+          <li>Use a newer file works for every AppImage</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.5" date="2026-11-15">
       <description>
         <ul>

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version 1.2.5" src="https://img.shields.io/badge/version-1.2.5-1f9e80">
+  <img alt="Version 1.2.6" src="https://img.shields.io/badge/version-1.2.6-1f9e80">
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Linux" src="https://img.shields.io/badge/platform-Linux-informational">
   <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-3776AB">
@@ -40,6 +40,7 @@
 - Hide or show an app with the eye on its row, Space, or the switch on its page. Hidden apps still open links and files, and stay in "Open With".
 - **Each app has a page** beside the list: how it looks in your launcher, its name, icon and command (edited right there, with Save and Discard), the file types it opens, whether it starts at login, helper apps, the changes made to it with Undo, and Uninstall. Unsaved edits are kept while you look at other apps.
 - **Installation details** at the bottom of each app's page: its package, version and where it came from (your distribution, the AUR, a PPA, Flathub, a Snap channel), when it was installed, whether it was installed directly or for another package (and by whom, where apt records it), who it's installed for and its size. Dependencies open to show what it needs, what needs it and optional extras. For an AppImage or a program no package owns: its file, the web address it was downloaded from, and the GitHub project its updates come from. The page opens at once and these fill in from the background; answers are remembered until something is installed or removed.
+- **Apps from GitHub**: an AppImage's page shows the GitHub project it comes from (from its update information or where it was downloaded), or you can link one. Check for updates when you choose, see what's new, and update with one button: the new AppImage for your processor is downloaded and checked, the launcher points at it and the old file goes to the Trash, with Undo.
 - **Select several** to hide, show, restore, restyle or uninstall many apps at once.
 - **Edit** any entry (name, icon, command, environment, folders, desktops, quick actions) with a live view of the file. Editing a system app saves your own copy; *Restore original* puts it back.
 - **Open** any app from its page or right-click menu, hidden ones included. Sort A–Z or newest first; apps that appeared since App Entries last looked are marked New until you open them.

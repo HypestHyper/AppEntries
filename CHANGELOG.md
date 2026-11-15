@@ -1,9 +1,11 @@
 # Changelog
 
-## Unreleased
+## 1.2.6 — 2026-11-15
 
 - **Installation** section at the bottom of each app's page: its package, version and where it came from (your distribution's repositories, the AUR, a PPA or other repository, a hand-installed package file, Flathub, a Snap channel), when it was installed, whether it was installed directly or pulled in by another package, who installed it (where apt records that), whether it's for all users or just you, and its size. **Dependencies** opens to show what it needs, what needs it, and optional extras with whether they're installed. For a Flatpak, its runtime and how many other apps share it; for a Snap, its publisher and base.
 - For an AppImage or a program no package owns: the file, its date, the web address your browser downloaded it from, and the GitHub project an AppImage says its updates come from.
+- **Apps from GitHub**: an AppImage's page shows the GitHub project it comes from, found from its own update information or the address it was downloaded from; any other AppImage can be linked to a project by name. **Check for updates** reads the project's latest release (only when you press it; nothing about you is sent) and shows what's new. **Update** downloads the AppImage for your computer's processor next to the one you have, checks it, points the launcher at it and moves the old file to the Trash. Undo puts the old file and launcher back and moves the download to the Trash.
+- **Use a newer file…** now works for every AppImage, not just launchers made with App Entries.
 - The page doesn't wait for any of this: it opens at once, the section fills in from the background, and the dependency lists are only read when opened. Answers are remembered until something is installed or removed. Only reads; nothing is changed.
 
 ## 1.2.5 — 2026-11-15
