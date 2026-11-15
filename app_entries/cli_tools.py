@@ -34,6 +34,12 @@ class Tool:
     remove: list = field(default_factory=list)          # commands that remove it ([] = move `trash` to the Trash)
     trash: list[str] = field(default_factory=list)
     needs_password: bool = False    # removing it asks for your password (a system package)
+    description: str = ""           # its one-line summary
+    group: str = ""                 # for a package: the manager's label (pacman, apt…)
+
+    @property
+    def search_text(self) -> str:
+        return " ".join([self.name, self.description, self.kind, self.project] + self.commands).casefold()
 
     @property
     def github(self) -> str:
@@ -81,6 +87,7 @@ def _python(home: str, bins: list[str]) -> list[Tool]:
             for name, version, url, _editable in install_info._dists(venv):
                 if name.lower().replace("_", "-") == n.lower().replace("_", "-"):
                     t.version, t.project = version, install_info._https(url) if url.startswith(("http", "git")) else ""
+                    t.description = _summary(venv, name)
             t.update = [["pipx", "upgrade", n]] if kind == "pipx" else [["uv", "tool", "upgrade", n]]
             t.remove = [["pipx", "uninstall", n]] if kind == "pipx" else [["uv", "tool", "uninstall", n]]
             out.append(t)
@@ -97,7 +104,8 @@ def _cargo(home: str) -> list[Tool]:
         name, version, source = m.groups()
         bins = [os.path.join(home, ".cargo", "bin", b) for b in (info or {}).get("bins", [])]
         t = Tool(name, "cargo", version, commands=[os.path.basename(b) for b in bins],
-                 paths=[b for b in bins if os.path.exists(b)])
+                 paths=[b for b in bins if os.path.exists(b)],
+                 description="Built from its code" if source.startswith("git+") else "From crates.io")
         t.size = _size(t.paths)
         if source.startswith("git+"):
             t.project = install_info._https(re.sub(r"[?#].*$", "", source[4:]))
@@ -136,7 +144,8 @@ def _go(home: str, env) -> list[Tool]:
         if not os.path.isfile(p):
             continue
         module, version = go_module(p)
-        t = Tool(n, "go", version, commands=[n], paths=[p], size=_size([p]))
+        t = Tool(n, "go", version, commands=[n], paths=[p], size=_size([p]),
+                 description=f"Built from {module}" if module else "A Go program")
         if module:
             if module.startswith("github.com/"):
                 t.project = "https://" + "/".join(module.split("/")[:3])
@@ -175,6 +184,7 @@ def _npm(home: str) -> list[Tool]:
                 repo = pkg.get("repository") or ""
                 repo = repo.get("url", "") if isinstance(repo, dict) else repo
                 t = Tool(pkg.get("name", n), "npm", pkg.get("version", ""), commands=bins, folder=d,
+                         description=str(pkg.get("description") or ""),
                          paths=[os.path.join(prefix, "bin", b) for b in bins], size=_size([d]),
                          project=install_info._https(repo) if repo else "")
                 t.update = [["npm", "install", "-g", t.name + "@latest"]]
@@ -200,6 +210,8 @@ def _loose(home: str, bins: list[str], taken: set[str]) -> list[Tool]:
             if any((real + os.sep).startswith(os.path.realpath(t) + os.sep) for t in taken if os.path.isdir(t)):
                 continue
             t = Tool(n, "file", commands=[n], paths=[p], size=_size([real]))
+            what, comment, _preview = describe_file(real)
+            t.description = comment or what
             t.project = install_info.download_origin(real)
             _checkout, remote = install_info.git_remote(real, home)
             if remote:
@@ -231,7 +243,7 @@ def _packages(managers, apps) -> list[Tool]:
             own = files.get(pkg, [])
             if any(f.endswith(".desktop") and "/applications/" in f for f in own) or any(f in with_entry for f in own):
                 continue        # it has a menu entry: it's in the app list
-            bins = sorted({os.path.basename(f) for f in own if os.path.dirname(f) in BIN_DIRS})
+            bins = sorted({f for f in own if os.path.dirname(f) in BIN_DIRS}, key=os.path.basename)
             if bins:            # else a library, data or a service, not something you run
                 found[pkg] = bins
         found = {p: b for p, b in found.items() if not m.base_system(p) and not m.blocked(p)}
@@ -239,7 +251,8 @@ def _packages(managers, apps) -> list[Tool]:
         defaults = [o.key for o in m.options if o.default]
         for pkg, bins in found.items():
             info = infos.get(pkg) or pkgmanagers.Info(pkg)
-            t = Tool(pkg, m.name, info.version, commands=bins, size=info.size, needs_password=m.needs_root)
+            t = Tool(pkg, m.name, info.version, commands=[os.path.basename(b) for b in bins], paths=bins,
+                     size=info.size, needs_password=m.needs_root, description=info.description, group=m.label)
             t.remove = m.commands([pkg], defaults)
             out.append(t)
     return out
@@ -303,3 +316,61 @@ def by_kind(tools: list[Tool]) -> list[tuple[str, list[Tool]]]:
 
 def find(tools: list[Tool], name: str) -> Optional[Tool]:
     return next((t for t in tools if t.name == name), None)
+
+
+def _summary(venv: str, dist: str) -> str:
+    import glob
+    for meta in glob.glob(os.path.join(venv, "lib", "python*", "site-packages", "*.dist-info", "METADATA")):
+        try:
+            with open(meta, encoding="utf-8", errors="replace") as f:
+                head = f.read(8192)
+        except OSError:
+            continue
+        name = re.search(r"^Name:\s*(.+)$", head, flags=re.MULTILINE)
+        if name and name.group(1).strip().lower().replace("_", "-") == dist.lower().replace("_", "-"):
+            m = re.search(r"^Summary:\s*(.+)$", head, flags=re.MULTILINE)
+            return m.group(1).strip() if m else ""
+    return ""
+
+
+SCRIPTS = {"sh": "A shell script", "bash": "A Bash script", "zsh": "A Zsh script", "fish": "A fish script",
+           "python": "A Python script", "perl": "A Perl script", "ruby": "A Ruby script",
+           "node": "A JavaScript (Node) script", "lua": "A Lua script"}
+CODE_START = ("set -", "import ", "from ", "use ", "require")
+
+
+def describe_file(path: str) -> tuple[str, str, list[str]]:
+    """(what kind of file, its first comment line, its first lines if it's a
+    script). Only reads it; nothing runs."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(65536)
+    except OSError:
+        return "A file", "", []
+    if head.startswith(b"\x7fELF"):
+        return "A program (compiled, not a script)", "", []
+    if not head.startswith(b"#!"):
+        return "A file", "", []
+    lines = head.decode("utf-8", "replace").splitlines()
+    words = lines[0][2:].split()
+    interp = os.path.basename(words[0]) if words else ""
+    if interp == "env" and len(words) > 1:
+        interp = os.path.basename(words[1])
+    base = re.sub(r"[\d.]+$", "", interp)
+    what = SCRIPTS.get(base) or f"A script run by {interp}"
+    comment = ""
+    for line in lines[1:40]:
+        st = line.strip()
+        if not st:
+            continue
+        if st.startswith(("#", "//", "--")):
+            if st.startswith(("#!", "# -*-", "# vim:")):
+                continue
+            comment = st.lstrip("#/- ").strip()
+            if comment:
+                break
+        elif st.startswith(CODE_START):
+            continue
+        else:
+            break
+    return what, comment, lines[:40]

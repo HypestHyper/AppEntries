@@ -79,3 +79,5 @@ link
 shield
 android
 cloud_download
+help
+arrow_back

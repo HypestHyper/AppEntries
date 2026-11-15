@@ -71,6 +71,7 @@ class Info:
     version: str = ""
     size: int = 0                  # bytes installed, 0 if unknown
     foreign: bool = False          # not from the distribution's repositories (AUR and the like)
+    description: str = ""          # its one-line summary, where the manager gives one
 
 
 # Packages that are never uninstalled from here, and why.
@@ -273,7 +274,7 @@ class Pacman(Manager):
             name = fields.get("Name", "")
             if name:
                 out[name] = Info(name, fields.get("Version", ""), _human_size(fields.get("Installed Size", "")),
-                                 name in foreign)
+                                 name in foreign, fields.get("Description", ""))
         return {p: out.get(p, Info(p)) for p in pkgs}
 
     def files_many(self, pkgs):
@@ -423,7 +424,8 @@ class Apt(Manager):
                 out[p] = self.info(p)
             else:
                 size = f.get("Installed-Size", "")
-                out[p] = Info(p, f.get("Version", ""), int(size) * 1024 if size.isdigit() else 0)
+                out[p] = Info(p, f.get("Version", ""), int(size) * 1024 if size.isdigit() else 0,
+                              description=f.get("Description", ""))
         return out
 
     def base_system(self, pkg):
@@ -531,6 +533,18 @@ class _Rpm(Manager):
 
     def files(self, pkg):
         return [l for l in _ok(self.run(["rpm", "-ql", pkg])).splitlines() if l.startswith("/")]
+
+    def info_many(self, pkgs):
+        out = {p: Info(p) for p in pkgs}
+        if not pkgs:
+            return out
+        qf = "%{NAME}\\t%{VERSION}-%{RELEASE}\\t%{SIZE}\\t%{SUMMARY}\\n"
+        for line in _ok(self.run(["rpm", "-q", "--qf", qf] + list(pkgs))).splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 4 and parts[0] in out:
+                out[parts[0]] = Info(parts[0], parts[1], int(parts[2]) if parts[2].isdigit() else 0,
+                                     description=parts[3])
+        return out
 
     def files_many(self, pkgs):
         out: dict[str, list[str]] = {p: [] for p in pkgs}

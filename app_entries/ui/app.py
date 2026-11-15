@@ -1374,6 +1374,9 @@ class MainWindow(Gtk.ApplicationWindow):
         side = lists and not self._narrow
         self.list_area.set_hexpand(not side)
         self.list_area.set_size_request(LIST_WIDTH if side else -1, -1)
+        tools = self.stack.get_child_by_name("tools")
+        if tools is not None:
+            tools._layout()
         self._place_status()
 
     def _place_status(self):

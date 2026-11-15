@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Tools has pages**: click a tool to open its page beside the list (or instead of it in a narrow window), like an app's:
+  - what it is, with its package's description; for a file of your own, what kind of file it is (a compiled program, or a Bash, Python… script), its first comment and how it starts;
+  - its commands with where each one is, and **Help** to open its manual (or its --help) in your terminal;
+  - the same Installation details as apps: package, repository, install date, size, dependencies and what needs it, or the GitHub project;
+  - Update, Open folder, Open in text editor (for scripts), Project page and Remove.
+- The Tools list has a search box and a group filter, shows each tool's description and size, and each group's total size, with a line on what the group is (like what ~/.local/bin and ~/bin are for).
+
 ## 1.2.9 — 2026-11-15
 
 - **Terminal programs from your package manager** in Tools: packages you installed yourself that add a command but have no menu entry (ripgrep, btop, tmux and the like), grouped under the package manager that installed them, with their version, size and commands. **Remove** uninstalls one in your terminal, with the same command and options as Uninstall. Packages pulled in for others, and ones the system, your desktop or App Entries needs, aren't listed. Works with pacman, apt, dnf, zypper, rpm-ostree, xbps, apk, Portage and your Nix profile; on apt, packages Debian counts as part of the base system are left out too. (eopkg doesn't record which packages you installed yourself, so it isn't covered.)

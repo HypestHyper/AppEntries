@@ -144,3 +144,17 @@ def test_what_each_package_manager_says_you_installed(tmp_path):
     rpm = pm.Dnf(_run({("rpm", "-q", "--qf"): listing}), which)
     assert rpm.files_many(["htop", "tmux"]) == {"htop": ["/usr/bin/htop", "/usr/share/man/htop.1"],
                                                  "tmux": ["/usr/bin/tmux"]}
+
+
+def test_what_a_file_in_local_bin_is(tmp_path):
+    s = tmp_path / "backup"
+    s.write_text("#!/usr/bin/env bash\nset -e\n# Copy my documents to the backup drive\nrsync -a ~/Documents /mnt\n")
+    kind, comment, lines = cli_tools.describe_file(str(s))
+    assert (kind, comment, lines[2]) == ("A Bash script", "Copy my documents to the backup drive",
+                                         "# Copy my documents to the backup drive")
+    py = tmp_path / "tool"
+    py.write_text("#!/usr/bin/python3.12\nimport sys\nprint(sys.argv)\n")
+    assert cli_tools.describe_file(str(py))[:2] == ("A Python script", "")
+    elf = tmp_path / "bin"
+    elf.write_bytes(b"\x7fELF" + b"\0" * 20)
+    assert cli_tools.describe_file(str(elf)) == ("A program (compiled, not a script)", "", [])
