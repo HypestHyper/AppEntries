@@ -61,6 +61,14 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.2.11" date="2026-11-15">
+      <description>
+        <ul>
+          <li>A tool opens with a click anywhere on its row</li>
+          <li>Help in Tools opens the manual, and only runs a command's --help after you agree</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.10" date="2026-11-15">
       <description>
         <ul>
