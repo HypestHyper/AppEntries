@@ -392,3 +392,21 @@ def test_wrappers_are_looked_through(tmp_path):
                  exec=f"env DXVK_HUD=1 gamemoderun mangohud {prog} --fullscreen")
     d = ii.summary(app, system(tmp_path, {}, set()))
     assert d.kind == "file" and d.path == str(prog)
+
+
+def test_what_a_flatpak_can_reach(tmp_path):
+    info = ("[Context]\nshared=network;ipc;\nsockets=x11;wayland;pulseaudio;\ndevices=dri;\n"
+            "filesystems=home;xdg-download;xdg-pictures/Screenshots:ro;\n\n"
+            "[Session Bus Policy]\norg.freedesktop.Notifications=talk\norg.kde.StatusNotifierWatcher=see\n")
+    user = "[Context]\nfilesystems=!home;~/Games;\ndevices=all;\n"
+    s = system(tmp_path, {("flatpak", "info", "--show-permissions"): info,
+                          ("flatpak", "override", "--user", "--show"): user,
+                          ("flatpak", "override", "--system", "--show"): ""}, {"flatpak"})
+    got = [(p.group, p.text, p.wide) for p in ii.flatpak_permissions("org.x.App", s)]
+    assert ("network", "The internet and your network", False) in got
+    assert ("display", "X11 display (less shut off from other apps)", True) in got
+    assert ("sound", "Sound, and the microphone", False) in got
+    assert ("devices", "All devices: webcams, controllers, USB and more", True) in got
+    files = [t for g, t, _w in got if g == "files"]
+    assert files == ["Downloads", "Pictures/Screenshots (read only)", "~/Games"]   # home taken away by Flatseal
+    assert ("other", "Talks to: org.freedesktop.Notifications", False) in got

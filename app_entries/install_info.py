@@ -1065,3 +1065,110 @@ def _game_launcher(app, sysm) -> Optional[Details]:
         d.scope = "user" if path.startswith(sysm.home + os.sep) else "system"
     d.version = info.get("version", "")
     return d
+
+
+# ---------------------------------------------------------------------------
+# what a Flatpak can reach
+
+
+SOCKETS = {
+    "wayland": ("Wayland display", False), "x11": ("X11 display (less shut off from other apps)", True),
+    "fallback-x11": ("X11 display, only when Wayland isn't there", False),
+    "pulseaudio": ("Sound, and the microphone", False), "pipewire": ("PipeWire (sound and screen sharing)", False),
+    "cups": ("Printing", False), "pcsc": ("Smart cards", False), "ssh-auth": ("Your SSH key agent", True),
+    "gpg-agent": ("Your GPG key agent", True), "session-bus": ("Every app on your desktop session (full D-Bus)", True),
+    "system-bus": ("System services (full system D-Bus)", True), "inherit-wayland-socket": ("Wayland display", False),
+}
+DEVICES = {
+    "dri": ("Graphics acceleration", False), "all": ("All devices: webcams, controllers, USB and more", True),
+    "kvm": ("Virtual machines (KVM)", False), "input": ("Input devices such as game controllers", False),
+    "usb": ("USB devices", True), "shm": ("Shared memory", False),
+}
+SHARED = {"network": ("The internet and your network", False), "ipc": None}
+FOLDERS = {
+    "host": ("All files on the computer", True), "host-os": ("The system's programs and libraries", False),
+    "host-etc": ("The system's settings in /etc", False), "home": ("Your whole home folder", True),
+    "xdg-download": "Downloads", "xdg-documents": "Documents", "xdg-music": "Music", "xdg-pictures": "Pictures",
+    "xdg-videos": "Videos", "xdg-desktop": "Desktop", "xdg-public-share": "Public", "xdg-templates": "Templates",
+    "xdg-config": "~/.config", "xdg-data": "~/.local/share", "xdg-cache": "~/.cache", "xdg-run": "runtime files",
+}
+
+
+@dataclass
+class Permission:
+    group: str          # network, display, sound, devices, files, other
+    text: str
+    wide: bool = False  # reaches a lot: worth a look
+
+
+def _keyfile(text: str) -> dict:
+    out, group = {}, ""
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("[") and line.endswith("]"):
+            group = line[1:-1]
+            out.setdefault(group, {})
+        elif "=" in line and group:
+            k, v = line.split("=", 1)
+            out[group][k.strip()] = v.strip()
+    return out
+
+
+def _merge(base: list[str], extra: list[str]) -> list[str]:
+    """Overrides add items, and take them away with a leading !."""
+    items = list(dict.fromkeys(x for x in base if x and not x.startswith("!")))
+    for x in extra:
+        if not x:
+            continue
+        if x.startswith("!"):
+            items = [i for i in items if i.split(":")[0] != x[1:].split(":")[0]]
+        elif x not in items:
+            items.append(x)
+    return items
+
+
+def flatpak_permissions(fid: str, sysm: Optional[System] = None) -> list[Permission]:
+    """What a Flatpak can reach, with your own and system-wide overrides
+    (the changes Flatseal makes) applied."""
+    sysm = sysm or _default()
+    raw = sysm.out(["flatpak", "info", "--show-permissions", fid])
+    if not raw.strip():
+        raise RuntimeError(f"flatpak didn't say what {fid} can reach.")
+    ctx = _keyfile(raw).get("Context", {})
+    for scope in ("--system", "--user"):
+        over = _keyfile(sysm.out(["flatpak", "override", scope, "--show", fid])).get("Context", {})
+        for key in set(ctx) | set(over):
+            ctx[key] = ";".join(_merge(ctx.get(key, "").split(";"), over.get(key, "").split(";")))
+    out = []
+    for item in ctx.get("shared", "").split(";"):
+        what = SHARED.get(item)
+        if what:
+            out.append(Permission("network", *what))
+    for item in ctx.get("sockets", "").split(";"):
+        if item in SOCKETS:
+            text, wide = SOCKETS[item]
+            out.append(Permission("display" if item in ("wayland", "x11", "fallback-x11") else
+                                  "sound" if item in ("pulseaudio", "pipewire") else "other", text, wide))
+    for item in ctx.get("devices", "").split(";"):
+        if item in DEVICES:
+            out.append(Permission("devices", *DEVICES[item]))
+    for item in ctx.get("filesystems", "").split(";"):
+        if not item:
+            continue
+        name, _sep, mode = item.partition(":")
+        sub = ""
+        if name.startswith("xdg-") and "/" in name:
+            name, sub = name.split("/", 1)
+        known = FOLDERS.get(name)
+        if isinstance(known, tuple):
+            text, wide = known
+        else:
+            text, wide = ((known + ("/" + sub if sub else "")) if known else name), False
+        if mode == "ro":
+            text += " (read only)"
+        out.append(Permission("files", text, wide and mode != "ro"))
+    talk = [k for k, v in _keyfile(raw).get("Session Bus Policy", {}).items() if v in ("talk", "own")]
+    if talk:
+        out.append(Permission("other", "Talks to: " + ", ".join(sorted(talk)[:6]) +
+                              (f" and {len(talk) - 6} more" if len(talk) > 6 else ""), False))
+    return out

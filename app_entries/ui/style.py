@@ -181,6 +181,7 @@ expander.entry-expander > title {{ padding: 6px 4px; }}
 progressbar trough {{ min-height: 6px; border-radius: 3px; background: {SECONDARY_CONTAINER}; border: none; }}
 progressbar progress {{ min-height: 6px; border-radius: 3px; background: {PRIMARY}; border: none; }}
 .dep-chip {{ background: {SURFACE_CONTAINER_HIGHEST}; border-radius: 8px; padding: 3px 9px; }}
+.dep-chip.dep-wide {{ background: {TERTIARY_CONTAINER}; color: {ON_TERTIARY_CONTAINER}; }}
 .dep-chip.dep-missing {{ background: transparent; box-shadow: inset 0 0 0 1px {OUTLINE_VARIANT}; color: {ON_SURFACE_VARIANT}; }}
 /* Navigation rail */
 .navrail {{ padding: 4px 0 8px 0; min-width: 64px; }}

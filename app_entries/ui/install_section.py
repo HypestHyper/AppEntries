@@ -186,6 +186,8 @@ class InstallSection(Gtk.Box):
             add(_("Updates come from"), d.updates_from)
         if d.kind in ("package", "flatpak", "snap") and d.made != "webapp":
             c.append(self._deps_expander(d))
+        if d.kind == "flatpak":
+            c.append(self._permissions_expander(d))
         if d.kind in ("appimage", "file") and d.made not in ("webapp", "commands"):
             c.append(GitHubPart(self.app, d, src, self._here))
         elif d.kind == "package" and src is not None and d.made != "webapp":
@@ -219,6 +221,61 @@ class InstallSection(Gtk.Box):
 
         ex.connect("notify::expanded", opened)
         return ex
+
+    def _permissions_expander(self, d):
+        ex = Gtk.Expander()
+        ex.add_css_class("entry-expander")
+        ex.set_label_widget(hbox(8, icon("shield"), label(_("What it can reach"), ("body",))))
+        box = vbox(12)
+        box.set_margin_top(6)
+        ex.set_child(box)
+        started = {"yes": False}
+
+        def opened(*_a):
+            if not ex.get_expanded() or started["yes"]:
+                return
+            started["yes"] = True
+            box.append(hbox(10, spinner(), label(_("Reading its permissions…"), ("small", "dim"))))
+            run_bg(lambda: install_info.flatpak_permissions(d.package), lambda r: self._permissions(box, r))
+
+        ex.connect("notify::expanded", opened)
+        return ex
+
+    def _permissions(self, box, perms):
+        if not self._here():
+            return
+        clear(box)
+        if isinstance(perms, Exception):
+            box.append(label(str(perms), ("small", "error-text"), wrap=True))
+            return
+        box.append(label(_("Flatpak apps are shut off from the rest of the computer and reach only what's listed "
+                           "here, including changes made with Flatseal. Those marked are worth a look."),
+                         ("small", "dim"), wrap=True))
+        groups = [("files", _("Files")), ("network", _("Network")), ("display", _("Display")),
+                  ("sound", _("Sound")), ("devices", _("Devices")), ("other", _("Other"))]
+        if not perms:
+            box.append(label(_("Nothing outside its own sandbox."), ("body",)))
+        for key, title in groups:
+            mine = [x for x in perms if x.group == key]
+            if not mine:
+                continue
+            row = WrapBox(6, 6)
+            for x in mine:
+                chip = label(x.text, ("small", "dep-chip") + (("dep-wide",) if x.wide else ()))
+                if x.wide:
+                    chip.set_tooltip_text(_("This reaches a lot. Fine if the app needs it; Flatseal can take it "
+                                            "away."))
+                row.append(chip)
+            box.append(vbox(6, label(title, ("subheading",)), row))
+        from .helpers_window import HelperActions, shortcuts_for
+        win = self.get_root()
+        flatseal = next((x for x in shortcuts_for(self.app, win._all_apps()) if x.key == "flatseal"), None) \
+            if win is not None and hasattr(win, "_all_apps") else None
+        if flatseal is not None:
+            acts = HelperActions(win)
+            text = _("Change in Flatseal") if flatseal.installed else _("Get Flatseal to change these")
+            box.append(_start(button(text, "tune", "tonal", small=True, tooltip=flatseal.what,
+                                     cb=lambda *_a: acts.open(flatseal))))
 
     def _deps_loaded(self, d):
         if not self._here():
@@ -570,3 +627,8 @@ def _install_command(manager: str, path: str) -> list:
 
 def _downloads() -> str:
     return GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOWNLOAD) or GLib.get_home_dir()
+
+
+def _start(w):
+    w.set_halign(Gtk.Align.START)
+    return w
