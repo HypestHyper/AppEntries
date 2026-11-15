@@ -61,6 +61,16 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.2.7" date="2026-11-15">
+      <description>
+        <ul>
+          <li>Launchers made with App Entries, and App Entries itself, are described as such</li>
+          <li>Real sizes for apps started by scripts or living in their own folder</li>
+          <li>Apps installed with pip, pipx, uv or git, and packages from GitHub, can be checked and updated</li>
+          <li>Paths shown whole, and Flatpak runtimes explained</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.6" date="2026-11-15">
       <description>
         <ul>

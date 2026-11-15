@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.7 — 2026-11-15
 
 - **Launchers made with App Entries** say so in Installation, instead of showing the program they run: a web app shows its site, its browser and how much its own sign-ins take; a commands launcher, the shell that runs your commands; a launcher for a program, the program's own details below.
 - **App Entries itself** shows its version, where it's installed and its real size.
