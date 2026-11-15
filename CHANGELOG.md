@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.10 — 2026-11-15
 
 - **Tools has pages**: click a tool to open its page beside the list (or instead of it in a narrow window), like an app's:
   - what it is, with its package's description; for a file of your own, what kind of file it is (a compiled program, or a Bash, Python… script), its first comment and how it starts;

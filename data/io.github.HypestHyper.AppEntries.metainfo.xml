@@ -61,6 +61,14 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.2.10" date="2026-11-15">
+      <description>
+        <ul>
+          <li>Tools have their own pages: what each one is, its commands with Help, where it came from and its dependencies</li>
+          <li>Search, a group filter and descriptions in Tools</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.9" date="2026-11-15">
       <description>
         <ul>
