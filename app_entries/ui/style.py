@@ -334,7 +334,9 @@ scrollbar slider {{ background: {OUTLINE_VARIANT}; border-radius: 999px; min-wid
 scrollbar slider:hover {{ background: {OUTLINE}; }}
 
 /* Tooltip and snackbar */
-tooltip, tooltip.background {{ background: {INVERSE_SURFACE}; color: {INVERSE_ON_SURFACE}; border-radius: 8px; border: none; box-shadow: none; }}
+tooltip, tooltip.background {{ background: {SURFACE_CONTAINER_HIGHEST}; color: {ON_SURFACE}; border-radius: 8px;
+  border: 1px solid {OUTLINE_VARIANT}; box-shadow: none; }}
+tooltip label {{ color: {ON_SURFACE}; }}
 tooltip label {{ font-family: {FONT}; font-size: 13px; }}
 .snackbar {{
   background: {INVERSE_SURFACE}; color: {INVERSE_ON_SURFACE}; border-radius: 14px;

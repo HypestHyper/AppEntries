@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Tools** in the rail opens again: the installed settings didn't list it as a place, so clicking it did nothing.
+- A commands launcher's script shows its first 10 lines on its page, with **Show all**, instead of the whole script; and no tooltip repeats it.
+- Tooltips use the app's own colours, so they're dark in dark mode instead of a bright box.
+
 ## 1.2.8 — 2026-11-15
 
 - **App updates**, on the Updates page: every app and tool from a GitHub project in one list (AppImages, apps installed with pip, pipx or uv, git copies, AUR packages, package files from GitHub, and tools in Tools). **Check all** asks GitHub for each one's latest release; AppImages update right there (with Undo), and the rest run their own update command in your terminal. Turn on **Check once a day** and a status chip says when something is newer; nothing is downloaded or changed until you press Update.

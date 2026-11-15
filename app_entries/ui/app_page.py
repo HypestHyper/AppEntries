@@ -13,7 +13,21 @@ from .. import APP_ID, appimages, autostart, defaults, history, uninstall
 from .app_card import UNINSTALL_HINTS, gicon_later, label_for_source
 from .dialogs import run_bg
 from .install_section import InstallSection
-from .widgets import Floating, Toggle, WrapBox, button, card, clear, enter, hbox, icon, label, section, vbox
+from .widgets import (
+    Floating,
+    Toggle,
+    WrapBox,
+    button,
+    card,
+    clear,
+    enter,
+    hbox,
+    icon,
+    label,
+    long_text,
+    section,
+    vbox,
+)
 
 SELF_ID = APP_ID + ".desktop"
 
@@ -342,7 +356,8 @@ class AppPage(Gtk.Box):
             v = label(value or _("None"), ("mono",) if mono else ("body",), wrap=not mono, ellipsize=mono)
             if mono:
                 v.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
-                v.set_tooltip_text(value)
+                if value and "\n" not in value and len(value) < 200:
+                    v.set_tooltip_text(value)     # the whole of a shortened line; never a script
             if not value:
                 v.add_css_class("dim")
             return vbox(2, label(title, ("small", "dim")), v)
@@ -359,7 +374,7 @@ class AppPage(Gtk.Box):
             spec = launchers.read_spec(read_text(a.override_path) or "")
             if spec is not None and spec.kind == "commands":
                 runs = "\n\n".join(c.strip() for c in spec.commands if c.strip()) or runs
-        c.append(line(_("Runs"), runs, mono=True))
+        c.append(vbox(2, label(_("Runs"), ("small", "dim")), long_text(runs or _("None"))))
         if a.customised:
             c.append(label(_("Customised: launchers use your copy of this entry. Restore original, below, puts "
                              "the version its package installed back."), ("small", "dim"), wrap=True, chars=50))

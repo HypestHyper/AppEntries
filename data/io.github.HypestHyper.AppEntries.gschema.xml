@@ -13,6 +13,7 @@
         <choice value="defaults"/>
         <choice value="settings"/>
         <choice value="updates"/>
+        <choice value="tools"/>
       </choices>
       <default>"all"</default>
       <summary>Which apps to list</summary>

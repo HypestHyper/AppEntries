@@ -22,3 +22,15 @@ def test_no_function_shadows_the_translation_function():
                     bad.append(f"{path.relative_to(PKG.parent)}:{fn.lineno}")
                     break
     assert bad == []
+
+
+def test_every_rail_place_is_allowed_by_the_settings_schema():
+    """GSettings quietly refuses a value its schema doesn't list, so a rail
+    place missing there does nothing when clicked."""
+    import re
+    schema = next((PKG.parent / "data").glob("*.gschema.xml")).read_text()
+    allowed = set(re.findall(r'<choice value="([^"]+)"/>',
+                             schema.split('<key name="filter"', 1)[1].split("</key>", 1)[0]))
+    src = (PKG / "ui" / "app.py").read_text()
+    rail = re.findall(r'^\s+\("(\w+)", _\("', src.split("RAIL = [", 1)[1].split("PAGES", 1)[0], flags=re.MULTILINE)
+    assert rail and set(rail) <= allowed, set(rail) - allowed

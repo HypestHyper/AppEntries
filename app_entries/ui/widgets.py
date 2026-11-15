@@ -333,6 +333,31 @@ def scroll_passes_through(widget):
     widget.add_controller(ctrl)
 
 
+def long_text(text, max_lines=10, mono=True):
+    """Text shown whole up to `max_lines` lines (wrapped, selectable, no
+    tooltip), with a button to show the rest when it's longer."""
+    lines = text.splitlines() or [""]
+    short = "\n".join(lines[:max_lines])
+    v = label(short, ("mono",) if mono else ("body",), wrap=True)
+    v.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+    v.set_selectable(True)
+    if len(lines) <= max_lines:
+        return v
+    more = Gtk.Button(halign=Gtk.Align.START)
+    more.add_css_class("text")
+    more.add_css_class("small")
+    shown = {"all": False}
+
+    def toggle(*_a):
+        shown["all"] = not shown["all"]
+        v.set_label(text if shown["all"] else short)
+        more.set_label(_("Show less") if shown["all"] else
+                       _("Show all {n} lines").format(n=len(lines)))
+    more.set_label(_("Show all {n} lines").format(n=len(lines)))
+    more.connect("clicked", toggle)
+    return vbox(4, v, more)
+
+
 def card(inner=False):
     b = vbox(12)
     b.add_css_class("card-inner" if inner else "card")

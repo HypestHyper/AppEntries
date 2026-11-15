@@ -80,7 +80,8 @@ class AutostartPage(Gtk.ScrolledWindow):
         name = label(it.name, ("body", "app-name"), ellipsize=True)
         cmd = label(it.exec, ("small", "faint", "mono"), ellipsize=True)
         cmd.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
-        cmd.set_tooltip_text(it.exec + "\n" + it.path)
+        first = it.exec.splitlines()[0] if it.exec else ""
+        cmd.set_tooltip_text((first[:200] + ("…" if len(first) > 200 or "\n" in it.exec else "")) + "\n" + it.path)
         lines = vbox(2, name)
         if it.comment:
             lines.append(label(it.comment, ("small", "dim"), ellipsize=True))
