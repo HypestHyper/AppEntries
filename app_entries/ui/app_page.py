@@ -552,6 +552,9 @@ class AppPage(Gtk.Box):
                 if now is not None and now.id == a.id:
                     right = hbox(6, icon("check", ("accent",)),
                                  label(_("Opens with {app}").format(app=a.name), ("small", "dim")))
+                    if t.implicit:
+                        right.set_tooltip_text(_("You haven't chosen an app for it, so your desktop picks {app}. "
+                                                 "Make default keeps it that way.").format(app=a.name))
                 else:
                     right = hbox(8)
                     if now is not None:

@@ -139,7 +139,7 @@ class DefaultsPage(Gtk.ScrolledWindow):
         current = by_id.get(s.app_id)
         picked_by_desktop = current is None and not s.mixed and bool(types)
         if picked_by_desktop:
-            current = self._desktop_pick(types[0].mime, by_id)
+            current = by_id.get(types[0].app_id) if types[0].implicit else None
         if not cands:
             picker = label(_("No installed app opens these"), ("small", "dim"))
         else:
@@ -177,17 +177,6 @@ class DefaultsPage(Gtk.ScrolledWindow):
             c.append(inner)
         return c
 
-    @staticmethod
-    def _desktop_pick(mime, by_id):
-        """With no default set for a type in any mimeapps.list, your desktop
-        still opens it with something, usually the first installed app that
-        says it can. That app, if it's one of the listed ones."""
-        try:
-            info = Gio.AppInfo.get_default_for_type(mime, False)
-        except GLib.Error:
-            info = None
-        return by_id.get(info.get_id()) if info is not None and info.get_id() else None
-
     def _toggle_types(self, key):
         self._open ^= {key}
         self._signature = None
@@ -210,11 +199,9 @@ class DefaultsPage(Gtk.ScrolledWindow):
         cands = defaults.type_candidates(t.mime, apps)
         current = by_id.get(t.app_id)
         tip = _("Choose the app for this type")
-        if current is None:
-            current = self._desktop_pick(t.mime, by_id)
-            if current is not None:
-                tip = _("You haven't chosen one, so your desktop picks {app}. Choose to change it.").format(
-                    app=current.name)
+        if current is not None and t.implicit:
+            tip = _("You haven't chosen one, so your desktop picks {app}. Choose to change it.").format(
+                app=current.name)
         if cands:
             picker = self._pick_button(cands, current, False, lambda a, m=t.mime: self._set_types([m], a),
                                        tip, small=True)
@@ -247,7 +234,7 @@ class DefaultsPage(Gtk.ScrolledWindow):
                                ("small", "dim")))
             return c
         # Types with no default set open with your desktop's pick.
-        opens = {t.mime: by_id.get(t.app_id) or self._desktop_pick(t.mime, by_id) for t in types}
+        opens = {t.mime: by_id.get(t.app_id) for t in types}
         not_yet = [t.mime for t in types if opens[t.mime] is None or opens[t.mime].id != chosen.id]
         gap = Gtk.Box(hexpand=True)
         head.append(gap)

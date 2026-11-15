@@ -128,3 +128,16 @@ def test_extensions_come_from_the_mime_database(tmp_path):
     df._globs.clear()
     assert df.extensions("text/html", e) == [".html"]
     assert df.extensions("text/x-readme", e) == []
+
+
+def test_a_type_nobody_chose_shows_what_the_desktop_opens_it_with(xdg):
+    from app_entries import defaults as df
+    office = de.App(id="onlyoffice.desktop", name="ONLYOFFICE", mime_types=["application/msword", "text/plain"])
+    editor = de.App(id="editor.desktop", name="Editor", mime_types=["text/plain"])
+    apps = [office, editor]
+    pick = {"application/msword": "onlyoffice.desktop", "text/plain": "editor.desktop"}.get
+    t = df.type_state("application/msword", apps, xdg.env, pick=lambda m: pick(m, ""))
+    assert (t.app_id, t.implicit, t.chosen_by_you) == ("onlyoffice.desktop", True, False)
+    # A pick that isn't installed (or nothing at all) stays empty.
+    t = df.type_state("application/msword", apps, xdg.env, pick=lambda m: "gone.desktop")
+    assert (t.app_id, t.implicit) == ("", False)

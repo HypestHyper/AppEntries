@@ -164,14 +164,34 @@ class TypeState:
     app_id: str = ""              # what opens it now, "" if nothing is chosen
     chosen_by_you: bool = False   # set in your own mimeapps.list
     category: str = ""            # the Category key it's part of, if any
+    implicit: bool = False        # nobody chose it: your desktop's own pick, which double-click opens
 
 
-def type_state(mime: str, apps: list[de.App], env=None) -> TypeState:
+def desktop_pick(mime: str) -> str:
+    """With no default set in any mimeapps.list, the app your desktop opens
+    a type with anyway (usually the first installed app that says it can),
+    as GLib works it out. "" if none, or GLib isn't there."""
+    try:
+        from gi.repository import Gio
+        info = Gio.AppInfo.get_default_for_type(mime, False)
+    except Exception:  # noqa: BLE001 - no GLib, or no answer
+        return ""
+    return (info.get_id() or "") if info is not None else ""
+
+
+def type_state(mime: str, apps: list[de.App], env=None, pick=desktop_pick) -> TypeState:
+    """What opens a type now: the one chosen in a mimeapps.list, or else
+    your desktop's pick. The one place both the app page and Defaults ask."""
     installed = {a.id for a in apps}
     did, path = default_for(mime, installed, env)
     mine = path.startswith(config_home(env) + os.sep) if path else False
     cat = next((c.key for c in CATEGORIES if mime in c.mimes), "")
-    return TypeState(mime, did, mine, cat)
+    implicit = False
+    if not did:
+        picked = pick(mime) if pick else ""
+        if picked in installed:
+            did, implicit = picked, True
+    return TypeState(mime, did, mine, cat, implicit)
 
 
 def type_candidates(mime: str, apps: list[de.App]) -> list[de.App]:

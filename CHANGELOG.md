@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Default apps agree everywhere**: an app's page and the Defaults tab now ask the same question, so a file type nobody chose an app for shows the app your desktop opens it with (ONLYOFFICE for .doc, say) in both, instead of "Make default" on the app's page.
 - **Ctrl+Z** while typing in a field undoes the typing there, instead of the last change in History.
 - A new icon shows in the app list straight away, even when it replaces the old icon file under the same name.
 - Status chips sit in the title bar, beside History and Refresh, so an app's page starts level with the search box.
