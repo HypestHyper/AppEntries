@@ -51,10 +51,11 @@ def _tile(icon_name, px=48):
     return tile
 
 
-def _what_runs(in_terminal, password, steam=False, manager=""):
+def _what_runs(in_terminal, password, steam=False, manager="", opener="Steam"):
     """The note under the command."""
     if steam:
-        return _("Opens Steam, which asks you to confirm and removes the game itself.")
+        return _("Opens {launcher}, where you remove the game itself.").format(launcher=opener) \
+            if opener != "Steam" else _("Opens Steam, which asks you to confirm and removes the game itself.")
     if in_terminal and password:
         return (_("Opens your terminal running this, so you see everything it does. {tool} asks for your "
                   "password there; App Entries never sees it.").format(tool=manager or _("It")))
@@ -191,7 +192,7 @@ class _Base(Gtk.Window):
             elif term:
                 self._in_terminal(title, term, on_done)
             elif steam:
-                self._in_steam(steam, on_done)
+                self._in_steam(steam, on_done, getattr(self, "_opener", "Steam"))
             else:
                 on_done(True, "")
 
@@ -254,16 +255,19 @@ class _Base(Gtk.Window):
 
         self._timer = GLib.timeout_add(1500, poll)
 
-    def _in_steam(self, cmds, on_done):
+    def _in_steam(self, cmds, on_done, opener="Steam"):
         for argv in cmds:
             self._print("$ " + terminal.shown([argv]))
             try:
                 subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL, start_new_session=True)
             except OSError as e:
-                on_done(False, _("Steam couldn't be opened: {why}.").format(why=e.strerror or e))
+                on_done(False, _("{launcher} couldn't be opened: {why}.").format(launcher=opener,
+                                                                                   why=e.strerror or e))
                 return
-        set_text(self._wait_label, _("Confirm in Steam's window. This continues once Steam has removed it."))
+        set_text(self._wait_label, _("Confirm in Steam's window. This continues once Steam has removed it.")
+                 if opener == "Steam" else _("Uninstall it in {launcher}. This continues once the game's folder is "
+                                             "gone.").format(launcher=opener))
         self._wait_for_gone(on_done)
 
     def _check_gone(self):
@@ -501,7 +505,7 @@ class UninstallWindow(_Base):
         set_text(self._cmd_label, terminal.shown(cmds))
         if cmds:
             note = _what_runs(p.in_terminal, p.password, p.opens_steam,
-                              p.manager.label if p.manager else ("snap" if p.kind == "snap" else "Flatpak"))
+                              p.manager.label if p.manager else ("snap" if p.kind == "snap" else "Flatpak"), p.opener)
         else:
             note = _("App Entries removes these files itself.")
         again = p.reinstall(self.opts)
@@ -515,9 +519,11 @@ class UninstallWindow(_Base):
     def _start(self):
         p, opts = self.plan, list(self.opts)
         self._busy = True
+        self._opener = p.opener
         cmds = p.commands(opts)
         how = (_("Uninstall it in your terminal") if p.in_terminal else
-               _("Open Steam to uninstall it") if p.opens_steam else _("Uninstall {name}").format(name=p.app.name))
+               _("Open {launcher} to uninstall it").format(launcher=p.opener) if p.opens_steam
+               else _("Uninstall {name}").format(name=p.app.name))
         steps = ([how] if cmds else []) + [_("Remove its menu entries and App Entries' files for it"),
                                            _("Record it in History")]
         self._progress_page(self._header(_("Uninstalling…"), p.kind_label), steps)

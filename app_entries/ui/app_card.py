@@ -139,6 +139,11 @@ UNINSTALL_HINTS = {
     "distrobox": N_("Removes what distrobox-export added to your menus. Shows the full list first."),
     "package": N_("Removes its package with your package manager, in your terminal. Shows what else goes, and "
                   "which apps need it, first."),
+    "python": N_("Moves its Python environment and the commands it added to the Trash, and removes its menu "
+                 "entry. Shows the full list first."),
+    "folder": N_("Moves its folder to the Trash and removes its menu entry. Shows the full list first."),
+    "game": N_("Opens the launcher that installed it to remove the game, then removes its menu entry. Shows the "
+               "full list first."),
 }
 
 

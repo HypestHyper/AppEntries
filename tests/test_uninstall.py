@@ -448,3 +448,70 @@ def test_apk_tools_3_output():
     assert a.owner("/usr/share/applications/gimp.desktop") == "gimp"
     p = a.preview(["gimp"], [])
     assert p.exact and p.removed == ["gimp", "gimp-lang", "babl"] and p.dependents == [] and not p.stops
+
+
+def _put(path, text):
+    import pathlib
+    pathlib.Path(path).write_text(text)
+
+
+def _home_app(xdg, name, exec_line):
+    xdg.write(xdg.user, name + ".desktop", f"[Desktop Entry]\nType=Application\nName={name}\nExec={exec_line}\n")
+    return next(a for a in de.scan(xdg.env) if a.id == name + ".desktop")
+
+
+def test_a_pipx_app_goes_to_the_trash_with_its_commands(xdg, monkeypatch):
+    import os
+    home = xdg.env["HOME"]
+    monkeypatch.setenv("HOME", home)
+    venv = os.path.join(home, ".local/share/pipx/venvs/iridia")
+    os.makedirs(venv + "/bin")
+    _put(venv + "/pyvenv.cfg", "home = /usr/bin\n")
+    prog = venv + "/bin/iridia-gui"
+    _put(prog, f"#!{venv}/bin/python\nimport iridia\n")
+    os.chmod(prog, 0o755)
+    os.makedirs(home + "/.local/bin")
+    os.symlink(prog, home + "/.local/bin/iridia-gui")
+    os.symlink("/usr/bin/true", home + "/.local/bin/other")
+    app = _home_app(xdg, "Iridia", home + "/.local/bin/iridia-gui")
+    assert uninstall.kind_of(app) == "python"
+    p = uninstall.plan(app, de.scan(xdg.env), xdg.env)
+    assert p.kind_label == "Python app · installed with pipx" and not p.blocked
+    assert p.trash_paths == [venv, home + "/.local/bin/iridia-gui"]       # not the other command
+    assert app.source_path in p.entry_files and p.commands([]) == []
+
+
+def test_only_a_folder_named_like_the_app_is_offered(xdg, monkeypatch):
+    import os
+    home = xdg.env["HOME"]
+    monkeypatch.setenv("HOME", home)
+    os.makedirs(home + "/Apps/Zed-0.160/bin")
+    _put(home + "/Apps/Zed-0.160/bin/zed", "x")
+    os.chmod(home + "/Apps/Zed-0.160/bin/zed", 0o755)
+    zed = _home_app(xdg, "Zed", home + "/Apps/Zed-0.160/bin/zed")
+    assert uninstall.kind_of(zed) == "folder"
+    assert uninstall.plan(zed, de.scan(xdg.env), xdg.env).trash_paths == [home + "/Apps/Zed-0.160"]
+    # A script in a folder of many scripts, or in a dotfiles copy: never the whole folder.
+    os.makedirs(home + "/scripts/.git")
+    _put(home + "/scripts/.git/config", '[remote "origin"]\n\turl = https://github.com/me/dots\n')
+    _put(home + "/scripts/backup.sh", "#!/bin/sh\n")
+    os.chmod(home + "/scripts/backup.sh", 0o755)
+    assert uninstall.kind_of(_home_app(xdg, "Backup", home + "/scripts/backup.sh")) == ""
+
+
+def test_a_heroic_game_hands_over_to_heroic(xdg, monkeypatch):
+    import os
+    home = xdg.env["HOME"]
+    monkeypatch.setenv("HOME", home)
+    game = home + "/Games/Heroic/APICO"
+    os.makedirs(game)
+    os.makedirs(home + "/.config/heroic/nile_config/nile")
+    _put(home + "/.config/heroic/nile_config/nile/installed.json", f'[{{"id": "g1", "path": "{game}"}}]')
+    app = _home_app(xdg, "APICO", "xdg-open heroic://launch?appName=g1&runner=nile")
+    assert uninstall.kind_of(app) == "game"
+    p = uninstall.plan(app, de.scan(xdg.env), xdg.env, which=lambda t: "/usr/bin/heroic" if t == "heroic" else None)
+    assert (p.kind_label, p.opener, p.opens_steam) == ("Heroic Games Launcher game · Amazon Games",
+                                                        "Heroic Games Launcher", True)
+    assert p.commands([]) == [["heroic"]] and not p.gone()
+    os.rmdir(game)
+    assert p.gone()

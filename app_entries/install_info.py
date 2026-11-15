@@ -1172,3 +1172,67 @@ def flatpak_permissions(fid: str, sysm: Optional[System] = None) -> list[Permiss
         out.append(Permission("other", "Talks to: " + ", ".join(sorted(talk)[:6]) +
                               (f" and {len(talk) - 6} more" if len(talk) > 6 else ""), False))
     return out
+
+
+def home_install(app, home: str = "") -> Optional[tuple[str, str, str]]:
+    """For an app that lives in your home folder outside any package:
+    ("python", its folder, its Python environment) or ("folder", its folder,
+    ""), or None. Only looks at files; quick enough for menus."""
+    home = home or os.path.expanduser("~")
+    prog = _program(app)
+    if not prog:
+        return None
+    real = real_program(prog)
+    if not real.startswith(home + os.sep):
+        return None
+    names = [app.name, os.path.basename(prog), os.path.basename(real), app.id.removesuffix(".desktop")]
+
+    def its_own(folder):
+        # Named like the app, so it's the app's folder and not, say, ~/scripts or a dotfiles copy.
+        return bool(folder) and not _shared(folder, home) and _named_like(os.path.basename(folder), names)
+    venv = _venv_of(real)
+    if venv:
+        tool_dir = os.path.relpath(venv, home).startswith((".local/share/pipx/venvs/", ".local/share/uv/tools/"))
+        folder = _own_folder(real, home)
+        if its_own(folder):
+            return "python", folder, venv
+        if tool_dir or its_own(venv):
+            return "python", venv, venv
+        return None      # a Python environment shared by several tools
+    checkout, _remote = git_remote(real, home)
+    if its_own(checkout):
+        return "folder", checkout, ""
+    folder = _own_folder(real, home)
+    return ("folder", folder, "") if its_own(folder) else None
+
+
+def _norm(text: str) -> str:
+    """Lower case letters only, versions and separators gone: "Zed-0.160.4" -> "zed"."""
+    return re.sub(r"[^a-z]", "", re.sub(r"\d+(\.\d+)*", "", text.lower()))
+
+
+def _named_like(folder_name: str, names) -> bool:
+    f = _norm(folder_name)
+    if len(f) < 3:
+        return False
+    for n in names:
+        n = _norm(n)
+        if len(n) >= 3 and (n in f or f in n):
+            return True
+    return False
+
+
+def open_launcher(key: str, which=None, home: str = "") -> list[str]:
+    """The command that opens a game launcher (Heroic, Lutris…)."""
+    import shutil
+    which = which or shutil.which
+    home = home or os.path.expanduser("~")
+    _name, schemes, programs, flatpaks = GAME_LAUNCHERS[key]
+    for prog in programs:
+        if which(prog):
+            return [prog]
+    for fid in flatpaks:
+        if any(os.path.isdir(os.path.join(base, fid)) for base in
+               ("/var/lib/flatpak/app", os.path.join(home, ".local/share/flatpak/app"))):
+            return ["flatpak", "run", fid]
+    return ["xdg-open", schemes[0] + "://"]

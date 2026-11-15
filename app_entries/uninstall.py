@@ -56,7 +56,8 @@ class Plan:
     goes_too: list[str] = field(default_factory=list)       # other apps in your menus removed with it
     stop_working: list[str] = field(default_factory=list)   # apps in your menus that use it
     in_terminal: bool = False
-    opens_steam: bool = False
+    opens_steam: bool = False       # opens a launcher (Steam, Heroic…), which removes it
+    opener: str = "Steam"           # that launcher's name
     password: bool = False
     manager: Optional[pkgmanagers.Manager] = None
     packages: list[str] = field(default_factory=list)
@@ -208,7 +209,14 @@ def kind_of(app: de.App) -> str:
         return "appimage"
     if src == "system" and app.base_path:
         return "package"
-    return ""
+    # Not from a package: games another launcher installed, and apps that
+    # live in a folder of your own (pip, pipx and uv apps, git copies, app folders).
+    from . import install_info
+    key, _arg = install_info._launcher_of(install_info._words(app.exec))
+    if key and key != "steam":
+        return "game"
+    found = install_info.home_install(app)
+    return found[0] if found else ""
 
 
 def _your_files(apps: Sequence[de.App], ids: Sequence[str], env) -> list[Change]:
@@ -552,6 +560,123 @@ def _plan_steam(app: de.App, apps, env, which) -> Plan:
 
 
 # ---------------------------------------------------------------------------
+# Apps in a folder of your own: pip, pipx and uv apps, git copies, app folders
+
+
+def _links_into(folder: str, env) -> list[str]:
+    """Links in ~/.local/bin and ~/bin that lead into the folder (pipx and uv
+    put the app's commands there)."""
+    home = _home(env)
+    out = []
+    for d in (os.path.join(home, ".local", "bin"), os.path.join(home, "bin")):
+        try:
+            names = os.listdir(d)
+        except OSError:
+            continue
+        for n in names:
+            p = os.path.join(d, n)
+            if os.path.islink(p) and (os.path.realpath(p) + os.sep).startswith(os.path.realpath(folder) + os.sep):
+                out.append(p)
+    return sorted(out)
+
+
+def _data_guesses(names, folder: str, env) -> list[str]:
+    home = _home(env)
+    out = []
+    for n in names:
+        if not n:
+            continue
+        for base in (".config", ".local/share", ".local/state", ".cache"):
+            p = os.path.join(home, base, n)
+            if os.path.isdir(p) and not (p + os.sep).startswith(folder + os.sep) and \
+                    not (folder + os.sep).startswith(p + os.sep) and p not in out:
+                out.append(p)
+    return out
+
+
+def _plan_home(app: de.App, apps, env) -> Plan:
+    from . import install_info
+    home = _home(env)
+    kind, folder, _venv = install_info.home_install(app, home) or ("folder", "", "")
+    d = install_info.Details(kind="file", path=install_info._program(app))
+    install_info._python_or_git(d, install_info.real_program(d.path), home)
+    if kind == "python":
+        how = {"pipx": "pipx", "uv": "uv"}.get(d.installer, "pip")
+        label = f"Python app · installed with {how}"
+    elif d.installer == "git":
+        label = "A git copy of " + (install_info.github_of(d.project).removeprefix("GitHub: ") or d.project)
+    else:
+        label = "App folder · " + _short(folder, env)
+    p = Plan(app, kind, label, folder, version=d.version, size=folder_size(folder))
+    if not folder or folder in (home, "/") or not os.path.isdir(folder):
+        p.blocked = "Couldn't tell which folder holds it."
+        return p
+    p.removes.append(Line("folder", f"{_short(folder, env)}, to the Trash", p.size))
+    links = _links_into(folder, env)
+    for link in links:
+        p.removes.append(Line("link", f"{_short(link, env)}, to the Trash"))
+    p.trash_paths = [folder] + links
+    mine = de.user_apps_dir(env) + os.sep
+    users = [a for a in apps if a.source_path.startswith(mine)
+             and (folder in a.exec or any(link in a.exec for link in links))]
+    if app not in users:
+        users.append(app)
+    p.app_ids = [a.id for a in users]
+    p.entry_files = [a.source_path for a in users if a.source_path.startswith(mine)]
+    for f in p.entry_files:
+        p.removes.append(Line("description", _short(f, env)))
+    p.notes.append("Everything in its folder goes to the Trash, including anything saved inside it. Undo puts it "
+                   "all back.")
+    _data_option(p, "data", "Folders that look like its settings",
+                 "Found by name, so only a guess: check the list. Moved to the Trash, so you can restore them.",
+                 _data_guesses({os.path.basename(folder), app.name.lower(), (d.package or "").lower()}, folder, env),
+                 env)
+    source = d.project or d.package
+
+    def reinstall(plan, opts):
+        if d.installer == "pipx" and source:
+            return [["pipx", "install", ("git+" + d.project) if d.project else d.package]]
+        if d.installer == "uv" and source:
+            return [["uv", "tool", "install", ("git+" + d.project) if d.project else d.package]]
+        if d.installer == "git" and d.project:
+            return [["git", "clone", d.project, folder]]
+        return []
+    p._reinstall = reinstall
+    return p
+
+
+# ---------------------------------------------------------------------------
+# Games another launcher installed (Heroic, Lutris, Bottles…)
+
+
+def _plan_game(app: de.App, apps, env, which) -> Plan:
+    from . import install_info
+    key, _arg = install_info._launcher_of(install_info._words(app.exec))
+    d = install_info._game_launcher(app, install_info.System(home=_home(env)))
+    name = install_info.GAME_LAUNCHERS[key][0]
+    p = Plan(app, "game", f"{name} game" + (f" · {d.store}" if d and d.store else ""), d.package if d else "",
+             size=d.size if d else 0)
+    p.opener = name
+    mine = de.user_apps_dir(env) + os.sep
+    p.app_ids = [app.id]
+    p.entry_files = [app.source_path] if app.source_path.startswith(mine) else []
+    opener = install_info.open_launcher(key, which, _home(env))
+    if d is not None and d.folder:
+        folder = d.folder
+        p.removes.append(Line("sports_esports", f"The game, removed in {name}", p.size))
+        p.opens_steam = True
+        p._commands = lambda plan, opts: [opener]
+        p._gone = lambda plan: not os.path.isdir(folder)
+    else:
+        p.notes.append(f"{name} doesn't say where the game is, so only its menu entry is removed here. Uninstall "
+                       f"the game itself in {name}.")
+    for f in p.entry_files:
+        p.removes.append(Line("description", _short(f, env)))
+    p._reinstall = lambda plan, opts: [opener]
+    return p
+
+
+# ---------------------------------------------------------------------------
 # Distrobox
 
 
@@ -732,6 +857,10 @@ def plan(app: de.App, apps: Sequence[de.App], env=None, run: Run = pkgmanagers.r
         p = _plan_distrobox(app, apps, env, run)
     elif kind == "package":
         p = _plan_package(app, apps, env, run, which, managers)
+    elif kind in ("python", "folder"):
+        p = _plan_home(app, apps, env)
+    elif kind == "game":
+        p = _plan_game(app, apps, env, which)
     else:
         raise ValueError(f"{app.name} can't be uninstalled from here.")
     if not p.app_ids:
@@ -839,8 +968,8 @@ def plan_batch(apps_chosen: Sequence[de.App], apps: Sequence[de.App], env=None, 
         if not kind:
             b.skipped.append((a.name, "it isn't something App Entries can uninstall"))
             continue
-        if kind == "steam":
-            b.skipped.append((a.name, "Steam games are uninstalled one at a time, in Steam's own window"))
+        if kind in ("steam", "game"):
+            b.skipped.append((a.name, "games are uninstalled one at a time, in their launcher's own window"))
             continue
         try:
             p = plan(a, apps, env, run, which, managers)

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Uninstall** works for more kinds of app, each shown in full first and undone with Undo:
+  - **Python apps** installed with pip, pipx or uv: their environment and the commands they added to ~/.local/bin go to the Trash, with their menu entry.
+  - **Git copies and app folders** in your home folder: the folder goes to the Trash. Only a folder named like the app is offered, so a script in ~/scripts or a dotfiles copy never takes its whole folder with it.
+  - **Games from Heroic, Lutris, Bottles, itch and Minigalaxy**: the launcher opens so you remove the game there, and its menu entry goes once the game's folder is gone, as with Steam.
 - **What a Flatpak can reach**, on its page under Installation: files and folders, network, display (X11 or Wayland), sound, devices and the services it talks to, in plain words, with your Flatseal changes applied. The ones that reach a lot are marked, and Flatseal is a click away.
 - **New** lasts until you open the app or App Entries starts again, as intended. The Filter menu's Mark as seen button is gone.
 - **Games from Heroic, Lutris, Bottles, itch and Minigalaxy** are recognised in Installation, instead of showing the package of the helper their launcher calls (like xdg-utils for `xdg-open heroic://…`). The page says which launcher installed and starts the game and, for Heroic, which store it's from (Epic, GOG or Amazon). Where Heroic or Lutris keep a record, it shows the game's folder and real size, its version and (Lutris) when it was installed.
