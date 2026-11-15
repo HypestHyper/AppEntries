@@ -16,6 +16,7 @@ from .widgets import Group, Toggle, button, card, hbox, label, vbox
 KINDS = [
     ("launcher", _("Launcher"), "rocket_launch", _("A program, a script or commands")),
     ("webapp", _("Web app"), "language", _("A site in its own window")),
+    ("github", _("From GitHub…"), "cloud_download", _("Paste a project's link; installs its latest release")),
     ("appimage", _("AppImage…"), "deployed_code", _("Reads its name, icon and file types")),
     ("folder", _("App folder…"), "folder_open", _("An app you unpacked from a tar.gz or zip")),
     ("exe", _("Windows program…"), "computer", _("An .exe, run with Wine or Proton")),
@@ -61,6 +62,10 @@ def start(win, key, path=None):
         return
     if key == "distrobox":
         DistroboxPicker(win).present()
+        return
+    if key == "github":
+        from .github_installer import GitHubInstaller
+        GitHubInstaller(win).present()
         return
     if path:
         _read(win, key, path)

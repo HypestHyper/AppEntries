@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Install from GitHub** (New ▾ → From GitHub…, and Tools → Add from GitHub…): paste a project's link and App Entries reads its releases, lets you pick the version (test versions if you want them) and suggests the file that fits this computer, saying why:
+  - an **AppImage** goes to ~/Applications and the usual AppImage form opens, filled in from the app itself;
+  - an **app archive** is unpacked into its own folder in ~/Applications (refusing any file that would land outside it) and the app folder form opens;
+  - a **.deb, .rpm or pacman package** for your system, or a **Flatpak bundle**, installs in your terminal;
+  - a project with only source code gets the usual command for its language (pipx, uv, cargo, go install, npm) or a git copy, run in your terminal.
+  Downloads are checked against the release's checksum file when it has one, and everything is read from github.com's pages, so it doesn't use up GitHub's API limit. Installed apps are linked to their project, so App updates covers them.
 - **Checking for app updates no longer runs into GitHub's limit** of 60 questions an hour: App Entries reads each project's release pages on github.com (where its latest version leads, and its list of files) instead of GitHub's API, remembers answers for an hour, and only asks the API if the pages don't answer.
 - **Default apps agree everywhere**: an app's page and the Defaults tab now ask the same question, so a file type nobody chose an app for shows the app your desktop opens it with (ONLYOFFICE for .doc, say) in both, instead of "Make default" on the app's page.
 - **Ctrl+Z** while typing in a field undoes the typing there, instead of the last change in History.

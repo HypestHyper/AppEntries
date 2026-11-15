@@ -481,7 +481,10 @@ def check_version(src: Source, installed: str, kind: str = "", get: Callable = _
 
 
 MAGIC = {".appimage": (b"\x7fELF", "an AppImage"), ".deb": (b"!<arch>", "a .deb package"),
-         ".rpm": (b"\xed\xab\xee\xdb", "an .rpm package")}
+         ".rpm": (b"\xed\xab\xee\xdb", "an .rpm package"), ".zip": (b"PK\x03\x04", "a zip archive"),
+         ".tar.gz": (b"\x1f\x8b", "a .tar.gz archive"), ".tgz": (b"\x1f\x8b", "a .tgz archive"),
+         ".tar.xz": (b"\xfd7zXZ", "a .tar.xz archive"), ".txz": (b"\xfd7zXZ", "a .txz archive"),
+         ".tar.bz2": (b"BZh", "a .tar.bz2 archive"), ".tar.zst": (b"\x28\xb5\x2f\xfd", "a .tar.zst archive")}
 
 
 def download(asset: Asset, folder: str, progress: Callable[[int, int], None] = lambda done, total: None,
@@ -525,11 +528,12 @@ def download(asset: Asset, folder: str, progress: Callable[[int, int], None] = l
         expected = asset.size if asset.size and not asset.approx else sent
         if expected and done != expected:
             raise GitHubError("The download was cut short. Nothing was changed.")
-        ext = next((e for e in MAGIC if name.lower().endswith(e)), ".appimage")
-        magic, what = MAGIC[ext]
-        with open(part, "rb") as f:
-            if f.read(len(magic)) != magic:
-                raise GitHubError(f"The downloaded file isn't {what}. Nothing was changed.")
+        ext = next((e for e in MAGIC if name.lower().endswith(e)), "")
+        if ext:
+            magic, what = MAGIC[ext]
+            with open(part, "rb") as f:
+                if f.read(len(magic)) != magic:
+                    raise GitHubError(f"The downloaded file isn't {what}. Nothing was changed.")
         os.chmod(part, 0o755 if ext == ".appimage" else 0o644)
         try:
             # As browsers do, so it's still known where it came from.

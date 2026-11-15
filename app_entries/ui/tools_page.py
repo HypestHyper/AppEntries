@@ -36,6 +36,12 @@ class ToolsPage(Gtk.ScrolledWindow):
                          cb=lambda *_a: self.reload())
         refresh.set_valign(Gtk.Align.END)
         refresh.set_margin_bottom(6)
+        add = button(_("Add from GitHub…"), "cloud_download", "tonal", small=True,
+                     tooltip=_("Paste a project's link: installs a tool with the command its code uses"),
+                     cb=lambda *_a: self._add_from_github())
+        add.set_valign(Gtk.Align.END)
+        add.set_margin_bottom(6)
+        head.append(add)
         head.append(refresh)
         page.append(head)
         self.list = vbox(10)
@@ -99,6 +105,13 @@ class ToolsPage(Gtk.ScrolledWindow):
         row.append(acts)
         row.add_css_class("tool-row")
         return row
+
+    def _add_from_github(self):
+        from .github_installer import GitHubInstaller
+        dlg = GitHubInstaller(self.win)
+        dlg.connect("close-request", lambda *_a: (GLib.timeout_add_seconds(2, lambda: (self.reload(), False)[1]),
+                                                  False)[1])
+        dlg.present()
 
     def _terminal(self, commands):
         try:
