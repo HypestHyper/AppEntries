@@ -61,6 +61,18 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.2.8" date="2026-11-15">
+      <description>
+        <ul>
+          <li>App updates: every app and tool from GitHub in one list, with an optional daily check</li>
+          <li>Waiting system, Flatpak and Snap updates, installed in your terminal</li>
+          <li>A Tools tab for command-line tools from cargo, go, pipx, uv and npm</li>
+          <li>Uninstall for pip, pipx and uv apps, app folders and launcher games</li>
+          <li>Games from Heroic and Lutris, Waydroid, JetBrains Toolbox, Wine and Bottles apps recognised</li>
+          <li>What a Flatpak can reach, in plain words</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.7" date="2026-11-15">
       <description>
         <ul>

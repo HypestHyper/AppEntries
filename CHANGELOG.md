@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.8 — 2026-11-15
 
 - **App updates**, on the Updates page: every app and tool from a GitHub project in one list (AppImages, apps installed with pip, pipx or uv, git copies, AUR packages, package files from GitHub, and tools in Tools). **Check all** asks GitHub for each one's latest release; AppImages update right there (with Undo), and the rest run their own update command in your terminal. Turn on **Check once a day** and a status chip says when something is newer; nothing is downloaded or changed until you press Update.
 - **System, Flatpak and Snap**: how many updates are waiting (pacman with checkupdates, apt, dnf, zypper, Flatpak, Snap), with the command that installs them run in your terminal, one by one or all together. With paru or yay, AUR packages are included.
