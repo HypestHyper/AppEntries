@@ -374,3 +374,46 @@ def describe_file(path: str) -> tuple[str, str, list[str]]:
         else:
             break
     return what, comment, lines[:40]
+
+
+NEEDS_ROOT = (r"must be (run as )?root|as root|superuser|permission denied|operation not permitted|"
+              r"requires root|need(s)? to be root|run with sudo")
+
+
+def has_manual(cmd: str, run=None) -> bool:
+    """Whether `man` has a page for it (finding it runs nothing of the command's)."""
+    import shutil
+    import subprocess
+    if not shutil.which("man"):
+        return False
+    try:
+        r = (run or subprocess.run)(["man", "-w", cmd], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    # It names the page's file. (Minimised systems' stand-in man says yes to everything.)
+    first = (r.stdout or "").strip().splitlines()[0] if r.returncode == 0 and (r.stdout or "").strip() else ""
+    return bool(first) and os.path.isfile(first)
+
+
+def help_script(cmd: str) -> str:
+    """A shell script that shows a command's manual, or, if it has none,
+    offers to run its --help, and only once you press Enter: a program that
+    doesn't understand --help (a script of your own, say) would simply run.
+    If it then says it needs administrator rights, that's explained, and
+    the sudo command shown for you to run yourself; nothing runs as root."""
+    import shlex
+    c = shlex.quote(cmd)
+    return (
+        f'page=$(man -w {c} 2>/dev/null | head -n 1); if [ -n "$page" ] && [ -f "$page" ]; then exec man {c}; fi\n'
+        f'printf "%s has no manual page.\\n\\nMost programs answer \\"%s --help\\" with a short summary, but a few '
+        f'(scripts of your own, say) don\'t understand it and just run.\\n\\nPress Enter to run %s --help, or close '
+        f'this window. " {c} {c} {c}\n'
+        'read -r _ || exit 0\n'
+        f'out=$({c} --help 2>&1 </dev/null)\n'
+        f'if printf "%s" "$out" | grep -qiE {shlex.quote(NEEDS_ROOT)}; then\n'
+        f'  printf "\\n%s\\n\\n%s needs administrator rights even to show its help. If you trust it, run:\\n'
+        f'  sudo %s --help\\n" "$out" {c} {c}\n'
+        'else\n'
+        '  printf "%s\\n" "$out" | ${PAGER:-less}\n'
+        'fi\n'
+    )

@@ -158,3 +158,26 @@ def test_what_a_file_in_local_bin_is(tmp_path):
     elf = tmp_path / "bin"
     elf.write_bytes(b"\x7fELF" + b"\0" * 20)
     assert cli_tools.describe_file(str(elf)) == ("A program (compiled, not a script)", "", [])
+
+
+def test_help_never_runs_a_command_until_you_say_so(tmp_path):
+    import subprocess
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    marker = tmp_path / "ran"
+    (bin_dir / "mybackup").write_text(f"#!/bin/sh\ntouch {marker}\n")         # doesn't know --help: just runs
+    (bin_dir / "admintool").write_text("#!/bin/sh\necho 'admintool: must be run as root' >&2\nexit 1\n")
+    (bin_dir / "nice-tool").write_text("#!/bin/sh\necho 'usage: nice-tool [options]'\n")
+    for f in bin_dir.iterdir():
+        f.chmod(0o755)
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "PAGER": "cat", "MANPATH": str(tmp_path)}
+
+    def run(cmd, keys):
+        return subprocess.run(["sh", "-c", cli_tools.help_script(cmd)], input=keys, capture_output=True, text=True,
+                              env=env, timeout=10).stdout
+    out = run("mybackup", "")                       # the window closed without pressing Enter
+    assert "has no manual page" in out and not marker.exists()
+    out = run("admintool", "\n")
+    assert "needs administrator rights" in out and "sudo admintool --help" in out
+    out = run("nice-tool", "\n")
+    assert "usage: nice-tool [options]" in out and "administrator" not in out

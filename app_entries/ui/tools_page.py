@@ -266,8 +266,10 @@ class ToolsPage(Gtk.Box):
 
     def _commands(self, t):
         box = vbox(0, section(ngettext("Its command", "Its commands", len(t.commands)),
-                              _("Type these in a terminal to use it. Help opens its manual, or its own --help.")))
+                              _("Type these in a terminal to use it. Manual opens its manual page in your "
+                                "terminal; where there's none, Help… offers to run its own --help.")))
         c = card()
+        helps = []
         paths = t.paths if len(t.paths) == len(t.commands) else [""] * len(t.commands)
         for name, path in list(zip(t.commands, paths))[:40]:
             text = vbox(0, label(name, ("mono", "body")))
@@ -276,20 +278,30 @@ class ToolsPage(Gtk.Box):
                 p.set_selectable(True)
                 text.append(p)
             text.set_hexpand(True)
-            c.append(hbox(12, text, button(_("Help"), "help", "text", small=True,
-                                           tooltip=_("Opens its manual in your terminal, or its --help if it has no "
-                                                     "manual"), cb=lambda *_a, n=name: self._help(n))))
+            b = button(_("Help…"), "help", "text", small=True, cb=lambda *_a, n=name: self._help(n),
+                       tooltip=_("Opens a terminal that offers to run {cmd} --help. Nothing runs until you press "
+                                 "Enter there.").format(cmd=name))
+            c.append(hbox(12, text, b))
+            helps.append((name, b))
         if len(t.commands) > 40:
             c.append(label(_("And {n} more.").format(n=len(t.commands) - 40), ("small", "dim")))
         box.append(c)
+
+        def manuals(found):
+            if isinstance(found, Exception):
+                return
+            for (name, b), yes in zip(helps, found):
+                if yes:
+                    b.set_label(_("Manual"))
+                    b.set_tooltip_text(_("Opens the manual page for {cmd} in your terminal").format(cmd=name))
+        # Which have a manual page: asked off the main thread, the buttons say so when it's known.
+        run_bg(lambda: [cli_tools.has_manual(n) for n, _b in helps], manuals)
         return box
 
     # -- actions --------------------------------------------------------------------------
 
     def _help(self, cmd):
-        q = shlex.quote(cmd)
-        script = f"man {q} 2>/dev/null || {{ {q} --help 2>&1 || {q} -h 2>&1; }} | ${{PAGER:-less}}"
-        self._terminal([["sh", "-c", script]])
+        self._terminal([["sh", "-c", cli_tools.help_script(cmd)]])
 
     def _add_from_github(self):
         from .github_installer import GitHubInstaller

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Help in Tools is safe**: a command with a manual page shows **Manual** and opens it. One without shows **Help…**, which opens a terminal explaining it can run the command's --help and waits for you to press Enter, because a program that doesn't understand --help (a script of your own, say) would just run. If it then says it needs administrator rights, the terminal explains that and shows the sudo command for you to run yourself; nothing runs as root.
 - A tool in Tools opens with a click anywhere on its row, not just its name or arrow.
 
 ## 1.2.10 — 2026-11-15
