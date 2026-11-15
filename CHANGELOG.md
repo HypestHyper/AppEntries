@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Games from Heroic, Lutris, Bottles, itch and Minigalaxy** are recognised in Installation, instead of showing the package of the helper their launcher calls (like xdg-utils for `xdg-open heroic://…`). The page says which launcher installed and starts the game and, for Heroic, which store it's from (Epic, GOG or Amazon). Where Heroic or Lutris keep a record, it shows the game's folder and real size, its version and (Lutris) when it was installed.
+- Commands that only adjust how an app runs (`env`, `gamemoderun`, `prime-run`, `mangohud` and the like) are looked through to the app itself, and openers (`xdg-open`, `gio open`, `gtk-launch`…) are never taken for the app.
+
 ## 1.2.7 — 2026-11-15
 
 - **Launchers made with App Entries** say so in Installation, instead of showing the program they run: a web app shows its site, its browser and how much its own sign-ins take; a commands launcher, the shell that runs your commands; a launcher for a program, the program's own details below.

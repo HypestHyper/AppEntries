@@ -53,6 +53,7 @@ class Details:
     depends: list[Dep] = field(default_factory=list)
     required_by: list[str] = field(default_factory=list)
     optional: list[Dep] = field(default_factory=list)
+    store: str = ""               # for a game: the store it came from (Epic, GOG, Amazon…)
     shared_with: int = 0          # other apps using the same Flatpak runtime
     runtime_size: int = 0
     # Launchers made with App Entries: webapp, commands, program or appimage.
@@ -94,6 +95,15 @@ class System:
         r = self.run(argv)
         return r[1] if r is not None and r[0] == 0 else ""
 
+
+# Commands that run the next word with something changed (environment,
+# graphics card, priority): the app is what they run.
+WRAPPERS = {"env", "sh", "bash", "dash", "zsh", "flatpak", "snap", "nohup", "setsid", "nice", "ionice", "taskset",
+            "gamemoderun", "prime-run", "mangohud", "optirun", "primusrun", "pvkrun", "switcherooctl", "firejail",
+            "systemd-run", "dbus-run-session", "run", "--"}
+# Commands that open an address, so another app does the work.
+OPENERS = {"xdg-open", "gio", "gtk-launch", "gtk4-launch", "kde-open", "kde-open5", "kioclient", "kioclient5",
+           "exo-open", "gvfs-open", "mimeopen", "handlr", "dex"}
 
 # ---------------------------------------------------------------------------
 # remembering answers
@@ -162,8 +172,10 @@ def _program(app) -> str:
     for w in words:
         if "=" in w and not w.startswith("/"):
             continue        # env VAR=value
-        if os.path.basename(w) in ("env", "sh", "bash", "flatpak", "snap"):
-            continue
+        if os.path.basename(w) in WRAPPERS:
+            continue        # runs the next word: that's the app
+        if os.path.basename(w) in OPENERS:
+            return ""       # opens an address: some other app does the work
         p = w if os.path.isabs(w) else (shutil.which(w) or "")
         if p and os.path.isfile(p):
             return p
@@ -218,6 +230,9 @@ def _summary(app, sysm: System) -> Details:
 
 
 def _installed(app, sysm: System) -> Details:
+    game = _game_launcher(app, sysm)
+    if game is not None:
+        return game
     kind = uninstall.kind_of(app)
     if kind == "flatpak":
         return _flatpak(uninstall._flatpak_id(app), sysm)
@@ -921,3 +936,132 @@ def _python_or_git(d: Details, real: str, home: str) -> None:
                 d.update_cmd = [["git", "-C", checkout, "pull"]]
     if d.project and not d.updates_from:
         d.updates_from = github_of(d.project) or d.project
+
+
+# ---------------------------------------------------------------------------
+# games and apps another launcher installed and starts
+
+
+GAME_LAUNCHERS = {
+    # name: (how it's called, address schemes, programs, Flatpak IDs)
+    "heroic": ("Heroic Games Launcher", ("heroic",), ("heroic", "heroic-games-launcher"),
+               ("com.heroicgameslauncher.hgl",)),
+    "lutris": ("Lutris", ("lutris",), ("lutris",), ("net.lutris.Lutris",)),
+    "bottles": ("Bottles", ("bottles",), ("bottles-cli", "bottles"), ("com.usebottles.bottles",)),
+    "itch": ("itch", ("itch",), ("itch", "kitch"), ("io.itch.itch",)),
+    "minigalaxy": ("Minigalaxy", ("minigalaxy",), ("minigalaxy",), ("io.github.sharkwouter.Minigalaxy",)),
+    "steam": ("Steam", ("steam",), ("steam",), ("com.valvesoftware.Steam",)),
+}
+HEROIC_STORES = {"legendary": "Epic Games Store", "gog": "GOG", "nile": "Amazon Games", "sideload": "added by hand"}
+
+
+def _launcher_of(words: list[str]) -> tuple[str, str]:
+    """(launcher key, the address or argument it was given) for a command
+    that hands a game to a game launcher, or ("", "")."""
+    for i, w in enumerate(words):
+        scheme = w.split(":", 1)[0].lower() if ":" in w and "/" not in w.split(":", 1)[0] else ""
+        base = os.path.basename(w)
+        for key, (_name, schemes, programs, flatpaks) in GAME_LAUNCHERS.items():
+            if scheme in schemes:
+                return key, w
+            if base in programs or w in flatpaks:
+                rest = [x for x in words[i + 1:] if not x.startswith("-")]
+                return key, rest[0] if rest else ""
+    return "", ""
+
+
+def _json(path: str):
+    import json
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def _heroic_dirs(home: str) -> list[str]:
+    return [os.path.join(home, ".config", "heroic"),
+            os.path.join(home, ".var", "app", "com.heroicgameslauncher.hgl", "config", "heroic")]
+
+
+def _heroic_game(home: str, app_name: str, runner: str) -> dict:
+    """What Heroic's own records say about one game: path, version."""
+    for base in _heroic_dirs(home):
+        if runner == "legendary":
+            for p in (os.path.join(base, "legendaryConfig", "legendary", "installed.json"),
+                      os.path.join(os.path.dirname(base), "legendary", "installed.json")):
+                data = _json(p) or {}
+                g = data.get(app_name) if isinstance(data, dict) else None
+                if g:
+                    return {"path": g.get("install_path", ""), "version": g.get("version", ""),
+                            "title": g.get("title", "")}
+        elif runner == "gog":
+            data = _json(os.path.join(base, "gog_store", "installed.json")) or {}
+            for g in data.get("installed", []) if isinstance(data, dict) else []:
+                if g.get("appName") == app_name:
+                    return {"path": g.get("install_path", ""), "version": g.get("version", "")}
+        elif runner == "nile":
+            data = _json(os.path.join(base, "nile_config", "nile", "installed.json")) or []
+            for g in data if isinstance(data, list) else []:
+                if g.get("id") == app_name:
+                    return {"path": g.get("path", ""), "version": g.get("version", "")}
+        elif runner == "sideload":
+            data = _json(os.path.join(base, "sideload_apps", "library.json")) or {}
+            for g in data.get("games", []) if isinstance(data, dict) else []:
+                if g.get("app_name") == app_name:
+                    return {"path": os.path.dirname(g.get("install", {}).get("executable", "")), "version": ""}
+    return {}
+
+
+def _lutris_game(home: str, game_id: str) -> dict:
+    import sqlite3
+    for db in (os.path.join(home, ".local", "share", "lutris", "pga.db"),
+               os.path.join(home, ".var", "app", "net.lutris.Lutris", "data", "lutris", "pga.db")):
+        if not os.path.isfile(db):
+            continue
+        try:
+            con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=1)
+            try:
+                col = "id" if game_id.isdigit() else "slug"
+                row = con.execute(f"SELECT directory, installed_at, runner, platform FROM games WHERE {col} = ?",
+                                  (int(game_id) if game_id.isdigit() else game_id,)).fetchone()
+            finally:
+                con.close()
+        except sqlite3.Error:
+            continue
+        if row:
+            return {"path": row[0] or "", "installed": row[1] or 0, "runner": row[2] or "", "platform": row[3] or ""}
+    return {}
+
+
+def _game_launcher(app, sysm) -> Optional[Details]:
+    words = _words(app.exec)
+    key, arg = _launcher_of(words)
+    if not key or (key == "steam" and uninstall.kind_of(app) == "steam"):
+        return None
+    name = GAME_LAUNCHERS[key][0]
+    d = Details(kind="managed", manager=name, note="managed", scope="user")
+    info = {}
+    if key == "heroic":
+        from urllib.parse import parse_qs, urlparse
+        q = parse_qs(urlparse(arg).query) if "?" in arg else {}
+        app_name = (q.get("appName") or [""])[0]
+        runner = (q.get("runner") or [""])[0]
+        d.package, d.store = app_name, HEROIC_STORES.get(runner, runner)
+        info = _heroic_game(sysm.home, app_name, runner) if app_name else {}
+    elif key == "lutris":
+        m = re.search(r"rungame(?:id)?/(\S+)", arg)
+        if m:
+            d.package = m.group(1)
+            info = _lutris_game(sysm.home, d.package)
+            if info.get("installed"):
+                d.date, d.date_label = float(info["installed"]), "installed"
+            d.store = info.get("runner", "")
+    else:
+        d.package = arg
+    path = info.get("path", "")
+    if path and os.path.isdir(path):
+        d.folder, d.size = path, uninstall.folder_size(path)
+        d.scope = "user" if path.startswith(sysm.home + os.sep) else "system"
+    d.version = info.get("version", "")
+    return d

@@ -340,3 +340,55 @@ def test_a_package_from_github_is_noticed_by_its_homepage(tmp_path):
     assert c.newer and c.current == "1.2.0" and c.asset.name == "tool_1.3.0_amd64.deb"
     assert gh.check_version(src, "1.3.0", "dnf", get=lambda url: rel, machine="x86_64").asset.name.endswith(".rpm")
     assert not gh.check_version(src, "1.3.0", "apt", get=lambda url: rel, machine="x86_64").newer
+
+
+def test_a_game_heroic_installed_is_heroics_not_xdg_utils(tmp_path):
+    home = tmp_path / "home"
+    game = home / "Games" / "Heroic" / "APICO"
+    game.mkdir(parents=True)
+    (game / "APICO.exe").write_bytes(b"x" * 4000)
+    nile = home / ".config/heroic/nile_config/nile"
+    nile.mkdir(parents=True)
+    gid = "amzn1.adg.product.1e783728-3de2-4114-ae25-2e4dc850d9ff"
+    (nile / "installed.json").write_text(f'[{{"id": "{gid}", "path": "{game}", "version": "1.4"}}]')
+    app = de.App(id="APICO.desktop", name="APICO", source="user", system=False,
+                 exec=f"xdg-open heroic://launch?appName={gid}&runner=nile")
+    calls = []
+    d = ii.summary(app, system(tmp_path, {("pacman", "-Qoq"): "xdg-utils\n"}, {"pacman"}, calls))
+    assert (d.kind, d.manager, d.store, d.package) == ("managed", "Heroic Games Launcher", "Amazon Games", gid)
+    assert (d.folder, d.size, d.version) == (str(game), 4000, "1.4")
+    assert not any("xdg-open" in " ".join(c) for c in calls)        # never asked who owns xdg-open
+
+
+def test_epic_through_heroic_flatpak_and_lutris(tmp_path):
+    import sqlite3
+    home = tmp_path / "home"
+    s = system(tmp_path, {}, set())
+    leg = home / ".var/app/com.heroicgameslauncher.hgl/config/heroic/legendaryConfig/legendary"
+    leg.mkdir(parents=True)
+    (leg / "installed.json").write_text('{"Fortnite": {"install_path": "/nope", "version": "7"}}')
+    app = de.App(id="f.desktop", name="F", source="user", system=False,
+                 exec="flatpak run com.heroicgameslauncher.hgl --no-gui heroic://launch?appName=Fortnite&runner=legendary")
+    d = ii.summary(app, s)
+    assert (d.manager, d.store, d.version, d.folder) == ("Heroic Games Launcher", "Epic Games Store", "7", "")
+    db = home / ".local/share/lutris/pga.db"
+    db.parent.mkdir(parents=True)
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE games (id INTEGER, slug TEXT, directory TEXT, installed_at INTEGER, runner TEXT, "
+                "platform TEXT)")
+    con.execute("INSERT INTO games VALUES (12, 'celeste', ?, 1700000000, 'wine', 'Windows')", (str(home),))
+    con.commit()
+    con.close()
+    app = de.App(id="l.desktop", name="Celeste", source="user", system=False, exec="lutris lutris:rungameid/12")
+    d = ii.summary(app, s)
+    assert (d.manager, d.store, d.date) == ("Lutris", "wine", 1700000000)
+
+
+def test_wrappers_are_looked_through(tmp_path):
+    prog = tmp_path / "game"
+    prog.write_text("#!/bin/sh\n")
+    prog.chmod(0o755)
+    app = de.App(id="g.desktop", name="G", source="user", system=False,
+                 exec=f"env DXVK_HUD=1 gamemoderun mangohud {prog} --fullscreen")
+    d = ii.summary(app, system(tmp_path, {}, set()))
+    assert d.kind == "file" and d.path == str(prog)

@@ -81,7 +81,7 @@ class InstallSection(Gtk.Box):
             c.append(label(_("App Entries couldn't tell what installed this app: no package owns its entry or "
                              "its program."), ("body", "dim"), wrap=True))
             return
-        if d.note:
+        if d.note and d.note != "managed":
             c.append(label(NOTES[d.note].format(box=d.package), ("body",), wrap=True))
             return
         grid = WrapBox(28, 14)
@@ -102,11 +102,20 @@ class InstallSection(Gtk.Box):
         def short(path):
             return "~" + path[len(home):] if path.startswith(home + "/") else path
 
+        if d.kind == "managed":
+            c.prepend(label(_("{launcher} installed this and starts it. Update or uninstall it there; its files are "
+                              "{launcher}'s to manage.").format(launcher=d.manager), ("body",), wrap=True))
         if d.made:
             add(_("Launcher"), _("Made with App Entries"))
             if d.made_date:
                 add(_("Launcher last changed"), _date(d.made_date))
-        if d.kind == "self":
+        if d.kind == "managed":
+            add(_("Installed and started by"), d.manager)
+            add(_("From"), d.store)
+            add(_("Version"), d.version)
+            add(_("Its folder"), short(d.folder), mono=True, tip=d.folder)
+            add(_("Its ID in {launcher}").format(launcher=d.manager), d.package, mono=True)
+        elif d.kind == "self":
             add(_("Version"), d.version)
             add(_("Installed in"), short(d.folder), mono=True, tip=d.folder)
             add(_("Updates"), _("From GitHub: HypestHyper/AppEntries, in Updates"))
