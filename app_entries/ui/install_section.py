@@ -485,6 +485,8 @@ class GitHubPart(Gtk.Box):
             return
         rel = r.release
         version = github_apps.version_in(rel.tag) or rel.tag
+        if self.win is not None and hasattr(self.win, "check_result"):
+            self.win.check_result(self.key, r.newer, version)
         if not r.newer:
             self.status.append(label(_("Up to date: {version} is the latest release.").format(version=version),
                                      ("body",), wrap=True))

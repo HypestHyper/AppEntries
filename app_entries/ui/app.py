@@ -669,7 +669,12 @@ class MainWindow(Gtk.ApplicationWindow):
         for did in old ^ set(newer):
             item = self.apps.by_id.get(did)
             if item is not None:
-                item.emit("changed")
+                # Its row shows the dot; its open page already shows what the check found.
+                self.app_page._quiet = item is self._current
+                try:
+                    item.emit("changed")
+                finally:
+                    self.app_page._quiet = False
         tools = self.stack.get_child_by_name("tools")
         if tools is not None:
             tools._filter()
@@ -678,9 +683,40 @@ class MainWindow(Gtk.ApplicationWindow):
         """The dot's words for an app or tool with an update, or ""."""
         if key not in self.app_updates_newer:
             return ""
-        version = (getattr(self, "app_update_info", {}) or {}).get(key, "")
+        found = (getattr(self, "app_update_info", {}) or {}).get(key, "")
+        version = found.get("version", "") if isinstance(found, dict) else found
         return (_("Version {version} is out").format(version=version) if version
                 else _("An update is waiting"))
+
+    def check_result(self, key, newer, version=""):
+        """A check on an app's page: the dot follows what it found, so a dot
+        from the daily check never outlives an up-to-date answer."""
+        if newer:
+            if key in self.app_updates_newer and self.update_note(key):
+                return
+            from .. import app_updates
+            info = dict(getattr(self, "app_update_info", {}) or {})
+            info[key] = {"version": version}
+            newer_list = list(dict.fromkeys(self.app_updates_newer + [key]))
+            st = app_updates.load_state()
+            app_updates.save_state(st.get("checked", 0), newer_list, info=info)
+            self.set_app_updates(newer_list, info)
+        else:
+            self.updated(key)
+
+    def _still_waiting(self, newer, info):
+        """The saved dots, minus AppImages whose file has changed since the
+        check (updated with Use a newer file, or outside App Entries)."""
+        keep = []
+        for key in newer:
+            found = info.get(key)
+            item = self.apps.by_id.get(key)
+            if isinstance(found, dict) and found.get("file") and item is not None:
+                now = appimages.appimage_of(item.app.exec)
+                if now and os.path.basename(now) != found["file"]:
+                    continue
+            keep.append(key)
+        return keep, {k: v for k, v in info.items() if k in keep}
 
     def updated(self, key):
         """An app was just updated from its page: its dot goes."""
@@ -704,7 +740,8 @@ class MainWindow(Gtk.ApplicationWindow):
             self.set_app_updates([], {})
             return
         if not force and not app_updates.due():
-            self.set_app_updates(st.get("newer", []), st.get("info", {}))
+            newer, info = self._still_waiting(st.get("newer", []), st.get("info", {}))
+            self.set_app_updates(newer, info)
             return
         apps = [i.app for i in self.apps.items()]
         flatpaks = {uninstall._flatpak_id(a): a.id for a in apps if a.source == "flatpak"}
@@ -714,7 +751,10 @@ class MainWindow(Gtk.ApplicationWindow):
             info = {}
             for c in items:
                 if c.result is not None and c.result.newer:
-                    info[c.key] = github_apps.version_in(c.result.release.tag) or c.result.release.tag
+                    # The file it's about, too: if it changes (updated some other way), the dot goes.
+                    path = c.details.path if c.details is not None and c.kind == "appimage" else ""
+                    info[c.key] = {"version": github_apps.version_in(c.result.release.tag) or c.result.release.tag,
+                                   "file": os.path.basename(path) if path else ""}
             for fid in app_updates.flatpak_waiting():
                 if fid in flatpaks:
                     info[flatpaks[fid]] = ""
