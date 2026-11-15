@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- When App Entries runs something in your terminal (Help, Update, Remove, installs), the window now waits for Enter afterwards instead of starting your shell, so your shell's startup (fastfetch in its config file, say) no longer prints over what the command said.
+
 ## 1.2.11 — 2026-11-15
 
 - **Help in Tools is safe**: a command with a manual page shows **Manual** and opens it. One without shows **Help…**, which opens a terminal explaining it can run the command's --help and waits for you to press Enter, because a program that doesn't understand --help (a script of your own, say) would just run. If it then says it needs administrator rights, the terminal explains that and shows the sudo command for you to run yourself; nothing runs as root.

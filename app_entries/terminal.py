@@ -65,13 +65,18 @@ def line(commands: list[list[str]]) -> str:
     return " && ".join(shlex.join(c) for c in commands if c and not c[0].startswith("#"))
 
 
+WAIT = '; printf "\\n%s" "Press Enter to close this window."; read -r _'
+
+
 def start(commands: list[list[str]], env=None, which: Callable = shutil.which,
           popen: Callable = subprocess.Popen) -> subprocess.Popen:
-    """Open the terminal running the commands, then a shell. Raises
-    NoTerminal when there's no terminal app, and OSError when it couldn't be
-    started."""
+    """Open the terminal running the commands, and keep it open until Enter
+    is pressed, so what they printed can be read. (Not by starting your
+    shell: its startup, like fastfetch in a config file, would print over
+    it.) Raises NoTerminal when there's no terminal app, and OSError when it
+    couldn't be started."""
     prefix = find(env, which)
-    cmd = line(commands) + '; exec "${SHELL:-/bin/sh}"'
+    cmd = line(commands) + WAIT
     return popen(prefix + ["/bin/sh", "-c", cmd], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                  stderr=subprocess.DEVNULL, start_new_session=True)
 

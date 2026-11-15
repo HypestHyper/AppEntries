@@ -222,7 +222,7 @@ def test_terminal_gets_the_command_and_keeps_a_shell_open():
     started = []
     terminal.start([["sudo", "pacman", "-R", "gimp"]], {"TERMINAL": "kitty"}, which_only("kitty"),
                    lambda argv, **_kw: started.append(argv))
-    assert started == [["kitty", "/bin/sh", "-c", 'sudo pacman -R gimp; exec "${SHELL:-/bin/sh}"']]
+    assert started == [["kitty", "/bin/sh", "-c", "sudo pacman -R gimp" + terminal.WAIT]]
 
 
 # ---------------------------------------------------------------------------
