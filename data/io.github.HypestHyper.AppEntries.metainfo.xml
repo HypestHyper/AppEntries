@@ -61,6 +61,17 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.3.0" date="2026-11-16">
+      <description>
+        <ul>
+          <li>Open file location opens the folder the app is installed in; a new button shows its entry file</li>
+          <li>Programs a build script put in ~/.local/bin or ~/bin can be uninstalled, with Undo</li>
+          <li>More detailed menu folders, like Strategy, Photography or Web browser</li>
+          <li>A smaller save bar in the page's own colours</li>
+          <li>The desktop picks and Every desktop, Only these or All except these now agree</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.13" date="2026-11-15">
       <description>
         <ul>

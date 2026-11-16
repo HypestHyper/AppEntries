@@ -7,6 +7,7 @@ from gi.repository import Gtk
 
 from .. import editing, health, launchers, overrides, symbols
 from .app_card import gicon_for
+from .categories import CategoryPicker
 from .dialogs import choose_icon_file
 from .entry_view import EntryView
 from .icon_picker import IconPicker, preview_texture
@@ -135,8 +136,10 @@ class EditForm(Gtk.Box):
         here = ", ".join(current) if current else _("unknown")
         page.append(section(_("Where it appears")))
         c = card()
-        cats, self.cat_buttons = _chips([(k, _(n)) for k, n in editing.MAIN_CATEGORIES], f.categories)
-        c.append(_field(_("Menu folders"), _("For launchers that sort apps into folders."), cats))
+        self.cats = CategoryPicker(f.categories, self._changed)
+        c.append(_field(_("Menu folders"), _("For launchers that sort apps into folders. Pick one to see more "
+                                             "detailed ones, which some menus and software centres use."),
+                        self.cats))
         self.show_in = Group([("all", _("Every desktop")), ("only", _("Only these")),
                               ("except", _("All except these"))], f.show_in, self._show_in_picked)
         self._desk_quiet = False
@@ -191,8 +194,6 @@ class EditForm(Gtk.Box):
         for e in (self.name, self.generic, self.comment, self.keywords, self.icon, self.command, self.wm_class):
             e.connect("changed", lambda *_: self._changed())
         self.env.get_buffer().connect("changed", lambda *_: self._changed())
-        for b in self.cat_buttons.values():
-            b.connect("toggled", lambda *_: self._changed())
         for b in self.desk_buttons.values():
             b.connect("toggled", self._desk_toggled)
 
@@ -214,7 +215,7 @@ class EditForm(Gtk.Box):
             terminal=self.terminal.get_active(),
             prefers_gpu=self.gpu.get_active(),
             wm_class=self.wm_class.get_text().strip(),
-            categories=[k for k, b in self.cat_buttons.items() if b.get_active()],
+            categories=self.cats.selected(),
             show_in=self.show_in.active() or "all",
             desktops=[k for k, b in self.desk_buttons.items() if b.get_active()],
             actions=actions,

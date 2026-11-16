@@ -192,3 +192,23 @@ def test_try_exec_the_entry_came_with_is_kept(xdg, monkeypatch):
     ov.apply(ed.plan_edit(only(xdg), ed.copy_fields(ed.read_fields(only(xdg), xdg.env), name="Mine"), xdg.env))
     d = group(xdg.user / "files.desktop")
     assert d["TryExec"] == "nautilus" and de.TRY_EXEC_KEY not in d
+
+
+def test_detailed_categories_are_read_and_written_in_order(xdg):
+    xdg.write(xdg.sys_b, "pix.desktop", "[Desktop Entry]\nType=Application\nName=Pix\nExec=pix\n"
+              "Categories=Graphics;X-Vendor-Thing;Photography;\n")
+    app = only(xdg)
+    f = ed.read_fields(app, xdg.env)
+    assert f.categories == ["Graphics", "Photography"]          # the vendor one isn't shown, but is kept
+    new = ed.copy_fields(f, categories=["Viewer", "Graphics", "Office", "Photography"])
+    ov.apply(ed.plan_edit(app, new, xdg.env))
+    assert group(xdg.user / "pix.desktop")["Categories"] == "Graphics;Office;Photography;Viewer;X-Vendor-Thing;"
+
+
+def test_every_detailed_category_goes_with_a_main_one():
+    mains = {k for k, _n in ed.MAIN_CATEGORIES}
+    assert set(ed.EXTRA_CATEGORIES) <= mains
+    for main, items in ed.EXTRA_CATEGORIES.items():
+        keys = [k for k, _n in items]
+        assert len(keys) == len(set(keys)) and not set(keys) & mains, main
+    assert ed.order_categories(["Emulator", "X-Odd", "Game", "Game"]) == ["Game", "Emulator", "X-Odd"]

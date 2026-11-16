@@ -28,6 +28,73 @@ MAIN_CATEGORIES = [
     ("Utility", "Accessories"),
 ]
 
+# Additional categories from the Desktop Menu Specification, under the main
+# ones they go with (some go with more than one). Menus and software centres
+# use them for sub-folders and search.
+EXTRA_CATEGORIES = {
+    "AudioVideo": [("Audio", "Audio"), ("Video", "Video"), ("Music", "Music"), ("Player", "Player"),
+                   ("Recorder", "Recorder"), ("AudioVideoEditing", "Audio and video editing"), ("Mixer", "Mixer"),
+                   ("Midi", "MIDI"), ("Sequencer", "Sequencer"), ("Tuner", "Tuner"), ("TV", "TV"),
+                   ("DiscBurning", "Disc burning")],
+    "Development": [("IDE", "IDE"), ("TextEditor", "Text editor"), ("Debugger", "Debugger"),
+                    ("RevisionControl", "Version control"), ("Building", "Building"), ("Profiling", "Profiling"),
+                    ("GUIDesigner", "Interface designer"), ("WebDevelopment", "Web development"),
+                    ("Database", "Databases"), ("Translation", "Translation")],
+    "Education": [("Languages", "Languages"), ("Math", "Maths"),
+                  ("ComputerScience", "Computer science"), ("Geography", "Geography"), ("History", "History"),
+                  ("Literature", "Literature"), ("Art", "Art"), ("Music", "Music"), ("Sports", "Sports"),
+                  ("Construction", "Construction")],
+    "Game": [("ActionGame", "Action"), ("AdventureGame", "Adventure"), ("ArcadeGame", "Arcade"),
+             ("BoardGame", "Board"), ("BlocksGame", "Blocks"), ("CardGame", "Card"), ("KidsGame", "Kids"),
+             ("LogicGame", "Puzzle and logic"), ("RolePlaying", "Role-playing"), ("Shooter", "Shooter"),
+             ("Simulation", "Simulation"), ("SportsGame", "Sports"), ("StrategyGame", "Strategy"),
+             ("Emulator", "Emulator")],
+    "Graphics": [("Photography", "Photography"), ("RasterGraphics", "Painting and photo editing"),
+                 ("VectorGraphics", "Vector drawing"), ("2DGraphics", "2D"), ("3DGraphics", "3D"),
+                 ("Viewer", "Viewer"), ("Scanning", "Scanning"), ("OCR", "Text recognition"),
+                 ("Publishing", "Publishing")],
+    "Network": [("WebBrowser", "Web browser"), ("Email", "Email"), ("InstantMessaging", "Messaging"),
+                ("Chat", "Chat"), ("VideoConference", "Video calls"), ("Telephony", "Phone calls"),
+                ("IRCClient", "IRC"), ("Feed", "News feeds"), ("News", "News"), ("FileTransfer", "File transfer"),
+                ("P2P", "Peer to peer"), ("RemoteAccess", "Remote access"), ("HamRadio", "Amateur radio")],
+    "Office": [("WordProcessor", "Word processing"), ("Spreadsheet", "Spreadsheets"),
+               ("Presentation", "Presentations"), ("Viewer", "Viewer"), ("Email", "Email"),
+               ("Calendar", "Calendar"), ("ContactManagement", "Contacts"), ("Finance", "Finance"),
+               ("ProjectManagement", "Project management"), ("Database", "Databases"), ("Chart", "Charts"),
+               ("FlowChart", "Diagrams"), ("Dictionary", "Dictionary"), ("Publishing", "Publishing")],
+    "Science": [("Math", "Maths"), ("Physics", "Physics"), ("Chemistry", "Chemistry"), ("Biology", "Biology"),
+                ("Astronomy", "Astronomy"), ("ArtificialIntelligence", "Artificial intelligence"),
+                ("ComputerScience", "Computer science"), ("DataVisualization", "Data visualisation"),
+                ("NumericalAnalysis", "Numerical analysis"), ("Engineering", "Engineering"),
+                ("Electronics", "Electronics"), ("Robotics", "Robotics"), ("Geography", "Geography"),
+                ("Geology", "Geology"), ("Maps", "Maps"), ("MedicalSoftware", "Medical"),
+                ("ImageProcessing", "Image processing"), ("Economy", "Economics")],
+    "Settings": [("DesktopSettings", "Desktop"), ("HardwareSettings", "Hardware"), ("Printing", "Printing"),
+                 ("PackageManager", "Software"), ("Security", "Security"), ("Accessibility", "Accessibility")],
+    "System": [("TerminalEmulator", "Terminal"), ("FileManager", "File manager"), ("Monitor", "System monitor"),
+               ("Filesystem", "Disks and file systems"), ("PackageManager", "Software"), ("Emulator", "Emulator"),
+               ("Security", "Security")],
+    "Utility": [("TextEditor", "Text editor"), ("Calculator", "Calculator"), ("Clock", "Clock"),
+                ("Archiving", "Archives"), ("Compression", "Compression"), ("FileTools", "File tools"),
+                ("TextTools", "Text tools"), ("Maps", "Maps"), ("Accessibility", "Accessibility")],
+}
+EXTRA_KEYS = list(dict.fromkeys(k for items in EXTRA_CATEGORIES.values() for k, _n in items))
+
+
+def known_category(c: str) -> bool:
+    """A category the editor shows: a main one or an additional one."""
+    return c in EXTRA_KEYS or any(c == k for k, _n in MAIN_CATEGORIES)
+
+
+def order_categories(cats) -> list[str]:
+    """Main categories first, then additional ones, each in the usual order;
+    ones the editor doesn't know keep their place at the end."""
+    cats = list(dict.fromkeys(cats))
+    main = [k for k, _n in MAIN_CATEGORIES if k in cats]
+    extra = [k for k in EXTRA_KEYS if k in cats]
+    return main + extra + [c for c in cats if c not in main and c not in extra]
+
+
 # Desktops as they appear in XDG_CURRENT_DESKTOP and OnlyShowIn/NotShowIn.
 DESKTOPS = [
     ("GNOME", "GNOME"), ("KDE", "KDE Plasma"), ("XFCE", "Xfce"), ("X-Cinnamon", "Cinnamon"),
@@ -60,7 +127,7 @@ class Fields:
     terminal: bool = False
     prefers_gpu: bool = False
     wm_class: str = ""
-    categories: list[str] = field(default_factory=list)  # main categories only
+    categories: list[str] = field(default_factory=list)  # main and additional ones the editor shows
     show_in: str = "all"                                 # all, only or except
     desktops: list[str] = field(default_factory=list)
     actions: list[Action] = field(default_factory=list)
@@ -133,7 +200,6 @@ def read_fields(app: de.App, env=None) -> Fields:
     d = df.group_dict()
     locales = de.locale_names(env)
     env_vars, command = split_env(de.unescape(d.get("Exec", "")))
-    main = {c for c, _n in MAIN_CATEGORIES}
     only, never = split_list(d.get("OnlyShowIn", "")), split_list(d.get("NotShowIn", ""))
     enabled = split_list(d.get("Actions", ""))
     actions = []
@@ -153,7 +219,7 @@ def read_fields(app: de.App, env=None) -> Fields:
         terminal=is_true(d.get("Terminal")),
         prefers_gpu=is_true(d.get("PrefersNonDefaultGPU")),
         wm_class=de.unescape(d.get("StartupWMClass", "")),
-        categories=[c for c in split_list(d.get("Categories", "")) if c in main],
+        categories=[c for c in split_list(d.get("Categories", "")) if known_category(c)],
         show_in="only" if only else "except" if never else "all",
         desktops=only or never,
         actions=actions,
@@ -282,10 +348,8 @@ def plan_edit(app: de.App, new: Fields, env=None) -> Optional[Change]:
         _set_bool(df, "PrefersNonDefaultGPU", new.prefers_gpu)
     if sorted(new.categories) != sorted(old.categories):
         changed = True
-        main = {c for c, _n in MAIN_CATEGORIES}
-        others = [c for c in split_list(df.group_dict().get("Categories", "")) if c not in main]
-        ordered = [c for c, _n in MAIN_CATEGORIES if c in new.categories]
-        _set_list(df, "Categories", ordered + others)
+        others = [c for c in split_list(df.group_dict().get("Categories", "")) if not known_category(c)]
+        _set_list(df, "Categories", order_categories(list(new.categories) + others))
     if (new.show_in, sorted(new.desktops)) != (old.show_in, sorted(old.desktops)):
         changed = True
         df.remove("OnlyShowIn")

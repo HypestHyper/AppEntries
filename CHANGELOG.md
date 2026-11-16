@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 — 2026-11-16
 
 - Open file location now opens the folder the app is installed in (its own folder, the AppImage's or
   program's folder, the Flatpak's or Snap's folder, or where a package's program lives). A new
@@ -9,6 +9,10 @@
   uninstalled: the program, its menu entry and icon go to the Trash, with Undo. You can also choose to
   remove its other commands and the git copy it was built from, which are left alone unless you turn them on.
 - Installation shows the git copy such a program was built from, and its GitHub project.
+- **More detailed menu folders**: pick a main folder (Games, Graphics, Internet…) and its detailed ones show
+  below it (Strategy, Emulator, Photography, Web browser, Text editor…), from the Desktop Menu
+  Specification. Some menus and software centres use them for sub-folders and search. Categories App Entries
+  doesn't know are kept as they are, and new launchers keep detailed ones when you edit them.
 - The save bar is now a small toolbar in the page's own colours at the bottom right, instead of a bright
   full-width banner: Unsaved changes, Discard and Save.
 - Where it appears: the desktop chips and Every desktop / Only these / All except these now agree. Picking a

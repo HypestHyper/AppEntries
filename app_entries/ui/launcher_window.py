@@ -6,13 +6,14 @@ from gettext import gettext as _
 from gi.repository import Gdk, Gtk
 
 from .. import desktop_entries as de
-from .. import editing, launchers, symbols
+from .. import launchers, symbols
 from . import motion
 from .app_card import gicon_for
+from .categories import CategoryPicker
 from .dialogs import choose_file, choose_icon_file
 from .entry_view import EntryView
 from .icon_picker import IconPicker, preview_texture
-from .widgets import Group, Toggle, WrapBox, button, card, hbox, label, section, set_text, vbox
+from .widgets import Group, Toggle, button, card, hbox, label, section, set_text, vbox
 
 
 def _explained(title, explanation, widget):
@@ -216,16 +217,9 @@ class LauncherWindow(Gtk.Box):
         self.comment = _entry(s.comment, _("Optional"))
         c.append(_explained(_("Description"), _("A short line about what it does, often shown as a tooltip."),
                             self.comment))
-        cats = WrapBox(6, 6)
-        self.cat_buttons = {}
-        for key, text in editing.MAIN_CATEGORIES:
-            b = Gtk.ToggleButton(label=_(text), active=key in s.categories)
-            b.add_css_class("filter")
-            b.connect("toggled", lambda *_: self._changed())
-            cats.append(b)
-            self.cat_buttons[key] = b
+        self.cats = CategoryPicker(s.categories, self._changed)
         c.append(_explained(_("Menu folders"), _("Where it's listed in launchers that sort apps into folders."),
-                            cats))
+                            self.cats))
         self.keywords = _entry(", ".join(s.keywords), _("Optional, separated by commas"))
         c.append(_explained(_("Search words"), _("Extra words that find it when you search a launcher."),
                             self.keywords))
@@ -366,7 +360,7 @@ class LauncherWindow(Gtk.Box):
             terminal=self.terminal.get_active() or (self.kind.active() == "commands" and len(self._frames) > 1),
             keep_open=(self.terminal.get_active() or len(self._frames) > 1) and self.keep_open.get_active(),
             accepts_files=self.files.get_active(),
-            categories=[k for k, b in self.cat_buttons.items() if b.get_active()],
+            categories=self.cats.selected(),
             keywords=[k.strip() for k in self.keywords.get_text().split(",") if k.strip()],
             icon_kind=kind,
             icon=self.spec.icon,
