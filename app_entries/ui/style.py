@@ -145,9 +145,14 @@ button.row-eye.is-on {{ color: {ON_SURFACE_VARIANT}; }}
 .preview-row.is-faded {{ opacity: .38; }}
 .page-switch {{ padding: 0 2px; }}
 .page-note {{ background: alpha({ERROR}, .10); border-radius: 16px; padding: 12px 14px; margin-top: 12px; }}
-.save-bar {{ background: {INVERSE_SURFACE}; border-radius: 28px; padding: 8px 10px 8px 22px; box-shadow: 0 4px 16px {SHADOW_M}; }}
-.save-bar label {{ color: {INVERSE_ON_SURFACE}; }}
-.save-bar button.text {{ color: {INVERSE_PRIMARY}; }}
+.save-bar {{
+  background: {SURFACE_CONTAINER_HIGHEST}; border: 1px solid {OUTLINE_VARIANT}; border-radius: 28px;
+  padding: 6px 6px 6px 16px; box-shadow: 0 6px 20px {SHADOW_M};
+}}
+.save-bar .save-bar-icon {{ color: {PRIMARY}; font-size: 20px; }}
+.save-bar .save-bar-text {{ color: {ON_SURFACE}; font-weight: 500; margin: 0 8px 0 2px; }}
+.save-bar button.text {{ color: {ON_SURFACE_VARIANT}; }}
+.save-bar button.filled {{ min-height: 40px; padding: 0 18px; border-radius: 20px; }}
 .form-bar {{ padding: 4px 12px 12px 4px; }}
 .embedded-form textview.textarea {{ min-height: 64px; }}
 .history-panel {{ background: {SURFACE_CONTAINER_LOW}; border-radius: 28px; margin: 0 12px 0 4px;

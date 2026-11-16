@@ -9,6 +9,8 @@
   uninstalled: the program, its menu entry and icon go to the Trash, with Undo. You can also choose to
   remove its other commands and the git copy it was built from, which are left alone unless you turn them on.
 - Installation shows the git copy such a program was built from, and its GitHub project.
+- The save bar is now a small toolbar in the page's own colours at the bottom right, instead of a bright
+  full-width banner: Unsaved changes, Discard and Save.
 
 ## 1.2.13 — 2026-11-15
 

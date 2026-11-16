@@ -99,19 +99,19 @@ class AppPage(Gtk.Box):
         self.scroll.add_css_class("m-page")
         self.form = None            # the edit form, kept while it has unsaved changes
         self._was_dirty = False
-        # Save or discard: shown only once something has changed.
-        self.bar_text = label("", ("body",), ellipsize=True)
-        self.bar_text.set_hexpand(True)
-        self.bar_save = button(_("Save"), style="filled", small=True, tooltip=_("Save your changes (Ctrl+S)"),
-                               cb=lambda *_: self.save())
-        discard = button(_("Discard"), style="text", small=True, tooltip=_("Forget these changes"),
+        # Save or discard: a small toolbar in the page's colours, shown only
+        # once something has changed.
+        self.bar_text = label(_("Unsaved changes"), ("body", "save-bar-text"), ellipsize=True)
+        self.bar_save = button(_("Save"), "check", style="filled", small=True,
+                               tooltip=_("Save your changes (Ctrl+S)"), cb=lambda *_: self.save())
+        discard = button(_("Discard"), "undo", style="text", small=True, tooltip=_("Forget these changes"),
                          cb=lambda *_: self.discard())
-        bar = hbox(10, self.bar_text, discard, self.bar_save)
+        bar = hbox(6, icon("edit_note", ("save-bar-icon",)), self.bar_text, discard, self.bar_save)
         bar.add_css_class("save-bar")
-        self.savebar = Floating(bar, valign=Gtk.Align.END)
+        self.savebar = Floating(bar, valign=Gtk.Align.END, halign=Gtk.Align.END)
         self.savebar.set_margin_start(16)
         self.savebar.set_margin_end(28)
-        self.savebar.set_margin_bottom(16)
+        self.savebar.set_margin_bottom(20)
         overlay = Gtk.Overlay(vexpand=True)
         overlay.set_child(self.scroll)
         overlay.add_overlay(self.savebar)
@@ -424,7 +424,7 @@ class AppPage(Gtk.Box):
                 self.head_image.set_from_paintable(preview_texture(form.picked, 64))
             else:
                 self.head_image.set_from_gicon(gicon_for(f.icon))
-        self.bar_text.set_label(_("Unsaved changes to {name}").format(name=self.item.app.name))
+        self.bar_text.set_tooltip_text(_("Unsaved changes to {name}").format(name=self.item.app.name))
         self.bar_save.set_sensitive(form.is_valid())
         self.savebar.set_revealed(dirty)
         if dirty != self._was_dirty:
