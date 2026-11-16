@@ -216,7 +216,10 @@ def kind_of(app: de.App) -> str:
     if key and key != "steam":
         return "game"
     found = install_info.home_install(app)
-    return found[0] if found else ""
+    if found:
+        return found[0]
+    # A program an install script copied into ~/.local/bin or ~/bin.
+    return "program" if install_info.own_program(app) else ""
 
 
 def _your_files(apps: Sequence[de.App], ids: Sequence[str], env) -> list[Change]:
@@ -646,6 +649,90 @@ def _plan_home(app: de.App, apps, env) -> Plan:
 
 
 # ---------------------------------------------------------------------------
+# A program copied into ~/.local/bin or ~/bin (by `./build.sh install`,
+# `make install PREFIX=~/.local` and the like)
+
+
+def _size_of(path: str) -> int:
+    if os.path.isdir(path) and not os.path.islink(path):
+        return folder_size(path)
+    try:
+        return os.lstat(path).st_size
+    except OSError:
+        return 0
+
+
+def _siblings(prog: str) -> list[str]:
+    """Other commands next to it that share its name's first part
+    (obsbot-gui → obsbot-cli): often installed by the same script."""
+    folder, name = os.path.split(prog)
+    stem = re.split(r"[-_.]", name)[0]
+    if len(stem) < 3:
+        return []
+    try:
+        names = sorted(os.listdir(folder))
+    except OSError:
+        return []
+    return [os.path.join(folder, n) for n in names
+            if n != name and re.split(r"[-_.]", n)[0] == stem and os.path.isfile(os.path.join(folder, n))]
+
+
+def _plan_program(app: de.App, apps, env) -> Plan:
+    from . import install_info
+    home = _home(env)
+    prog = install_info.own_program(app, home)
+    name = os.path.basename(prog)
+    p = Plan(app, "program", "A program in " + _short(os.path.dirname(prog), env), prog, size=_size_of(prog))
+    if not prog or not os.path.isfile(prog):
+        p.blocked = "Its program file is already gone."
+        return p
+    p.removes.append(Line("terminal", f"{_short(prog, env)}, to the Trash", p.size))
+    p.trash_paths = [prog]
+    mine = de.user_apps_dir(env) + os.sep
+    users = [a for a in apps if a.source_path.startswith(mine) and install_info._program(a) == prog]
+    if app not in users:
+        users.append(app)
+    p.app_ids = [a.id for a in users]
+    files = [a.source_path for a in users if a.source_path.startswith(mine)]
+    icons = {a.icon for a in users if a.icon}
+    for icon in sorted(icons):
+        if any(a.icon == icon for a in apps if a.id not in p.app_ids):
+            continue
+        if os.path.isabs(icon):
+            if icon.startswith(de.user_data_dir(env) + os.sep) and os.path.isfile(icon):
+                files.append(icon)
+        else:
+            files += appimages._icon_files(icon, de.user_data_dir(env))
+    p.entry_files = files
+    for f in files:
+        p.removes.append(Line("description", _short(f, env)))
+
+    def option(key, title, explanation, paths):
+        if paths:
+            p.also.append(Option(key, title, explanation))
+            p.folders[key] = paths
+            p.folder_sizes[key] = sum(_size_of(x) for x in paths)
+
+    siblings = _siblings(prog)
+    option("commands", "Its other commands: " + ", ".join(os.path.basename(x) for x in siblings),
+           "Found by name next to it, so only a guess: often put there by the same install script. Moved to the "
+           "Trash, so you can restore them.", siblings)
+    stem = re.split(r"[-_.]", name)[0]
+    checkout = install_info.source_checkout([name, stem, app.name], home)
+    option("source", "The copy it was built from: " + _short(checkout, env) if checkout else "",
+           "The git copy found by name in your home folder, with everything built in it. Moved to the Trash, so "
+           "you can restore it.", [checkout] if checkout else [])
+    _data_option(p, "data", "Folders that look like its settings",
+                 "Found by name, so only a guess: check the list. Moved to the Trash, so you can restore them.",
+                 _data_guesses({name, stem, app.name.lower()}, prog, env), env)
+    p.notes.append("It was copied there by hand or by an install script, so no package manager knows about it. "
+                   "Undo puts the files back.")
+    remote = install_info.git_remote(checkout + "/", "/")[1] if checkout else ""
+    p._reinstall = (lambda plan, opts: [["git", "clone", remote]]) if remote else None
+    return p
+
+
+# ---------------------------------------------------------------------------
 # Games another launcher installed (Heroic, Lutris, Bottles…)
 
 
@@ -870,6 +957,8 @@ def plan(app: de.App, apps: Sequence[de.App], env=None, run: Run = pkgmanagers.r
         p = _plan_home(app, apps, env)
     elif kind == "game":
         p = _plan_game(app, apps, env, which)
+    elif kind == "program":
+        p = _plan_program(app, apps, env)
     else:
         raise ValueError(f"{app.name} can't be uninstalled from here.")
     if not p.app_ids:

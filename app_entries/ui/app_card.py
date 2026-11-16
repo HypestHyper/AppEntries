@@ -152,6 +152,7 @@ UNINSTALL_HINTS = {
     "python": N_("Moves its Python environment and the commands it added to the Trash, and removes its menu "
                  "entry. Shows the full list first."),
     "folder": N_("Moves its folder to the Trash and removes its menu entry. Shows the full list first."),
+    "program": N_("Moves its program file, menu entry and icon to the Trash. Shows the full list first."),
     "game": N_("Opens the launcher that installed it to remove the game, then removes its menu entry. Shows the "
                "full list first."),
 }
@@ -227,5 +228,5 @@ def menu_box(a, act, hide_item=False):
             _(UNINSTALL_HINTS[kind]), act("uninstall"), danger=True))
     box.append(option_button(
         "folder_open", _("Open file location"),
-        _("Opens the folder that holds this app's entry file in your file manager."), act("open-folder")))
+        _("Opens the folder the app is installed in, in your file manager."), act("open-folder")))
     return box

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Open file location now opens the folder the app is installed in (its own folder, the AppImage's or
+  program's folder, the Flatpak's or Snap's folder, or where a package's program lives). A new
+  "Show its entry file" button shows the menu entry file itself.
+- Programs that a build script copied into ~/.local/bin or ~/bin (like `./build.sh install`) can be
+  uninstalled: the program, its menu entry and icon go to the Trash, with Undo. You can also choose to
+  remove its other commands and the git copy it was built from, which are left alone unless you turn them on.
+- Installation shows the git copy such a program was built from, and its GitHub project.
+
 ## 1.2.13 — 2026-11-15
 
 - The update dot no longer stays on an app that's up to date: a check on its page (including the one that runs when you open an app with a dot) now clears the dot or adds it, and a dot for an AppImage whose file has changed since the daily check (updated another way) is dropped.

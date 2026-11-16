@@ -592,6 +592,17 @@ def _file(path, sysm, kind="file"):
         elif real != path and os.path.isfile(real):
             d.size = os.path.getsize(real)
         _python_or_git(d, real, sysm.home)
+        if not d.project and os.path.dirname(real) in [os.path.join(sysm.home, b) for b in OWN_BIN]:
+            # Put here by an install script: the git copy it was built from, if it's still around.
+            name = os.path.basename(real)
+            checkout = source_checkout([name, name.split("-")[0]], sysm.home)
+            if checkout:
+                _c, remote = git_remote(checkout + "/", "/")
+                d.raw["checkout"] = checkout
+                d.installer = "built"
+                if remote:
+                    d.project = remote
+                    d.updates_from = github_of(remote) or remote
     d.origin = download_origin(path)
     d.raw["update_info"] = update_info(path) if kind == "appimage" else ""
     d.updates_from = d.updates_from or (appimage_updates(path) if kind == "appimage" else "")
@@ -1327,3 +1338,73 @@ def _wine(app, sysm) -> Optional[Details]:
     if os.path.isdir(prefix):
         d.folder, d.size = prefix, uninstall.folder_size(prefix)
     return d
+
+
+# ---------------------------------------------------------------------------
+# where an app lives, and programs an install script put in ~/.local/bin
+
+OWN_BIN = (".local/bin", "bin")
+SOURCE_PLACES = ("", "src", "source", "code", "Code", "dev", "Dev", "git", "Git", "projects", "Projects",
+                 "Repos", "repos", "Documents", "Downloads", "Apps", "apps", "build", "Builds", ".local/src")
+
+
+def own_program(app, home: str = "") -> str:
+    """A program file that sits in your own command folder (~/.local/bin or
+    ~/bin) itself, not a link into an app's folder: put there by you or an
+    install script (`./build.sh install`, `make install PREFIX=~/.local`).
+    "" otherwise."""
+    home = home or os.path.expanduser("~")
+    prog = _program(app)
+    if not prog or os.path.islink(prog):
+        return ""
+    folder = os.path.dirname(os.path.abspath(prog))
+    return prog if folder in [os.path.join(home, b) for b in OWN_BIN] else ""
+
+
+def source_checkout(names, home: str = "", limit: int = 400) -> str:
+    """A git copy in your home folder named like the app (the one it was
+    built from, usually), or "". Looks in the usual places, two levels down."""
+    home = home or os.path.expanduser("~")
+    looked = 0
+    for place in SOURCE_PLACES:
+        base = os.path.join(home, place)
+        try:
+            entries = sorted(os.listdir(base))
+        except OSError:
+            continue
+        for n in entries:
+            looked += 1
+            if looked > limit:
+                return ""
+            path = os.path.join(base, n)
+            if n.startswith(".") or not os.path.isdir(os.path.join(path, ".git")):
+                continue
+            if _named_like(n, names):
+                return path
+    return ""
+
+
+def install_location(app, d: Optional["Details"] = None, home: str = "") -> str:
+    """The folder an app is installed in, for Open file location: its own
+    folder, the AppImage's or program's folder, a Flatpak's or Snap's, or
+    where a package's program really lives. "" if there's nothing better
+    than its entry file's folder."""
+    home = home or os.path.expanduser("~")
+    found = home_install(app, home)
+    if found:
+        return found[1]
+    if d is not None:
+        if d.folder and os.path.isdir(d.folder):
+            return d.folder
+        if d.kind == "flatpak" and d.package:
+            for base in (os.path.join(home, ".local/share/flatpak/app"), "/var/lib/flatpak/app"):
+                if os.path.isdir(os.path.join(base, d.package)):
+                    return os.path.join(base, d.package)
+        if d.kind == "snap" and d.package and os.path.isdir(f"/snap/{d.package}/current"):
+            return f"/snap/{d.package}/current"
+        if d.path and os.path.exists(d.path):
+            return os.path.dirname(os.path.realpath(d.path))
+    prog = _program(app)
+    if prog:
+        return os.path.dirname(real_program(prog)) if os.path.isfile(real_program(prog)) else os.path.dirname(prog)
+    return ""

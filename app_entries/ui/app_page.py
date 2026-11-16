@@ -690,6 +690,10 @@ class AppPage(Gtk.Box):
         elif (a.source == "user" or a.created) and a.override_path and not a.override_managed:
             add(_("Delete this launcher"), "delete", "delete", "danger")
         add(_("Open file location"), "folder_open", "open-folder",
-            tip=_("Opens the folder that holds this app's entry file in your file manager."))
+            tip=_("Opens the folder the app is installed in, in your file manager."))
+        if a.override_path or a.source_path:
+            add(_("Show its entry file"), "description", "open-entry",
+                tip=_("Shows {file}, the file that puts it in your menus, in your file manager.").format(
+                    file=os.path.basename(a.override_path or a.source_path)))
         return row
 

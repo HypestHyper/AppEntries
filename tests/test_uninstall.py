@@ -527,3 +527,40 @@ def test_waydroid_and_bottles(xdg, monkeypatch):
     word = _home_app(xdg, "Word", "bottles-cli run -b Office -p Word")
     p = uninstall.plan(word, de.scan(xdg.env), xdg.env)
     assert p.commands([]) == [] and "stays in its bottle (Office)" in p.notes[0]
+
+
+def test_a_program_a_build_script_put_in_local_bin(xdg, monkeypatch):
+    """Like `./build.sh install` from obsbot-camera-control: copies obsbot-gui
+    (and obsbot-cli) into ~/.local/bin, writes a menu entry and an icon."""
+    import os
+    home = xdg.env["HOME"]
+    monkeypatch.setenv("HOME", home)
+    os.makedirs(home + "/.local/bin")
+    for n in ("obsbot-gui", "obsbot-cli", "other"):
+        _put(home + "/.local/bin/" + n, "\x7fELF")
+        os.chmod(home + "/.local/bin/" + n, 0o755)
+    icons = home + "/.local/share/icons/hicolor/scalable/apps"
+    os.makedirs(icons)
+    _put(icons + "/obsbot-control.svg", "<svg/>")
+    os.makedirs(home + "/obsbot-camera-control/.git")
+    _put(home + "/obsbot-camera-control/.git/config",
+         '[remote "origin"]\n\turl = https://github.com/aaronsb/obsbot-camera-control.git\n')
+    xdg.write(xdg.user, "obsbot-control.desktop", "[Desktop Entry]\nType=Application\nName=OBSBOT Control\n"
+              f"Exec={home}/.local/bin/obsbot-gui\nIcon=obsbot-control\n")
+    apps = de.scan(xdg.env)
+    app = next(a for a in apps if a.id == "obsbot-control.desktop")
+    assert uninstall.kind_of(app) == "program"
+    p = uninstall.plan(app, apps, xdg.env)
+    assert not p.blocked and p.trash_paths == [home + "/.local/bin/obsbot-gui"]
+    assert app.source_path in p.entry_files and icons + "/obsbot-control.svg" in p.entry_files
+    assert p.folders["commands"] == [home + "/.local/bin/obsbot-cli"]
+    assert p.folders["source"] == [home + "/obsbot-camera-control"]
+    assert not {"commands", "source"} & set(p.defaults())       # off unless turned on
+    assert p.reinstall([])[0][:2] == ["git", "clone"] and "aaronsb/obsbot-camera-control" in p.reinstall([])[0][2]
+
+    from app_entries import install_info
+    assert install_info.install_location(app, install_info.Details(), home) == home + "/.local/bin"
+    # A link into an app's folder is not a program of its own.
+    os.remove(home + "/.local/bin/other")
+    os.symlink(home + "/.local/bin/obsbot-cli", home + "/.local/bin/other")
+    assert uninstall.kind_of(_home_app(xdg, "Other", home + "/.local/bin/other")) == ""

@@ -2005,11 +2005,36 @@ class MainWindow(Gtk.ApplicationWindow):
         elif action == "launch":
             self._launch(app)
         elif action == "open-folder":
-            path = app.override_path or app.source_path
+            # Where the app is installed; its entry file's folder if nothing better is known.
+            from .. import install_info
             try:
-                Gio.AppInfo.launch_default_for_uri(Gio.File.new_for_path(os.path.dirname(path)).get_uri(), None)
-            except GLib.Error as e:
-                error_dialog(self, _("Couldn't open the folder"), e.message, os.path.dirname(path))
+                folder = install_info.install_location(app, install_info.summary(app))
+            except (OSError, ValueError):
+                folder = ""
+            if folder and os.path.isdir(folder):
+                self._show_in_files(folder)
+            else:
+                self._show_in_files(app.override_path or app.source_path, select=True)
+        elif action == "open-entry":
+            self._show_in_files(app.override_path or app.source_path, select=True)
+
+    def _show_in_files(self, path, select=False):
+        """Open a folder in the file manager, or with `select`, the folder
+        holding a file with the file picked out (where the file manager can)."""
+        if select:
+            try:
+                bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+                bus.call_sync("org.freedesktop.FileManager1", "/org/freedesktop/FileManager1",
+                              "org.freedesktop.FileManager1", "ShowItems",
+                              GLib.Variant("(ass)", ([Gio.File.new_for_path(path).get_uri()], "")),
+                              None, Gio.DBusCallFlags.NONE, 3000, None)
+                return
+            except GLib.Error:
+                path = os.path.dirname(path)
+        try:
+            Gio.AppInfo.launch_default_for_uri(Gio.File.new_for_path(path).get_uri(), None)
+        except GLib.Error as e:
+            error_dialog(self, _("Couldn't open the folder"), e.message, path)
 
     def _newer_file(self, app):
         """Point an AppImage launcher at a newer download you choose."""
