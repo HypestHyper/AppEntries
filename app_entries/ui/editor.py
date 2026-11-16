@@ -138,7 +138,9 @@ class EditForm(Gtk.Box):
         cats, self.cat_buttons = _chips([(k, _(n)) for k, n in editing.MAIN_CATEGORIES], f.categories)
         c.append(_field(_("Menu folders"), _("For launchers that sort apps into folders."), cats))
         self.show_in = Group([("all", _("Every desktop")), ("only", _("Only these")),
-                              ("except", _("All except these"))], f.show_in, lambda _v: self._changed())
+                              ("except", _("All except these"))], f.show_in, self._show_in_picked)
+        self._desk_quiet = False
+        self._desk_kept = list(f.desktops)
         known = [k for k, _n in editing.DESKTOPS]
         options = list(editing.DESKTOPS) + [(d, d) for d in current + f.desktops if d not in known]
         options = list(dict(options).items())
@@ -189,8 +191,10 @@ class EditForm(Gtk.Box):
         for e in (self.name, self.generic, self.comment, self.keywords, self.icon, self.command, self.wm_class):
             e.connect("changed", lambda *_: self._changed())
         self.env.get_buffer().connect("changed", lambda *_: self._changed())
-        for b in list(self.cat_buttons.values()) + list(self.desk_buttons.values()):
+        for b in self.cat_buttons.values():
             b.connect("toggled", lambda *_: self._changed())
+        for b in self.desk_buttons.values():
+            b.connect("toggled", self._desk_toggled)
 
         self._ready = True
         self._changed()
@@ -236,6 +240,42 @@ class EditForm(Gtk.Box):
             self.command_warning.set_visible(False)
         if self._ready:
             self._on_change(self)
+
+    # The desktop chips and Every desktop / Only these / All except these
+    # agree: picking a desktop under Every desktop means Only these; clearing
+    # the last one, or choosing Every desktop, means every desktop again.
+
+    def _set_desks(self, keys):
+        self._desk_quiet = True
+        for k, b in self.desk_buttons.items():
+            b.set_active(k in keys)
+        self._desk_quiet = False
+
+    def _picked_desks(self):
+        return [k for k, b in self.desk_buttons.items() if b.get_active()]
+
+    def _desk_toggled(self, *_):
+        if self._desk_quiet:
+            return
+        picked = self._picked_desks()
+        mode = self.show_in.active()
+        if picked and mode == "all":
+            self.show_in.set_active("only")
+        elif not picked and mode != "all":
+            self.show_in.set_active("all")
+        if picked:
+            self._desk_kept = picked
+        self._changed()
+
+    def _show_in_picked(self, mode):
+        if mode == "all":
+            if self._picked_desks():
+                self._desk_kept = self._picked_desks()
+            self._set_desks(())
+        elif not self._picked_desks():
+            # Back to Only these or All except these: the desktops picked before, or the current one.
+            self._set_desks(self._desk_kept or editing.current_desktops()[:1])
+        self._changed()
 
     def is_valid(self):
         return not editing.validate(self.fields())

@@ -11,6 +11,10 @@
 - Installation shows the git copy such a program was built from, and its GitHub project.
 - The save bar is now a small toolbar in the page's own colours at the bottom right, instead of a bright
   full-width banner: Unsaved changes, Discard and Save.
+- Where it appears: the desktop chips and Every desktop / Only these / All except these now agree. Picking a
+  desktop under Every desktop switches to Only these, choosing Every desktop clears the picks, and clearing
+  the last pick goes back to Every desktop. Before, "Every desktop" with KDE picked could be shown, and the
+  KDE pick was ignored when saving.
 
 ## 1.2.13 — 2026-11-15
 
