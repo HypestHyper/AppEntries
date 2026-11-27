@@ -5,6 +5,10 @@
 - "Apps without a launcher" no longer lists an AppImage, program or app folder that a launcher already
   starts another way: with `~` or `$HOME` in its command, through a link in ~/.local/bin or ~/bin, or
   through a small start script.
+- An AppImage whose launcher runs a link to it (like `~/.local/bin/tiny4lite-control`) is now treated as an
+  AppImage: its page shows its version and where updates come from, it gets the daily update check, and
+  Uninstall moves the link to the Trash along with the AppImage. Use a newer file and Update point the link at
+  the new file and leave the launcher as it is; Undo puts the old link back.
 
 ## 1.3.0 — 2026-11-16
 

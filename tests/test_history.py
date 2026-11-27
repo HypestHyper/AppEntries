@@ -76,3 +76,21 @@ def test_undoing_an_update_puts_the_old_file_back_and_the_download_in_the_trash(
     import os
     assert os.path.exists(old) and not os.path.exists(new)
     assert any(n.startswith("Tool-2") for n in os.listdir(trash.folder(xdg.env) + "/files"))
+
+
+def test_undoing_a_newer_file_through_a_link_swaps_the_link_back(xdg):
+    """The launcher runs ~/.local/bin/tool, a link to the AppImage: the
+    update points a new link at the new file; Undo puts the old link back."""
+    import os
+    home = xdg.env["HOME"]
+    os.makedirs(home + "/.local/bin")
+    old, new, link = f"{home}/Tool-1.AppImage", f"{home}/Tool-2.AppImage", f"{home}/.local/bin/tool"
+    for p in (old, new):
+        with open(p, "w") as f:
+            f.write(p)
+    os.symlink(old, link)
+    trashed = [trash.move(old, xdg.env), trash.move(link, xdg.env)]
+    os.symlink(new, link)
+    e = history.record("Tool now uses Tool-2", [], trashed, env=xdg.env, added=[link])
+    history.undo(e.id, xdg.env)
+    assert os.path.islink(link) and os.readlink(link) == old and os.path.exists(old)

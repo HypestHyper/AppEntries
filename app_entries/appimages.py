@@ -31,7 +31,54 @@ def appimage_of(exec_line: str) -> str:
     for p in parts:
         if p.lower().endswith(".appimage") and os.path.isabs(p):
             return p
+    # A link to one (often in ~/.local/bin, put there by an install script):
+    # the AppImage it leads to.
+    link = link_in(exec_line)
+    return os.path.realpath(link) if link else ""
+
+
+def _is_appimage_name(path: str) -> bool:
+    return path.lower().endswith(".appimage")
+
+
+def link_in(exec_line: str) -> str:
+    """The link an Exec line runs that leads to an AppImage (named in full,
+    or found in ~/.local/bin or ~/bin), or ""."""
+    from .health import program_of
+    prog = program_of(exec_line)
+    if not prog:
+        return ""
+    if not os.path.isabs(prog):
+        if "/" in prog:
+            return ""
+        home = os.path.expanduser("~")
+        for d in (os.path.join(home, ".local", "bin"), os.path.join(home, "bin")):
+            if os.path.islink(os.path.join(d, prog)):
+                prog = os.path.join(d, prog)
+                break
+        else:
+            return ""
+    if os.path.islink(prog) and _is_appimage_name(os.path.realpath(prog)):
+        return prog
     return ""
+
+
+def links_to(appimage: str, env=None) -> list[str]:
+    """Links in ~/.local/bin and ~/bin that lead to this AppImage."""
+    env = os.environ if env is None else env
+    home = env.get("HOME") or os.path.expanduser("~")
+    real = os.path.realpath(appimage)
+    out = []
+    for d in (os.path.join(home, ".local", "bin"), os.path.join(home, "bin")):
+        try:
+            names = sorted(os.listdir(d))
+        except OSError:
+            continue
+        for n in names:
+            p = os.path.join(d, n)
+            if os.path.islink(p) and os.path.realpath(p) == real:
+                out.append(p)
+    return out
 
 
 @dataclass

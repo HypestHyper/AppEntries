@@ -177,10 +177,12 @@ def undo(entry_id: int, env=None) -> Entry:
     if not e.changes and not e.trashed:
         raise UndoError("App Entries didn't change any files for this, so there's nothing to undo. Use "
                         "Reinstall to get the app back.")
+    added = {os.path.abspath(p) for p in e.added}
     for t in e.trashed:
         if not os.path.lexists(t.file):
             raise UndoError(f"{t.original} isn't in the Trash any more, so this can't be undone.", t.original)
-        if os.path.lexists(t.original):
+        # What this change put there (a link pointed at a new file) goes first, so it doesn't count.
+        if os.path.lexists(t.original) and os.path.abspath(t.original) not in added:
             raise UndoError(f"Something is already at {t.original}, so this can't be undone.", t.original)
     try:
         undo_all(e.changes)
@@ -189,14 +191,14 @@ def undo(entry_id: int, env=None) -> Entry:
                         "changes first.", err.path) from err
     except OverrideError as err:
         raise UndoError(f"The file couldn't be changed: {err.reason}.", err.path) from err
-    for t in e.trashed:
-        trash.restore(t)
     for p in e.added:
         if os.path.lexists(p):
             try:
                 trash.move(p, env)
             except trash.TrashError:
                 pass
+    for t in e.trashed:
+        trash.restore(t)
     e.undone = time.time()
     try:
         _save(entries, env)

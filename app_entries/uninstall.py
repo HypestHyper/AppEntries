@@ -460,6 +460,10 @@ def _plan_appimage(app: de.App, apps, env) -> Plan:
         p.trash_paths = [r.appimage]
     else:
         p.notes.append("The AppImage file itself is already gone; what was set up for it is still removed.")
+    # Links to it in ~/.local/bin or ~/bin (an install script's, or the command its launcher runs).
+    for link in appimages.links_to(r.appimage, env):
+        p.removes.append(Line("link", f"{_short(link, env)}, to the Trash"))
+        p.trash_paths.append(link)
     for f in r.entries + r.icons + r.others:
         p.removes.append(Line("description", _short(f, env)))
     p.entry_files = r.files

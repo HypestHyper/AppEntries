@@ -2039,7 +2039,7 @@ class MainWindow(Gtk.ApplicationWindow):
     def _newer_file(self, app):
         """Point an AppImage launcher at a newer download you choose."""
         from .app_page import _program_file
-        old = _program_file(app) or appimages.appimage_of(app.exec)
+        old = appimages.appimage_of(app.exec) or _program_file(app)
         if not old:
             return
         choose_file(self, _("Choose the newer AppImage"), lambda new: self.use_newer(app, old, new),
@@ -2054,6 +2054,10 @@ class MainWindow(Gtk.ApplicationWindow):
         if os.path.realpath(new) == os.path.realpath(old):
             return
         target = os.path.join(os.path.dirname(old), os.path.basename(new))
+        # A launcher that runs a link to the AppImage (in ~/.local/bin, say):
+        # the link is pointed at the new file and the launcher stays as it is.
+        link = "" if old in app.exec else appimages.link_in(app.exec)
+        links = [link] if link and os.path.realpath(link) == os.path.realpath(old) else []
 
         def plan():
             import shutil as sh
@@ -2062,6 +2066,8 @@ class MainWindow(Gtk.ApplicationWindow):
                     raise overrides.OverrideError(target, "a file with that name is already there")
                 sh.move(new, target)
             importers.make_executable(target)
+            if links:
+                return []
             text = overrides.read_text(app.override_path) if app.override_path else None
             spec = launchers.read_spec(text) if (app.created and text) else None
             if spec is not None:
@@ -2083,10 +2089,20 @@ class MainWindow(Gtk.ApplicationWindow):
             ok["yes"] = True
             # A downloaded update is the app's file now; Undo moves it to the Trash.
             added = [target] if downloaded else []
+            trashed = []
             try:
-                return [trash.move(old)], added
+                trashed.append(trash.move(old))
             except trash.TrashError:
-                return [], added
+                pass
+            for link in links:
+                # The old link to the Trash, a new one in its place; Undo swaps them back.
+                try:
+                    trashed.append(trash.move(link))
+                    os.symlink(target, link)
+                    added.append(link)
+                except (trash.TrashError, OSError):
+                    pass
+            return trashed, added
 
         def finished():
             if done is not None:
@@ -2094,7 +2110,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
         self._run_changes(plan, message or (lambda n: _("{name} now uses {file}").format(
             name=app.name, file=os.path.basename(target))), _("Couldn't change {name}").format(name=app.name),
-            after=after, done_anyway=finished)
+            after=after, allow_empty=bool(links), done_anyway=finished)
 
     def _launch(self, app):
         """Start the app the way a launcher would, from the entry launchers use."""

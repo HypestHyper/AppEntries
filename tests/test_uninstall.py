@@ -564,3 +564,25 @@ def test_a_program_a_build_script_put_in_local_bin(xdg, monkeypatch):
     os.remove(home + "/.local/bin/other")
     os.symlink(home + "/.local/bin/obsbot-cli", home + "/.local/bin/other")
     assert uninstall.kind_of(_home_app(xdg, "Other", home + "/.local/bin/other")) == ""
+
+
+def test_an_appimage_started_through_a_link_in_local_bin(xdg, monkeypatch):
+    """Exec=~/.local/bin/tiny4lite-control, a link to ~/Applications/Tiny4LiteControl-x86_64.AppImage."""
+    import os
+
+    from app_entries import appimages
+    home = xdg.env["HOME"]
+    monkeypatch.setenv("HOME", home)
+    os.makedirs(home + "/Applications")
+    os.makedirs(home + "/.local/bin")
+    img = home + "/Applications/Tiny4LiteControl-x86_64.AppImage"
+    _put(img, "\x7fELF")
+    os.chmod(img, 0o755)
+    os.symlink(img, home + "/.local/bin/tiny4lite-control")
+    app = _home_app(xdg, "Tiny4Lite", home + "/.local/bin/tiny4lite-control --slim")
+    assert appimages.appimage_of(app.exec) == img
+    assert appimages.appimage_of("tiny4lite-control") == img          # found in ~/.local/bin by name
+    assert uninstall.kind_of(app) == "appimage"
+    p = uninstall.plan(app, de.scan(xdg.env), xdg.env)
+    assert p.trash_paths == [img, home + "/.local/bin/tiny4lite-control"] and app.source_path in p.entry_files
+    assert appimages.appimage_of("/usr/bin/true") == ""
