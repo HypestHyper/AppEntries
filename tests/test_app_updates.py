@@ -11,10 +11,36 @@ def fake(answers):
 
 
 def test_flatpaks_with_an_update_waiting():
-    run = fake({("flatpak", "remote-ls"): (0, "Application ID\norg.gimp.GIMP\nmd.obsidian.Obsidian\n")})
-    assert au.flatpak_waiting(run, lambda t: "/usr/bin/flatpak") == {"org.gimp.GIMP", "md.obsidian.Obsidian"}
-    assert au.flatpak_waiting(run, lambda t: None) == set()          # no Flatpak, no question
-    assert au.flatpak_waiting(fake({}), lambda t: "/usr/bin/flatpak") == set()     # it couldn't say
+    run = fake({
+        ("flatpak", "remote-ls", "--system"): (0, ("Application ID\tCommit\norg.gimp.GIMP\taaaaaaaaaaaa\n"
+                                                   "md.obsidian.Obsidian\tbbbbbbbbbbbb\nio.held.App\tcccccccccccc\n")),
+        ("flatpak", "list", "--system"): (0, ("org.gimp.GIMP\t111111111111\n"
+                                             "md.obsidian.Obsidian\tbbbbbbbbbbbb\nio.held.App\t222222222222\n")),
+        ("flatpak", "mask", "--system"): (0, "  io.held.*\n"),
+        ("flatpak", "remote-ls", "--user"): (0, "com.spotify.Client\tdddddddddddd\n"),
+        ("flatpak", "list", "--user"): (0, "com.spotify.Client\t333333333333\n"),
+        ("flatpak", "mask", "--user"): (0, ""),
+    })
+    found = au.flatpak_waiting(run, lambda t: "/usr/bin/flatpak")
+    # Obsidian is listed but already at that commit; the held-back one is masked: neither gets a dot.
+    assert found == {"org.gimp.GIMP": {"scope": "system", "commit": "111111111111"},
+                     "com.spotify.Client": {"scope": "user", "commit": "333333333333"}}
+    assert au.flatpak_waiting(run, lambda t: None) == {}             # no Flatpak, no question
+    assert au.flatpak_waiting(fake({}), lambda t: "/usr/bin/flatpak") == {}      # it couldn't say
+    assert au.flatpak_still_waiting("org.gimp.GIMP", "system", run) is True
+    assert au.flatpak_still_waiting("md.obsidian.Obsidian", "system", run) is False
+    assert au.flatpak_still_waiting("org.gimp.GIMP", "user", run) is False      # not in that installation
+    assert au.flatpak_still_waiting("x", "system", fake({})) is None
+
+
+def test_the_installed_flatpak_commit_is_read_from_its_folder(tmp_path):
+    import os
+    d = tmp_path / ".local/share/flatpak/app/org.gimp.GIMP/x86_64/stable"
+    d.mkdir(parents=True)
+    os.symlink("1111111111112222", d / "active")
+    assert au.flatpak_commit("org.gimp.GIMP", "user", str(tmp_path)) == "1111111111112222"
+    assert au.flatpak_commit("org.other.App", "user", str(tmp_path)) == ""
+    assert au._same_commit("111111111111", "1111111111112222") and not au._same_commit("1111", "1111")
 
 
 def test_only_what_the_package_manager_doesnt_update_is_watched(tmp_path, monkeypatch):

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **No more Flatpak update dots with nothing to update.** The check now asks each Flatpak installation (yours
+  and the system's) on its own, counts an app only when the version on offer differs from the one installed,
+  and skips apps held back with `flatpak mask`. Update in terminal updates it in the installation the update
+  was found in.
+- A Flatpak's dot goes as soon as it's updated, in App Entries, a software centre or a terminal: checked when
+  you come back to the window (reading files only), and asked of Flatpak again when you open its page.
+
 ## 1.3.1 — 2026-11-27
 
 - "Apps without a launcher" no longer lists an AppImage, program or app folder that a launcher already

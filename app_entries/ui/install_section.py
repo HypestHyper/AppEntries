@@ -205,8 +205,11 @@ class InstallSection(Gtk.Box):
             c.append(self._permissions_expander(d))
             note = self.win.update_note(self.key) if self.win is not None else ""
             if note:
-                # Flatpak updates it, not the system's package manager.
-                cmd = [["flatpak", "update", "--user" if d.scope == "user" else "--system", d.package]]
+                # Flatpak updates it, not the system's package manager: in the
+                # installation the check found the update in.
+                found = (getattr(self.win, "app_update_info", {}) or {}).get(self.key)
+                scope = found.get("scope") if isinstance(found, dict) and found.get("scope") else d.scope
+                cmd = [["flatpak", "update", "--user" if scope == "user" else "--system", d.package]]
                 waiting = vbox(8)
                 waiting.add_css_class("card-inner")
                 waiting.append(hbox(10, Gtk.Box(css_classes=["update-dot"], valign=Gtk.Align.CENTER),
@@ -214,6 +217,7 @@ class InstallSection(Gtk.Box):
                 waiting.append(_start(button(_("Update in terminal"), "terminal", "tonal", small=True,
                                              tooltip=terminal.shown(cmd), cb=lambda *_a: _run_terminal(self, cmd))))
                 c.append(waiting)
+                self._recheck_flatpak(d.package, scope, waiting)
         if d.kind in ("appimage", "file") and d.made not in ("webapp", "commands"):
             c.append(GitHubPart(self.app, d, src, self._here, self.win, self.key))
         elif d.kind == "package" and src is not None and d.made != "webapp":
@@ -223,6 +227,21 @@ class InstallSection(Gtk.Box):
                 c.append(GitHubPart(self.app, d, src, self._here, self.win, self.key))
             elif d.manager == "apt" and not d.repo:
                 self._apt_github = (c, src)     # shown if apt says it was installed from a file
+
+    def _recheck_flatpak(self, fid, scope, waiting):
+        """Ask Flatpak again, in the background: if the update was installed
+        since the daily check (or Flatpak has nothing to do), the dot goes."""
+        from .. import app_updates
+        here, win, key = self._here, self.win, self.key
+
+        def done(r):
+            if isinstance(r, Exception) or r is None or not here():
+                return
+            if r is False:
+                waiting.set_visible(False)
+                if hasattr(win, "check_result"):
+                    win.check_result(key, False)
+        run_bg(lambda: app_updates.flatpak_still_waiting(fid, scope), done)
 
     # -- the dependency lists, read when opened ------------------------------
 

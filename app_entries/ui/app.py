@@ -328,6 +328,8 @@ class MainWindow(Gtk.ApplicationWindow):
         self._sort_newest = self.settings.get("sort") == "newest"
         self._new_ids = set()   # apps marked New: until you open their page
         self.app_updates_newer = []     # apps and tools with a newer version: a dot on their row
+        # Back to the window (after updating in a terminal, say): dots for what was updated go.
+        self.connect("notify::is-active", lambda *_a: self.is_active() and self._recheck_dots())
         self.app_update_results = {}    # GitHub checks made this run, by app ID
         self.app_update_info = {}       # the new version, for the dot's tooltip
 
@@ -706,7 +708,8 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def _still_waiting(self, newer, info):
         """The saved dots, minus AppImages whose file has changed since the
-        check (updated with Use a newer file, or outside App Entries)."""
+        check (updated with Use a newer file, or outside App Entries) and
+        Flatpaks updated since."""
         keep = []
         for key in newer:
             found = info.get(key)
@@ -715,8 +718,26 @@ class MainWindow(Gtk.ApplicationWindow):
                 now = appimages.appimage_of(item.app.exec)
                 if now and os.path.basename(now) != found["file"]:
                     continue
+            if isinstance(found, dict) and found.get("flatpak") and found.get("commit"):
+                # Updated since the check (here, in a software centre or a terminal): the dot goes.
+                from .. import app_updates
+                now = app_updates.flatpak_commit(found["flatpak"], found.get("scope", "system"))
+                if now and not app_updates._same_commit(now, found["commit"]):
+                    continue
             keep.append(key)
         return keep, {k: v for k, v in info.items() if k in keep}
+
+    def _recheck_dots(self):
+        """Drop dots for AppImages and Flatpaks that changed since the check.
+        Only reads files; nothing goes online."""
+        if not self.app_updates_newer:
+            return
+        info = getattr(self, "app_update_info", {}) or {}
+        newer, kept = self._still_waiting(self.app_updates_newer, info)
+        if newer != self.app_updates_newer:
+            from .. import app_updates
+            app_updates.save_state(app_updates.load_state().get("checked", 0), newer, info=kept)
+            self.set_app_updates(newer, kept)
 
     def updated(self, key):
         """An app was just updated from its page: its dot goes."""
@@ -755,9 +776,9 @@ class MainWindow(Gtk.ApplicationWindow):
                     path = c.details.path if c.details is not None and c.kind == "appimage" else ""
                     info[c.key] = {"version": github_apps.version_in(c.result.release.tag) or c.result.release.tag,
                                    "file": os.path.basename(path) if path else ""}
-            for fid in app_updates.flatpak_waiting():
+            for fid, found in app_updates.flatpak_waiting().items():
                 if fid in flatpaks:
-                    info[flatpaks[fid]] = ""
+                    info[flatpaks[fid]] = {"version": "", "flatpak": fid, **found}
             app_updates.save_state(time.time(), list(info), info=info)
             return items, info
 
