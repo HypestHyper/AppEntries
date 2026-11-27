@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.2 — 2026-11-27
 
 - **No more Flatpak update dots with nothing to update.** The check now asks each Flatpak installation (yours
   and the system's) on its own, counts an app only when the version on offer differs from the one installed,
@@ -8,6 +8,22 @@
   was found in.
 - A Flatpak's dot goes as soon as it's updated, in App Entries, a software centre or a terminal: checked when
   you come back to the window (reading files only), and asked of Flatpak again when you open its page.
+- Flatpak update dots also cover other installations (an SD card, say), follow `flatpak mask` patterns that
+  name a branch (`org.gimp.GIMP//stable`), read the branch the update is for when an app has more than one,
+  and find Flatpak's folders when `XDG_DATA_HOME` or `FLATPAK_USER_DIR` moves them. An app installed both for
+  you and for everyone is updated in the copy its launcher starts.
+- When a dot goes because you updated in a terminal, the app's open page drops its "update waiting" card too.
+  Coming back to the window no longer undoes a check that's still running, and the recheck no longer holds up
+  the window.
+- **Uninstall no longer mistakes a package for an AppImage** when a link of the same name in ~/.local/bin
+  leads to an AppImage but the package's program comes first in PATH.
+- **Use a newer file never leaves a launcher without its link.** The new link takes the old one's place in one
+  step; if it can't, the old file is kept and you're told why.
+- **Undo no longer stops halfway.** If something can't go to the Trash, nothing is undone; if a file can't be put
+  back, what was undone is kept and Undo can be tried again for the rest.
+- An AppImage's dot from a check on its page goes when you switch it to a newer file.
+- "Apps without a launcher" no longer skips a folder because a launcher starts one with a longer name
+  (`Game` next to `Game2`).
 
 ## 1.3.1 — 2026-11-27
 

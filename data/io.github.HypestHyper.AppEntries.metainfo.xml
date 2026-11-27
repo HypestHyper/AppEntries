@@ -61,6 +61,15 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.3.2" date="2026-11-27">
+      <description>
+        <ul>
+          <li>Flatpak update dots only when Flatpak has something to update, in every installation, and they go once it's updated</li>
+          <li>Uninstall no longer mistakes a package for an AppImage with a link of the same name in ~/.local/bin</li>
+          <li>Use a newer file never leaves a launcher without its link, and Undo no longer stops halfway</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.3.1" date="2026-11-27">
       <description>
         <ul>
