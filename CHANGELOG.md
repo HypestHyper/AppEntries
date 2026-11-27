@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- "Apps without a launcher" no longer lists an AppImage, program or app folder that a launcher already
+  starts another way: with `~` or `$HOME` in its command, through a link in ~/.local/bin or ~/bin, or
+  through a small start script.
+
 ## 1.3.0 — 2026-11-16
 
 - Open file location now opens the folder the app is installed in (its own folder, the AppImage's or

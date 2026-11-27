@@ -172,3 +172,32 @@ def test_finds_apps_without_a_launcher(tmp_path):
     known = [de.App(id="b.desktop", name="B", exec=f"{apps_dir / 'B.AppImage'} %U")]
     assert im.find_without_launcher(known, env) == [(str(apps_dir / "A.AppImage"), "appimage"),
                                                     (str(game / "solitaire.exe"), "exe")]
+
+
+def test_a_launcher_that_reaches_the_file_another_way_counts(tmp_path):
+    """Through ~ or $HOME, a link in ~/.local/bin, or a small start script."""
+    import os
+
+    from app_entries import desktop_entries as de
+    env = {"HOME": str(tmp_path), "PATH": "/usr/bin"}
+    apps_dir = tmp_path / "Applications"
+    apps_dir.mkdir()
+    img = apps_dir / "Tiny4LiteControl-x86_64.AppImage"
+    img.write_bytes(b"\x7fELF")
+    os.chmod(img, 0o755)
+
+    def has(exec_line):
+        return im.has_entry(str(img), [de.App(id="t.desktop", name="T", exec=exec_line)], env)
+
+    assert has(f"{img} %U")
+    assert has("~/Applications/Tiny4LiteControl-x86_64.AppImage")
+    assert has("env QT_QPA_PLATFORM=xcb $HOME/Applications/Tiny4LiteControl-x86_64.AppImage")
+    bin_dir = tmp_path / ".local" / "bin"
+    bin_dir.mkdir(parents=True)
+    os.symlink(img, bin_dir / "tiny4lite")
+    assert has("tiny4lite")                              # a link found in ~/.local/bin
+    script = bin_dir / "start-tiny"
+    script.write_text('#!/bin/sh\nexec "$HOME/Applications/Tiny4LiteControl-x86_64.AppImage" "$@"\n')
+    os.chmod(script, 0o755)
+    assert has(str(script))
+    assert not has("other-app")

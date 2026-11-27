@@ -552,13 +552,58 @@ def make_executable(path: str) -> bool:
     return True
 
 
-def has_entry(source: str, apps) -> bool:
-    """Whether an installed entry already starts this file or something in this folder."""
-    real = os.path.realpath(source)
+def _expand_home(text: str, home_dir: str) -> str:
+    """~, $HOME and ${HOME} written out, as a shell would."""
+    text = re.sub(r"\$\{HOME\}|\$HOME\b", lambda _m: home_dir, text)
+    return re.sub(r"(^|[\s=\"'])~(?=/)", lambda m: m.group(1) + home_dir, text)
+
+
+def _started(apps, env=None) -> tuple[str, set[str]]:
+    """Everything the entries start, for has_entry: their command lines with
+    the home folder written out, and the real files their programs are
+    (links followed, small start scripts read, PATH searched)."""
+    from . import install_info
+    from .health import program_of
+    home_dir = home(env)
+    path = os.pathsep.join([os.path.join(home_dir, ".local", "bin"), os.path.join(home_dir, "bin"),
+                            (env or os.environ).get("PATH", os.defpath)])
+    lines, real = [], set()
     for a in apps:
-        line = a.exec or ""
-        if source in line or real in line:
-            return True
+        line = _expand_home(a.exec or "", home_dir)
+        lines.append(line)
+        prog = program_of(line)
+        if not prog or "%" in prog:
+            continue
+        found = prog if os.path.isabs(prog) else shutil.which(prog, path=path)
+        if not found or not os.path.exists(found):
+            continue
+        real.add(os.path.realpath(found))
+        real.add(install_info.real_program(found))
+        # A small start script naming it with $HOME or ~, which real_program doesn't follow.
+        try:
+            if os.path.getsize(found) <= 16384:
+                with open(found, "rb") as f:
+                    text = f.read(16384)
+                if text.startswith(b"#!"):
+                    lines.append(_expand_home(text.decode("utf-8", "replace"), home_dir))
+        except OSError:
+            pass
+    return "\n".join(lines), real
+
+
+def has_entry(source: str, apps, env=None, started=None) -> bool:
+    """Whether an installed entry already starts this file or something in
+    this folder: named in its command (also with ~ or $HOME), through a link
+    or a small start script, or found in PATH."""
+    text, real_set = started if started is not None else _started(apps, env)
+    real = os.path.realpath(source)
+    if source in text or real in text:
+        return True
+    if real in real_set:
+        return True
+    if os.path.isdir(real):
+        inside = real + os.sep
+        return any(r.startswith(inside) for r in real_set)
     return False
 
 
@@ -566,6 +611,7 @@ def find_without_launcher(apps, env=None) -> list[tuple[str, str]]:
     """(path, kind) of AppImages, Windows programs and app folders in the
     usual places that no launcher starts yet. Only looks; changes nothing."""
     out = []
+    started = None
     for rel in APP_FOLDERS:
         d = os.path.join(home(env), rel)
         try:
@@ -590,6 +636,8 @@ def find_without_launcher(apps, env=None) -> list[tuple[str, str]]:
                     p, kind, file_app = os.path.join(p, exes[0]), "exe", True
             if not (file_app or folder_app):
                 continue
-            if not has_entry(p, apps):
+            if started is None:
+                started = _started(apps, env)
+            if not has_entry(p, apps, env, started):
                 out.append((p, kind))
     return out
