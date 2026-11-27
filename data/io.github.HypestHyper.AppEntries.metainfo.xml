@@ -61,6 +61,14 @@
     <binary>io.github.HypestHyper.AppEntries</binary>
   </provides>
   <releases>
+    <release version="1.3.1" date="2026-11-27">
+      <description>
+        <ul>
+          <li>Apps without a launcher no longer lists files a launcher starts through a link, a start script, or ~ and $HOME</li>
+          <li>An AppImage started through a link in ~/.local/bin is treated as an AppImage: update checks, Uninstall and Use a newer file</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.3.0" date="2026-11-16">
       <description>
         <ul>

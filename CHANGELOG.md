@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.1 — 2026-11-27
 
 - "Apps without a launcher" no longer lists an AppImage, program or app folder that a launcher already
   starts another way: with `~` or `$HOME` in its command, through a link in ~/.local/bin or ~/bin, or
