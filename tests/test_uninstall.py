@@ -573,6 +573,7 @@ def test_an_appimage_started_through_a_link_in_local_bin(xdg, monkeypatch):
     from app_entries import appimages
     home = xdg.env["HOME"]
     monkeypatch.setenv("HOME", home)
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")       # not the real ~/.local/bin
     os.makedirs(home + "/Applications")
     os.makedirs(home + "/.local/bin")
     img = home + "/Applications/Tiny4LiteControl-x86_64.AppImage"
@@ -586,3 +587,14 @@ def test_an_appimage_started_through_a_link_in_local_bin(xdg, monkeypatch):
     p = uninstall.plan(app, de.scan(xdg.env), xdg.env)
     assert p.trash_paths == [img, home + "/.local/bin/tiny4lite-control"] and app.source_path in p.entry_files
     assert appimages.appimage_of("/usr/bin/true") == ""
+    # A package's program of the same name that PATH runs first isn't the AppImage.
+    pkg = home + "/usr-bin"
+    os.makedirs(pkg)
+    _put(pkg + "/tiny4lite-control", "#!/bin/sh\n")
+    os.chmod(pkg + "/tiny4lite-control", 0o755)
+    first = {"HOME": home, "PATH": pkg + os.pathsep + home + "/.local/bin"}
+    assert appimages.appimage_of("tiny4lite-control", first) == ""
+    last = {"HOME": home, "PATH": home + "/.local/bin" + os.pathsep + pkg}
+    assert appimages.appimage_of("tiny4lite-control", last) == img
+    # The HOME it's given, not this process's.
+    assert appimages.appimage_of("tiny4lite-control", {"HOME": "/nowhere", "PATH": "/nowhere"}) == ""

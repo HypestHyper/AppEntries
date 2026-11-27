@@ -184,27 +184,54 @@ def undo(entry_id: int, env=None) -> Entry:
         # What this change put there (a link pointed at a new file) goes first, so it doesn't count.
         if os.path.lexists(t.original) and os.path.abspath(t.original) not in added:
             raise UndoError(f"Something is already at {t.original}, so this can't be undone.", t.original)
-    try:
-        undo_all(e.changes)
-    except ConflictError as err:
-        raise UndoError("A file was changed after this, by a later change or by hand. Undo the later "
-                        "changes first.", err.path) from err
-    except OverrideError as err:
-        raise UndoError(f"The file couldn't be changed: {err.reason}.", err.path) from err
+    # What this change put there goes to the Trash first: if it can't, nothing has changed yet.
+    moved = []
     for p in e.added:
         if os.path.lexists(p):
             try:
-                trash.move(p, env)
-            except trash.TrashError:
+                moved.append(trash.move(p, env))
+            except trash.TrashError as err:
+                _put_back(moved)
+                raise UndoError(f"{p} couldn't be moved to the Trash ({err}), so this can't be undone.", p) from err
+    try:
+        undo_all(e.changes)
+    except (ConflictError, OverrideError) as err:
+        _put_back(moved)
+        if isinstance(err, ConflictError):
+            raise UndoError("A file was changed after this, by a later change or by hand. Undo the later "
+                            "changes first.", err.path) from err
+        raise UndoError(f"The file couldn't be changed: {err.reason}.", err.path) from err
+    # The files are put back last. If one can't be, what was done so far is
+    # kept in the history, so Undo can be tried again for the rest.
+    left = list(e.trashed)
+    while left:
+        t = left[0]
+        try:
+            trash.restore(t)
+        except trash.TrashError as err:
+            e.changes, e.added, e.trashed = [], [], left
+            try:
+                _save(entries, env)
+            except OSError:
                 pass
-    for t in e.trashed:
-        trash.restore(t)
+            raise UndoError(f"{err}. The rest was undone; try Undo again once that's sorted out.",
+                            t.original) from err
+        left.pop(0)
     e.undone = time.time()
     try:
         _save(entries, env)
     except OSError:
         pass
     return e
+
+
+def _put_back(moved) -> None:
+    """Undo's own rollback: files it moved to the Trash go back."""
+    for t in reversed(moved):
+        try:
+            trash.restore(t)
+        except trash.TrashError:
+            pass
 
 
 def clear(env=None) -> None:

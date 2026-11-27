@@ -94,3 +94,41 @@ def test_undoing_a_newer_file_through_a_link_swaps_the_link_back(xdg):
     e = history.record("Tool now uses Tool-2", [], trashed, env=xdg.env, added=[link])
     history.undo(e.id, xdg.env)
     assert os.path.islink(link) and os.readlink(link) == old and os.path.exists(old)
+
+
+def test_undo_that_cant_finish_changes_nothing_or_can_be_tried_again(xdg, monkeypatch):
+    """The new link can't go to the Trash: nothing is undone. A file can't
+    be put back: the rest is undone, and Undo can be tried again."""
+    import os
+    home = xdg.env["HOME"]
+    os.makedirs(home + "/.local/bin")
+    old, new, link = f"{home}/Tool-1.AppImage", f"{home}/Tool-2.AppImage", f"{home}/.local/bin/tool"
+    for p in (old, new):
+        with open(p, "w") as f:
+            f.write(p)
+    os.symlink(old, link)
+    trashed = [trash.move(old, xdg.env), trash.move(link, xdg.env)]
+    os.symlink(new, link)
+    e = history.record("Tool now uses Tool-2", [], trashed, env=xdg.env, added=[link])
+
+    real_move, real_restore = trash.move, trash.restore
+
+    def no_trash(path, env=None):
+        raise trash.TrashError("the Trash can't be written")
+    monkeypatch.setattr(trash, "move", no_trash)
+    with pytest.raises(history.UndoError):
+        history.undo(e.id, xdg.env)
+    assert os.readlink(link) == new and not os.path.exists(old)         # nothing changed
+    monkeypatch.setattr(trash, "move", real_move)
+
+    def restore_once_fails(t):
+        if t.original == link:
+            raise trash.TrashError("disk full")
+        real_restore(t)
+    monkeypatch.setattr(trash, "restore", restore_once_fails)
+    with pytest.raises(history.UndoError):
+        history.undo(e.id, xdg.env)
+    assert os.path.exists(old) and not os.path.lexists(link)            # the old file is back
+    monkeypatch.setattr(trash, "restore", real_restore)
+    history.undo(e.id, xdg.env)                                         # and the rest, on a second try
+    assert os.readlink(link) == old

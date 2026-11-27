@@ -10,7 +10,7 @@ from gettext import ngettext
 
 from gi.repository import Gio, GLib, Gtk, Pango
 
-from .. import github_apps, install_info, terminal
+from .. import app_updates, github_apps, install_info, terminal
 from .dialogs import run_bg
 from .widgets import WrapBox, button, card, clear, hbox, icon, label, section, spinner, vbox
 
@@ -208,8 +208,10 @@ class InstallSection(Gtk.Box):
                 # Flatpak updates it, not the system's package manager: in the
                 # installation the check found the update in.
                 found = (getattr(self.win, "app_update_info", {}) or {}).get(self.key)
-                scope = found.get("scope") if isinstance(found, dict) and found.get("scope") else d.scope
-                cmd = [["flatpak", "update", "--user" if scope == "user" else "--system", d.package]]
+                found = found if isinstance(found, dict) else {}
+                scope = found.get("scope") or d.scope
+                arch, branch = found.get("arch", ""), found.get("branch", "")
+                cmd = [app_updates.flatpak_update_cmd(d.package, scope, branch)]
                 waiting = vbox(8)
                 waiting.add_css_class("card-inner")
                 waiting.append(hbox(10, Gtk.Box(css_classes=["update-dot"], valign=Gtk.Align.CENTER),
@@ -217,7 +219,7 @@ class InstallSection(Gtk.Box):
                 waiting.append(_start(button(_("Update in terminal"), "terminal", "tonal", small=True,
                                              tooltip=terminal.shown(cmd), cb=lambda *_a: _run_terminal(self, cmd))))
                 c.append(waiting)
-                self._recheck_flatpak(d.package, scope, waiting)
+                self._recheck_flatpak(d.package, scope, waiting, arch, branch)
         if d.kind in ("appimage", "file") and d.made not in ("webapp", "commands"):
             c.append(GitHubPart(self.app, d, src, self._here, self.win, self.key))
         elif d.kind == "package" and src is not None and d.made != "webapp":
@@ -228,10 +230,9 @@ class InstallSection(Gtk.Box):
             elif d.manager == "apt" and not d.repo:
                 self._apt_github = (c, src)     # shown if apt says it was installed from a file
 
-    def _recheck_flatpak(self, fid, scope, waiting):
+    def _recheck_flatpak(self, fid, scope, waiting, arch="", branch=""):
         """Ask Flatpak again, in the background: if the update was installed
         since the daily check (or Flatpak has nothing to do), the dot goes."""
-        from .. import app_updates
         here, win, key = self._here, self.win, self.key
 
         def done(r):
@@ -241,7 +242,7 @@ class InstallSection(Gtk.Box):
                 waiting.set_visible(False)
                 if hasattr(win, "check_result"):
                     win.check_result(key, False)
-        run_bg(lambda: app_updates.flatpak_still_waiting(fid, scope), done)
+        run_bg(lambda: app_updates.flatpak_still_waiting(fid, scope, arch=arch, branch=branch), done)
 
     # -- the dependency lists, read when opened ------------------------------
 

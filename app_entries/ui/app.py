@@ -332,6 +332,9 @@ class MainWindow(Gtk.ApplicationWindow):
         self.connect("notify::is-active", lambda *_a: self.is_active() and self._recheck_dots())
         self.app_update_results = {}    # GitHub checks made this run, by app ID
         self.app_update_info = {}       # the new version, for the dot's tooltip
+        self._app_checked = 0.0         # when the daily check last ran (saved with the dots)
+        self._app_check_busy = False    # a check is running: it saves the dots when done
+        self._recheck_busy = False
 
         self.snackbar = Snackbar()
         overlay = Gtk.Overlay(vexpand=True)
@@ -661,9 +664,10 @@ class MainWindow(Gtk.ApplicationWindow):
                     item.emit("changed")
         self._icon_times = now
 
-    def set_app_updates(self, newer, info=None):
+    def set_app_updates(self, newer, info=None, rebuild_open=False):
         """What has a newer version: a small dot on its row (apps and tools),
-        nothing louder."""
+        nothing louder. `rebuild_open`: a dot that went without the open page
+        knowing (updated in a terminal, say) rebuilds that page too."""
         old = set(self.app_updates_newer)
         self.app_updates_newer = list(newer)
         if info is not None:
@@ -672,7 +676,7 @@ class MainWindow(Gtk.ApplicationWindow):
             item = self.apps.by_id.get(did)
             if item is not None:
                 # Its row shows the dot; its open page already shows what the check found.
-                self.app_page._quiet = item is self._current
+                self.app_page._quiet = item is self._current and not (rebuild_open and did not in newer)
                 try:
                     item.emit("changed")
                 finally:
@@ -699,6 +703,11 @@ class MainWindow(Gtk.ApplicationWindow):
             from .. import app_updates
             info = dict(getattr(self, "app_update_info", {}) or {})
             info[key] = {"version": version}
+            item = self.apps.by_id.get(key)
+            image = appimages.appimage_of(item.app.exec) if item is not None else ""
+            if image:
+                # The file it's about, as the daily check keeps: if it changes, the dot goes.
+                info[key]["file"] = os.path.basename(image)
             newer_list = list(dict.fromkeys(self.app_updates_newer + [key]))
             st = app_updates.load_state()
             app_updates.save_state(st.get("checked", 0), newer_list, info=info)
@@ -706,38 +715,40 @@ class MainWindow(Gtk.ApplicationWindow):
         else:
             self.updated(key)
 
-    def _still_waiting(self, newer, info):
-        """The saved dots, minus AppImages whose file has changed since the
-        check (updated with Use a newer file, or outside App Entries) and
-        Flatpaks updated since."""
-        keep = []
-        for key in newer:
-            found = info.get(key)
+    def _execs(self, keys):
+        """The commands of these apps, by key (for app_updates.still_waiting)."""
+        out = {}
+        for key in keys:
             item = self.apps.by_id.get(key)
-            if isinstance(found, dict) and found.get("file") and item is not None:
-                now = appimages.appimage_of(item.app.exec)
-                if now and os.path.basename(now) != found["file"]:
-                    continue
-            if isinstance(found, dict) and found.get("flatpak") and found.get("commit"):
-                # Updated since the check (here, in a software centre or a terminal): the dot goes.
-                from .. import app_updates
-                now = app_updates.flatpak_commit(found["flatpak"], found.get("scope", "system"))
-                if now and not app_updates._same_commit(now, found["commit"]):
-                    continue
-            keep.append(key)
-        return keep, {k: v for k, v in info.items() if k in keep}
+            if item is not None:
+                out[key] = item.app.exec
+        return out
+
+    def _still_waiting(self, newer, info):
+        from .. import app_updates
+        return app_updates.still_waiting(newer, info, self._execs(newer))
 
     def _recheck_dots(self):
         """Drop dots for AppImages and Flatpaks that changed since the check.
-        Only reads files; nothing goes online."""
-        if not self.app_updates_newer:
+        Only reads files, in the background; nothing goes online. Not while a
+        check runs: it saves fresh dots when done."""
+        if not self.app_updates_newer or self._app_check_busy or self._recheck_busy:
             return
-        info = getattr(self, "app_update_info", {}) or {}
-        newer, kept = self._still_waiting(self.app_updates_newer, info)
-        if newer != self.app_updates_newer:
-            from .. import app_updates
-            app_updates.save_state(app_updates.load_state().get("checked", 0), newer, info=kept)
-            self.set_app_updates(newer, kept)
+        from .. import app_updates
+        before = list(self.app_updates_newer)
+        info = dict(getattr(self, "app_update_info", {}) or {})
+        execs = self._execs(before)
+        self._recheck_busy = True
+
+        def done(r):
+            self._recheck_busy = False
+            if isinstance(r, Exception) or self._app_check_busy or self.app_updates_newer != before:
+                return      # a check ran meanwhile, or the dots changed: its answer stands
+            newer, kept = r
+            if newer != before:
+                app_updates.save_state(self._app_checked, newer, info=kept)
+                self.set_app_updates(newer, kept, rebuild_open=True)
+        run_bg(lambda: app_updates.still_waiting(before, info, execs), done)
 
     def updated(self, key):
         """An app was just updated from its page: its dot goes."""
@@ -760,12 +771,22 @@ class MainWindow(Gtk.ApplicationWindow):
         if not self.settings.get("check-app-updates"):
             self.set_app_updates([], {})
             return
+        self._app_checked = float(st.get("checked", 0) or 0)
         if not force and not app_updates.due():
             newer, info = self._still_waiting(st.get("newer", []), st.get("info", {}))
             self.set_app_updates(newer, info)
             return
+        if self._app_check_busy:
+            return
         apps = [i.app for i in self.apps.items()]
         flatpaks = {uninstall._flatpak_id(a): a.id for a in apps if a.source == "flatpak"}
+        # The installation each Flatpak's launcher comes from (an edited copy: the
+        # original it was made from): that copy is the one to update.
+        prefer = {}
+        for a in apps:
+            scope = app_updates.flatpak_scope_of(a.source_path) or app_updates.flatpak_scope_of(a.base_path)
+            if a.source == "flatpak" and scope:
+                prefer.setdefault(uninstall._flatpak_id(a), scope)
 
         def work():
             items = [app_updates.check(c) for c in app_updates.gather(apps)]
@@ -776,18 +797,21 @@ class MainWindow(Gtk.ApplicationWindow):
                     path = c.details.path if c.details is not None and c.kind == "appimage" else ""
                     info[c.key] = {"version": github_apps.version_in(c.result.release.tag) or c.result.release.tag,
                                    "file": os.path.basename(path) if path else ""}
-            for fid, found in app_updates.flatpak_waiting().items():
+            for fid, found in app_updates.flatpak_waiting(prefer=prefer).items():
                 if fid in flatpaks:
                     info[flatpaks[fid]] = {"version": "", "flatpak": fid, **found}
-            app_updates.save_state(time.time(), list(info), info=info)
-            return items, info
+            checked = time.time()
+            app_updates.save_state(checked, list(info), info=info)
+            return items, info, checked
 
         def done(r):
+            self._app_check_busy = False
             if isinstance(r, Exception):
                 return
-            items, info = r
+            items, info, self._app_checked = r
             self.app_update_results = {c.key: (c.result, c.error) for c in items}
             self.set_app_updates(list(info), info)
+        self._app_check_busy = True
         run_bg(work, done)
 
     def _close_with_drafts(self, *_a):
@@ -2104,33 +2128,62 @@ class MainWindow(Gtk.ApplicationWindow):
             change = editing.plan_edit(app, changed)
             return [change] if change is not None else []
 
-        ok = {"yes": False}
+        ok = {"yes": False, "link": ""}
+
+        def swap_link(link):
+            """The old link to the Trash and a new one in its place, made first
+            under another name so the launcher always has one to run. Undo
+            swaps them back. Returns what was trashed, or raises OSError."""
+            tmp = f"{link}.new-{os.getpid()}"
+            os.symlink(target, tmp)
+            try:
+                t = trash.move(link)
+            except trash.TrashError as err:
+                os.unlink(tmp)
+                raise OSError(str(err)) from err
+            try:
+                os.replace(tmp, link)
+            except OSError:
+                try:
+                    os.unlink(tmp)
+                    trash.restore(t)
+                except (OSError, trash.TrashError):
+                    pass
+                raise
+            return t
 
         def after(_changes):
             ok["yes"] = True
             # A downloaded update is the app's file now; Undo moves it to the Trash.
             added = [target] if downloaded else []
             trashed = []
+            for link in links:
+                try:
+                    trashed.append(swap_link(link))
+                    added.append(link)
+                except OSError as err:
+                    # The old file stays where it is, so the old link still starts the app.
+                    ok["yes"], ok["link"] = False, link
+                    error_dialog(self, _("Couldn't change the link to {name}").format(name=app.name),
+                                 _("{reason}. The old file was kept, so the app still starts the old version.")
+                                 .format(reason=getattr(err, "strerror", None) or err), link)
+                    return trashed, added
             try:
                 trashed.append(trash.move(old))
             except trash.TrashError:
                 pass
-            for link in links:
-                # The old link to the Trash, a new one in its place; Undo swaps them back.
-                try:
-                    trashed.append(trash.move(link))
-                    os.symlink(target, link)
-                    added.append(link)
-                except (trash.TrashError, OSError):
-                    pass
             return trashed, added
+
+        default = message or (lambda n: _("{name} now uses {file}").format(
+            name=app.name, file=os.path.basename(target)))
 
         def finished():
             if done is not None:
                 GLib.idle_add(lambda: (done(ok["yes"]), False)[1])
 
-        self._run_changes(plan, message or (lambda n: _("{name} now uses {file}").format(
-            name=app.name, file=os.path.basename(target))), _("Couldn't change {name}").format(name=app.name),
+        self._run_changes(plan, lambda n: (default(n) if not ok["link"] else _("{name}: the new file is there, "
+                          "but its link still leads to the old one").format(name=app.name)),
+            _("Couldn't change {name}").format(name=app.name),
             after=after, allow_empty=bool(links), done_anyway=finished)
 
     def _launch(self, app):

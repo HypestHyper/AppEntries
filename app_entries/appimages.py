@@ -22,7 +22,7 @@ ICON_EXTS = (".png", ".svg", ".svgz", ".xpm")
 _KIT = re.compile(r"appimagekit_[0-9a-f]{32}")
 
 
-def appimage_of(exec_line: str) -> str:
+def appimage_of(exec_line: str, env=None) -> str:
     """The AppImage file an Exec line runs, or ""."""
     try:
         parts = shlex.split(exec_line)
@@ -33,7 +33,7 @@ def appimage_of(exec_line: str) -> str:
             return p
     # A link to one (often in ~/.local/bin, put there by an install script):
     # the AppImage it leads to.
-    link = link_in(exec_line)
+    link = link_in(exec_line, env)
     return os.path.realpath(link) if link else ""
 
 
@@ -41,22 +41,28 @@ def _is_appimage_name(path: str) -> bool:
     return path.lower().endswith(".appimage")
 
 
-def link_in(exec_line: str) -> str:
+def link_in(exec_line: str, env=None) -> str:
     """The link an Exec line runs that leads to an AppImage (named in full,
-    or found in ~/.local/bin or ~/bin), or ""."""
+    or a bare name found in ~/.local/bin or ~/bin), or "". A bare name is
+    only taken to be that link when PATH would run it, not something that
+    comes first (a package's program of the same name)."""
     from .health import program_of
+    env = os.environ if env is None else env
     prog = program_of(exec_line)
     if not prog:
         return ""
     if not os.path.isabs(prog):
         if "/" in prog:
             return ""
-        home = os.path.expanduser("~")
-        for d in (os.path.join(home, ".local", "bin"), os.path.join(home, "bin")):
-            if os.path.islink(os.path.join(d, prog)):
-                prog = os.path.join(d, prog)
-                break
-        else:
+        home = env.get("HOME") or os.path.expanduser("~")
+        found = shutil.which(prog, path=env.get("PATH", os.defpath))
+        mine = [os.path.join(d, prog) for d in (os.path.join(home, ".local", "bin"), os.path.join(home, "bin"))]
+        if found and not any(os.path.abspath(found) == m for m in mine):
+            return ""           # PATH runs another program by that name
+        # The one PATH runs, or else (a launcher's PATH often has ~/.local/bin
+        # when this process's doesn't) the first link in those folders.
+        prog = found or next((m for m in mine if os.path.islink(m)), "")
+        if not prog:
             return ""
     if os.path.islink(prog) and _is_appimage_name(os.path.realpath(prog)):
         return prog
@@ -132,7 +138,7 @@ def _icon_files(name: str, data_dir: str) -> list[str]:
 
 def plan(app: de.App, env=None) -> Removal:
     env = os.environ if env is None else env
-    path = appimage_of(app.exec)
+    path = appimage_of(app.exec, env)
     if not path:
         raise ValueError(f"{app.name} doesn't start an AppImage.")
     data_dir = de.user_data_dir(env)
@@ -146,7 +152,7 @@ def plan(app: de.App, env=None) -> Removal:
     all_entries = _entries(env)
     mine: dict[str, dict[str, str]] = {}
     for p, d in all_entries.items():
-        target = appimage_of(de.unescape(d.get("Exec", "")))
+        target = appimage_of(de.unescape(d.get("Exec", "")), env)
         if target and _same(target, path):
             if os.path.normpath(p).startswith(user_apps + os.sep):
                 mine[p] = d

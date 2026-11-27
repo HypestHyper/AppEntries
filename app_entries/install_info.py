@@ -117,7 +117,8 @@ _DBS = ("/var/lib/pacman/local", "/var/lib/dpkg/status", "/var/lib/rpm", "/usr/l
 
 def _stamp(sysm: System, files=()) -> tuple:
     out = []
-    for p in [sysm.p(d) for d in _DBS] + [os.path.join(sysm.home, ".local/share/flatpak/app")] + list(files):
+    home = "" if sysm.home == os.path.expanduser("~") else sysm.home
+    for p in [sysm.p(d) for d in _DBS] + [os.path.join(flatpak_dir("user", home), "app")] + list(files):
         try:
             out.append(os.stat(p).st_mtime_ns)
         except OSError:
@@ -474,6 +475,47 @@ def _rpm(m, pkg, sysm):
 # -- Flatpak and Snap ---------------------------------------------------------
 
 
+def flatpak_installations(root: str = "") -> list[tuple[str, str]]:
+    """Flatpak installations besides the user's and the system's (an SD card,
+    say), from /etc/flatpak/installations.d: [(name, folder)]."""
+    import configparser
+    import glob
+    out = []
+    for conf in sorted(glob.glob(root + "/etc/flatpak/installations.d/*.conf")):
+        cp = configparser.ConfigParser(interpolation=None, strict=False)
+        try:
+            cp.read(conf, encoding="utf-8")
+        except (OSError, configparser.Error):
+            continue
+        for sec in cp.sections():
+            m = re.fullmatch(r'Installation\s+"([^"]+)"', sec.strip())
+            path = cp.get(sec, "Path", fallback="").strip()
+            if m and path and m.group(1) not in ("user", "system", "default"):
+                out.append((m.group(1), path))
+    return out
+
+
+def flatpak_dir(scope: str, home: str = "", env=None, root: str = "") -> str:
+    """The folder a Flatpak installation keeps its apps in: "user", "system"
+    or the name of another installation. Follows FLATPAK_USER_DIR,
+    XDG_DATA_HOME and FLATPAK_SYSTEM_DIR the way Flatpak does; a home folder
+    given here (tests, another root) wins over the environment."""
+    env = os.environ if env is None else env
+    if scope == "user":
+        if home:
+            return os.path.join(home, ".local/share/flatpak")
+        if env.get("FLATPAK_USER_DIR"):
+            return env["FLATPAK_USER_DIR"]
+        data = env.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local/share")
+        return os.path.join(data, "flatpak")
+    if scope == "system":
+        return root + (env.get("FLATPAK_SYSTEM_DIR") or "/var/lib/flatpak")
+    for name, path in flatpak_installations(root):
+        if name == scope:
+            return root + path
+    return ""
+
+
 def _flatpak(fid, sysm):
     f = _fields(sysm.out(["flatpak", "info", fid]), indented=True)
     d = Details(kind="flatpak", manager="Flatpak", package=fid, version=f.get("Version", ""))
@@ -481,7 +523,10 @@ def _flatpak(fid, sysm):
     d.scope = "user" if f.get("Installation", "") == "user" else "system"
     d.size = pkgmanagers._human_size(f.get("Installed", "").replace("\xa0", " "))
     d.runtime = f.get("Runtime", "")
-    base = os.path.join(sysm.home, ".local/share/flatpak") if d.scope == "user" else sysm.p("/var/lib/flatpak")
+    inst = f.get("Installation", "")
+    named = inst if inst not in ("", "user", "system", "default") else ""
+    home = "" if sysm.home == os.path.expanduser("~") else sysm.home
+    base = flatpak_dir(named or d.scope, home, root=sysm.root)
     ref = f.get("Ref", "")
     parts = ref.split("/")
     if len(parts) == 4:

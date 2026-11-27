@@ -591,13 +591,20 @@ def _started(apps, env=None) -> tuple[str, set[str]]:
     return "\n".join(lines), real
 
 
+def _named_in(path: str, text: str) -> bool:
+    """Whether a command line names this path, or something inside it: the
+    name must end there (~/Apps/Game isn't named by ~/Apps/Game2/run)."""
+    path = path.rstrip(os.sep) or path
+    return re.search(re.escape(path) + r"""(?=$|[/\s"';:&|)])""", text) is not None
+
+
 def has_entry(source: str, apps, env=None, started=None) -> bool:
     """Whether an installed entry already starts this file or something in
     this folder: named in its command (also with ~ or $HOME), through a link
     or a small start script, or found in PATH."""
     text, real_set = started if started is not None else _started(apps, env)
     real = os.path.realpath(source)
-    if source in text or real in text:
+    if _named_in(source, text) or _named_in(real, text):
         return True
     if real in real_set:
         return True

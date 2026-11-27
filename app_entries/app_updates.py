@@ -129,29 +129,42 @@ def check(c: Candidate, get: Optional[Callable] = None) -> Candidate:
     return c
 
 
-def _flatpak_base(scope: str, home: str = "") -> str:
-    home = home or os.path.expanduser("~")
-    return os.path.join(home, ".local/share/flatpak") if scope == "user" else "/var/lib/flatpak"
+def _flag(scope: str) -> str:
+    return "--" + scope if scope in ("user", "system") else "--installation=" + scope
 
 
-def flatpak_commit(fid: str, scope: str, home: str = "") -> str:
+def _installations(root: str = "") -> list[str]:
+    """Every Flatpak installation: the system's, the user's and any others
+    (an SD card, say)."""
+    return ["system", "user"] + [name for name, _p in install_info.flatpak_installations(root)]
+
+
+def flatpak_scope_of(path: str, home: str = "") -> str:
+    """The installation a Flatpak's launcher was exported from (its .desktop
+    file's path), or ""."""
+    real = os.path.realpath(path) if path else ""
+    for scope in _installations():
+        base = install_info.flatpak_dir(scope, home)
+        if base and real.startswith(os.path.realpath(base) + os.sep):
+            return scope
+    return ""
+
+
+def flatpak_commit(fid: str, scope: str, home: str = "", arch: str = "", branch: str = "") -> str:
     """The commit of the Flatpak installed now, read from its folder (no
-    question to Flatpak, no internet), or ""."""
-    app_dir = os.path.join(_flatpak_base(scope, home), "app", fid)
+    question to Flatpak, no internet), or "". The arch and branch the check
+    found it on; without them, the one the app's `current` link names."""
+    app_dir = os.path.join(install_info.flatpak_dir(scope, home), "app", fid)
+    if not (arch and branch):
+        try:
+            arch, _s, branch = os.readlink(os.path.join(app_dir, "current")).partition("/")
+        except OSError:
+            return ""
+    active = os.path.join(app_dir, arch, branch, "active")
     try:
-        arches = sorted(os.listdir(app_dir))
+        return os.path.basename(os.readlink(active))
     except OSError:
         return ""
-    for arch in arches:
-        try:
-            branches = sorted(os.listdir(os.path.join(app_dir, arch)))
-        except OSError:
-            continue
-        for branch in branches:
-            active = os.path.join(app_dir, arch, branch, "active")
-            if os.path.islink(active):
-                return os.path.basename(os.readlink(active))
-    return ""
 
 
 def _rows(text: str) -> list[list[str]]:
@@ -164,55 +177,109 @@ def _same_commit(a: str, b: str) -> bool:
     return n >= 8 and a[:n] == b[:n]
 
 
-def flatpak_waiting(run=None, which=None, home: str = "") -> dict[str, dict]:
+def _mask_hits(pattern: str, fid: str, arch: str, branch: str) -> bool:
+    """Whether a `flatpak mask` pattern holds this app back. Patterns name an
+    ID (globs allowed) and may add an arch and branch: org.foo.Bar,
+    org.foo.*, org.foo.Bar//stable, app/org.foo.Bar/x86_64/stable."""
+    p = pattern.strip()
+    if p.startswith("runtime/"):
+        return False
+    p = p.removeprefix("app/")
+    parts = p.split("/")
+    for want, part in zip((fid, arch, branch), parts[:3]):
+        if part and not fnmatch.fnmatchcase(want, part):
+            return False
+    return bool(parts[0])
+
+
+def _waiting_in(scope: str, run) -> Optional[list[dict]]:
+    """What has an update in one installation: [{id, arch, branch, commit}],
+    or None if Flatpak couldn't say."""
+    flag = _flag(scope)
+    r = run(["flatpak", "remote-ls", flag, "--updates", "--app", "--columns=application,arch,branch,commit"])
+    if r is None or r[0] != 0:
+        return None
+    installed = {}
+    lr = run(["flatpak", "list", flag, "--app", "--columns=application,arch,branch,active"])
+    if lr is not None and lr[0] == 0:
+        installed = {tuple(row[:3]): row[3] for row in _rows(lr[1]) if len(row) >= 4}
+    masked = []
+    mr = run(["flatpak", "mask", flag])
+    if mr is not None and mr[0] == 0:
+        masked = [line.strip() for line in mr[1].splitlines() if line.strip()]
+    out = []
+    for row in _rows(r[1]):
+        if len(row) < 3:
+            continue
+        ref, remote = tuple(row[:3]), (row[3] if len(row) > 3 else "")
+        if ref not in installed or any(_mask_hits(m, *ref) for m in masked):
+            continue
+        if remote and _same_commit(remote, installed[ref]):
+            continue        # listed, but what's installed is already that commit
+        out.append({"id": ref[0], "arch": ref[1], "branch": ref[2], "commit": installed[ref]})
+    return out
+
+
+def flatpak_waiting(run=None, which=None, home: str = "", prefer: Optional[dict] = None) -> dict[str, dict]:
     """Flatpaks with an update waiting (Flatpak updates them, not the
-    system's package manager): {app ID: {"scope": "user" or "system",
-    "commit": the installed commit}}. Asked of each installation on its
-    own, and only counted when the remote's commit differs from the
-    installed one and the app isn't held back with `flatpak mask`, so a dot
-    always means `flatpak update` has something to do."""
+    system's package manager): {app ID: {"scope", "arch", "branch",
+    "commit"}}. Each installation (user, system and any others) is asked on
+    its own, and an app only counts when the remote's commit differs from
+    the installed one and it isn't held back with `flatpak mask`, so a dot
+    always means `flatpak update` has something to do. An app in more than
+    one installation: the one `prefer` names (where its launcher comes
+    from), else the first found."""
     import shutil
 
     from . import pkgmanagers
     run = run or pkgmanagers.run
+    prefer = prefer or {}
     if not (which or shutil.which)("flatpak"):
         return {}
     out: dict[str, dict] = {}
-    for scope in ("system", "user"):
-        flag = "--" + scope
-        r = run(["flatpak", "remote-ls", flag, "--updates", "--app", "--columns=application,commit"])
-        if r is None or r[0] != 0:
-            continue
-        installed = {}
-        lr = run(["flatpak", "list", flag, "--app", "--columns=application,active"])
-        if lr is not None and lr[0] == 0:
-            installed = {row[0]: row[1] for row in _rows(lr[1]) if len(row) >= 2}
-        masked = set()
-        mr = run(["flatpak", "mask", flag])
-        if mr is not None and mr[0] == 0:
-            masked = {line.strip() for line in mr[1].splitlines() if line.strip()}
-        for row in _rows(r[1]):
-            fid, remote = row[0], (row[1] if len(row) > 1 else "")
-            if fid not in installed or fid in out or any(fnmatch.fnmatchcase(fid, m) for m in masked):
+    for scope in _installations():
+        for w in _waiting_in(scope, run) or []:
+            fid = w["id"]
+            if fid in out and (out[fid]["scope"] == prefer.get(fid) or scope != prefer.get(fid)):
                 continue
-            if remote and _same_commit(remote, installed[fid]):
-                continue        # listed, but what's installed is already that commit
-            out[fid] = {"scope": scope, "commit": installed[fid]}
+            out[fid] = {"scope": scope, "arch": w["arch"], "branch": w["branch"], "commit": w["commit"]}
     return out
 
 
-def flatpak_still_waiting(fid: str, scope: str, run=None) -> Optional[bool]:
+def flatpak_still_waiting(fid: str, scope: str, run=None, arch: str = "", branch: str = "") -> Optional[bool]:
     """Ask Flatpak again about one app (for its page). None if it couldn't say."""
     from . import pkgmanagers
     run = run or pkgmanagers.run
-    flag = "--" + (scope or "system")
-    r = run(["flatpak", "remote-ls", flag, "--updates", "--app", "--columns=application,commit"])
-    if r is None or r[0] != 0:
+    found = _waiting_in(scope or "system", run)
+    if found is None:
         return None
-    lr = run(["flatpak", "list", flag, "--app", "--columns=application,active"])
-    installed = {row[0]: row[1] for row in _rows(lr[1]) if len(row) >= 2} if lr and lr[0] == 0 else {}
-    for row in _rows(r[1]):
-        if row[0] == fid:
-            remote = row[1] if len(row) > 1 else ""
-            return not (remote and fid in installed and _same_commit(remote, installed[fid]))
-    return False
+    return any(w["id"] == fid and (not arch or w["arch"] == arch) and (not branch or w["branch"] == branch)
+               for w in found)
+
+
+def flatpak_update_cmd(fid: str, scope: str, branch: str = "") -> list[str]:
+    """`flatpak update` for just this app, in its installation and branch."""
+    return ["flatpak", "update", _flag(scope or "system"), f"{fid}//{branch}" if branch else fid]
+
+
+def still_waiting(newer: list, info: dict, execs: dict, home: str = "") -> tuple[list, dict]:
+    """The saved dots, minus AppImages whose file has changed since the check
+    (updated with Use a newer file, or outside App Entries) and Flatpaks
+    updated since. `execs`: each app's command, by key. Only reads files;
+    nothing goes online, so it can run in the background."""
+    from . import appimages
+    keep = []
+    for key in newer:
+        found = info.get(key)
+        if isinstance(found, dict) and found.get("file") and key in execs:
+            now = appimages.appimage_of(execs[key])
+            if now and os.path.basename(now) != found["file"]:
+                continue
+        if isinstance(found, dict) and found.get("flatpak") and found.get("commit"):
+            # Updated since the check (here, in a software centre or a terminal): the dot goes.
+            now = flatpak_commit(found["flatpak"], found.get("scope", "system"), home,
+                                 found.get("arch", ""), found.get("branch", ""))
+            if now and not _same_commit(now, found["commit"]):
+                continue
+        keep.append(key)
+    return keep, {k: v for k, v in info.items() if k in keep}

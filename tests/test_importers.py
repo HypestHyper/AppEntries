@@ -201,3 +201,9 @@ def test_a_launcher_that_reaches_the_file_another_way_counts(tmp_path):
     os.chmod(script, 0o755)
     assert has(str(script))
     assert not has("other-app")
+    # Only that file or folder: a longer name that starts the same doesn't count.
+    assert not has(f"{img}-old %U")
+    assert not im.has_entry(str(apps_dir / "Game"), [de.App(id="g.desktop", name="G",
+                            exec=f"{apps_dir}/Game2/start.sh")], env)
+    assert im.has_entry(str(apps_dir / "Game"), [de.App(id="g.desktop", name="G",
+                        exec=f"'{apps_dir}/Game/start.sh'")], env)
